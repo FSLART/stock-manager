@@ -43,7 +43,7 @@ diretamente. `DB_PATH` permite escolher outra base de dados.
 
 ### MySQL no aaPanel
 
-O backend também suporta **MySQL 8.0/8.4** com `DB_BACKEND=mysql` e as
+O backend também suporta **MySQL 8.0/8.4 e MariaDB 10.11** com `DB_BACKEND=mysql` e as
 variáveis `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER` e
 `MYSQL_PASSWORD`. Para transferir os dados existentes, usa
 `scripts/migrate_mysql.py`: verifica a cópia antes de confirmar e mantém

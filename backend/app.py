@@ -110,7 +110,8 @@ class MySQLConnection:
 
 
 def init_mysql_schema(connection):
-    # MySQL 8+: hash the full component key instead of truncating a TEXT index.
+    # MySQL 8 / MariaDB 10.11: hash the full key instead of truncating a TEXT index.
+    mariadb = "MariaDB" in connection.execute("SELECT VERSION() AS version").fetchone()["version"]
     for sql in (
         """CREATE TABLE IF NOT EXISTS categories (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -134,6 +135,8 @@ def init_mysql_schema(connection):
             value LONGTEXT NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
     ):
+        if mariadb:
+            sql = sql.replace("utf8mb4_0900_as_ci", "utf8mb4_uca1400_as_ci").replace("utf8mb4_0900_bin", "utf8mb4_bin")
         connection.execute(sql)
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", BASE_DIR / "uploads"))

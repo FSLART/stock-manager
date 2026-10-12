@@ -1,7 +1,9 @@
 # Migrar Stocklart para MySQL no aaPanel
 
-Esta migração requer **MySQL 8.0 ou 8.4** (testada com 8.4). Não usar
-MySQL 5.x ou MariaDB: o esquema usa collations específicas do MySQL 8.
+Esta migração suporta **MySQL 8.0/8.4** e **MariaDB 10.11**. O backend
+deteta MariaDB e usa collations compatíveis, mantendo nomes de categorias
+sem distinção de maiúsculas/minúsculas e com distinção de acentos. Não usar
+MySQL 5.x.
 SQLite continua disponível e é o modo por defeito.
 
 ## 1. Preparar a base de dados
@@ -113,4 +115,31 @@ Para o executar contra um servidor de testes na porta 13316:
 
 ```sh
 MYSQL_TEST_PORT=13316 .venv/bin/python -m unittest discover -s tests -p test_mysql_storage.py -v
+```
+
+## Instalação atual no aaPanel
+
+O projeto `stock_manager` usa um comando personalizado de arranque:
+
+```sh
+/www/wwwroot/stock-manager/.venv/bin/gunicorn --workers 1 --bind 127.0.0.1:5000 --access-logfile - --error-logfile - backend.app:app
+```
+
+O processo é gerido pelo serviço systemd `stock-manager.service`, com
+arranque automático e reinício em caso de falha. Usa
+`systemctl restart stock-manager` e `journalctl -u stock-manager` para
+gerir o processo e consultar os logs. O arranque automático do projeto
+Node no aaPanel está desativado para evitar processos duplicados.
+O proxy do aaPanel encaminha para `127.0.0.1:5000`. O HTML gerado em
+`backend/templates/index.html` é servido pelo Flask; Vite não é necessário
+em produção. A configuração `.env` mantém MariaDB e modo local.
+
+A base original `backend/stock.db` foi preservada; 8 categorias e 75
+componentes foram migrados e verificados. Faz backups da base MariaDB para
+preservar as alterações posteriores à migração.
+
+Verificação opcional da API MariaDB configurada:
+
+```sh
+MARIADB_DEPLOYMENT_TEST=1 .venv/bin/python -m unittest discover -s tests -p test_mariadb_deployment.py -v
 ```
