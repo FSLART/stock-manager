@@ -33,10 +33,13 @@ os novos dados locais são apresentados, sem confirmar falsamente a gravação.
 
 ## Modo local (por defeito)
 
-O Flask usa SQLite em `meu_servidor/stock.db` e guarda imagens em
-`meu_servidor/uploads/`. Não precisa de Google, credenciais ou ligação à Internet
+O Flask usa SQLite em `data/stock.db` e guarda imagens em
+`backend/uploads/`. Não precisa de Google, credenciais ou ligação à Internet
 para gerir o stock. Os registos locais existentes são preservados. Faz cópias de
-segurança da base de dados e da pasta de imagens.
+segurança da base de dados e da pasta de imagens. `npm run dev:api` define
+`DB_PATH` para essa base, exceto quando já existe um valor no ambiente.
+O backend também usa esse caminho por defeito quando o Flask é iniciado
+diretamente. `DB_PATH` permite escolher outra base de dados.
 
 `STORAGE_MODE` permite escolher `local` (valor por defeito), `excel` (sincronizar
 com `Stock_sala.xlsx`) ou `google` (sincronizar com Google Sheets, requer
@@ -110,11 +113,11 @@ ambiente Python uma vez:
 
 ```sh
 python3 -m venv .venv
-.venv/bin/python -m pip install -r meu_servidor/requirements.txt
+.venv/bin/python -m pip install -r backend/requirements.txt
 ```
 
 No Windows, usa `python -m venv .venv` e
-`.venv\Scripts\python.exe -m pip install -r meu_servidor/requirements.txt`.
+`.venv\Scripts\python.exe -m pip install -r backend/requirements.txt`.
 
 Depois, mantém dois terminais abertos:
 
@@ -127,8 +130,7 @@ npm run dev
 
 O Vite encaminha `/api` e `/uploads` para o Flask; abre o endereço HTTP indicado
 pelo Vite, não o ficheiro `index.html` diretamente. `ECONNREFUSED 127.0.0.1:5000`
-significa que o backend não está iniciado. Para o arranque com túneis no Windows,
-consulta as [instruções do servidor](meu_servidor/README.md).
+significa que o backend não está iniciado.
 
 ## Build e testes
 
@@ -144,7 +146,7 @@ JavaScript e o CSS num único HTML, sem dependência de CDN para arrancar a app.
 As fontes Google continuam opcionais, com fontes locais como alternativa.
 O build atualiza:
 
-- `meu_servidor/templates/index.html` — servidor principal;
+- `backend/templates/index.html` — servidor principal;
 - `apps_script/index.html` — implementação Google Apps Script;
 - `dist/index.html` — artefacto local de build.
 
@@ -171,9 +173,8 @@ em vez de indicar falsamente que foram guardadas.
 O backend Python continua responsável pelo SQLite, Excel, Google Sheets e
 ficheiros carregados; o Apps Script continua responsável pela integração com
 Sheets/Drive. As cópias antigas do código e o ZIP de origem foram removidos.
-A base de dados do servidor antigo foi preservada em
-`meu_servidor/backups/stock-legacy.db`, pois contém dados diferentes da base atual.
-Este arquivo não é usado pela aplicação.
+As bases de dados ficam em `data/` e não são versionadas; inclui essa pasta nas
+cópias de segurança.
 
 Para reverter a migração, restaura os ficheiros da revisão anterior com Git.
 Não é necessária uma migração de dados.

@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class LocalStorageTest(unittest.TestCase):
     def test_local_crud_survives_reload_without_google_or_excel(self):
         for index, relative in enumerate([
-            'meu_servidor/app.py',
+            'backend/app.py',
         ]):
             with self.subTest(server=relative), tempfile.TemporaryDirectory() as temp:
                 with patch.dict(os.environ, {

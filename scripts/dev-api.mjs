@@ -5,12 +5,15 @@ import { fileURLToPath } from 'node:url'
 const root = fileURLToPath(new URL('../', import.meta.url))
 const python = process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python'
 if (!existsSync(new URL(`../${python}`, import.meta.url))) {
-  console.error('Create the Python environment first:\npython -m venv .venv\nThen install meu_servidor/requirements.txt using the Python inside .venv (see README.md).')
+  console.error('Create the Python environment first:\npython -m venv .venv\nThen install backend/requirements.txt using the Python inside .venv (see README.md).')
   process.exit(1)
 }
 const child = spawn(fileURLToPath(new URL(`../${python}`, import.meta.url)), [
-  '-m', 'flask', '--app', 'meu_servidor/app.py', 'run', '--host', '127.0.0.1', '--port', '5000',
-], { cwd: root, stdio: 'inherit', env: process.env })
+  '-m', 'flask', '--app', 'backend/app.py', 'run', '--host', '127.0.0.1', '--port', '5000',
+], { cwd: root, stdio: 'inherit', env: {
+  ...process.env,
+  DB_PATH: process.env.DB_PATH || fileURLToPath(new URL('../data/stock.db', import.meta.url)),
+} })
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal))
 child.on('error', error => { console.error(error.message); process.exitCode = 1 })
 child.on('exit', code => { process.exitCode = code ?? 1 })

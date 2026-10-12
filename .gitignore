@@ -3,5 +3,7 @@ dist/
 __pycache__/
 .venv/
 *.log
-meu_servidor/uploads/
-meu_servidor/Stock_sala.xlsx
+data/*.db
+data/*.db-*
+backend/uploads/
+backend/Stock_sala.xlsx
