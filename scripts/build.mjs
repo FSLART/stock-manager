@@ -21,7 +21,6 @@ await mkdir('dist', { recursive: true })
 for (const target of [
   'dist/index.html',
   'meu_servidor/templates/index.html',
-  'serverstocklart-main/meu_servidor/templates/index.html',
   'apps_script/index.html',
 ]) {
   await writeFile(target, html)

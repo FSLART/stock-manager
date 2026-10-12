@@ -5,7 +5,7 @@ aplicação funciona com a API Flask e com o Google Apps Script.
 
 ## Design e páginas
 
-O design segue `stocklart-vue-pcb-development`, com tema escuro, amarelo LART,
+O design usa tema escuro, amarelo LART,
 menu responsivo e fotografias incluídas no HTML gerado. A página inicial mostra
 o stock real e permite consultar o inventário, gerir categorias e adicionar material.
 
@@ -146,7 +146,6 @@ O build atualiza:
 
 - `meu_servidor/templates/index.html` — servidor principal;
 - `apps_script/index.html` — implementação Google Apps Script;
-- `serverstocklart-main/meu_servidor/templates/index.html` — cópia antiga do servidor;
 - `dist/index.html` — artefacto local de build.
 
 Os HTML gerados estão versionados para que o arranque habitual do Flask continue
@@ -171,9 +170,10 @@ em vez de indicar falsamente que foram guardadas.
 
 O backend Python continua responsável pelo SQLite, Excel, Google Sheets e
 ficheiros carregados; o Apps Script continua responsável pela integração com
-Sheets/Drive. A cópia antiga mantém as limitações da sua API original (incluindo
-a ausência de upload de imagens). O ZIP histórico é um arquivo de origem e não
-é usado para executar a aplicação.
+Sheets/Drive. As cópias antigas do código e o ZIP de origem foram removidos.
+A base de dados do servidor antigo foi preservada em
+`meu_servidor/backups/stock-legacy.db`, pois contém dados diferentes da base atual.
+Este arquivo não é usado pela aplicação.
 
 Para reverter a migração, restaura os ficheiros da revisão anterior com Git.
 Não é necessária uma migração de dados.
