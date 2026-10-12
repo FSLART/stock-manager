@@ -41,6 +41,22 @@ segurança da base de dados e da pasta de imagens. `npm run dev:api` define
 O backend também usa esse caminho por defeito quando o Flask é iniciado
 diretamente. `DB_PATH` permite escolher outra base de dados.
 
+### MySQL no aaPanel
+
+O backend também suporta **MySQL 8.0/8.4** com `DB_BACKEND=mysql` e as
+variáveis `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER` e
+`MYSQL_PASSWORD`. Para transferir os dados existentes, usa
+`scripts/migrate_mysql.py`: verifica a cópia antes de confirmar e mantém
+o ficheiro SQLite original. Segue o [guia de migração para aaPanel](docs/aapanel-mysql.md)
+antes de iniciar a aplicação com MySQL. Mantém `STORAGE_MODE=local` e um
+único worker de aplicação para escritas seguras.
+
+O backend e o comando de migração carregam automaticamente o ficheiro `.env`
+da raiz do projeto; variáveis já definidas no servidor têm prioridade.
+Copia `.env.example` para `.env` e preenche `MYSQL_PASSWORD` com a password
+criada no aaPanel. O ficheiro `.env` é ignorado pelo Git. Para usar SQLite,
+define `DB_BACKEND=sqlite` nesse ficheiro ou no ambiente do processo.
+
 `STORAGE_MODE` permite escolher `local` (valor por defeito), `excel` (sincronizar
 com `Stock_sala.xlsx`) ou `google` (sincronizar com Google Sheets, requer
 credenciais válidas). Em modo local não há sincronização automática com folhas

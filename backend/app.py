@@ -34,6 +34,7 @@ from google.oauth2.service_account import Credentials
 from uuid import uuid4
 from werkzeug.utils import secure_filename
 from PIL import Image, ImageOps, UnidentifiedImageError
+from dotenv import load_dotenv
 
 # Este objeto regista as rotas e configura o servidor web da aplicacao.
 app = Flask(__name__)
@@ -43,6 +44,7 @@ app.json.sort_keys = False
 # Permite construir caminhos relativos ao projeto, independentemente da pasta
 # a partir da qual o comando para iniciar o servidor foi executado.
 BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR.parent / ".env", override=False, interpolate=False)
 # SQLite local por defeito; sincronizacao externa apenas por opcao explicita.
 STORAGE_MODE = os.getenv("STORAGE_MODE", "local").strip().lower()
 if STORAGE_MODE not in {"local", "excel", "google"}:
@@ -50,6 +52,90 @@ if STORAGE_MODE not in {"local", "excel", "google"}:
 # Ficheiro SQLite principal. DB_PATH no ambiente permite usar outra base,
 # por exemplo numa instalacao de testes sem tocar na base real.
 DB_PATH = Path(os.getenv("DB_PATH", BASE_DIR.parent / "data" / "stock.db"))
+DB_BACKEND = os.getenv("DB_BACKEND", "sqlite").strip().lower()
+if DB_BACKEND not in {"sqlite", "mysql"}:
+    raise ValueError("DB_BACKEND must be sqlite or mysql")
+DB_INTEGRITY_ERRORS = (sqlite3.IntegrityError,)
+if DB_BACKEND == "mysql":
+    import pymysql
+    DB_INTEGRITY_ERRORS += (pymysql.IntegrityError,)
+    MYSQL_SETTINGS = {
+        "host": os.getenv("MYSQL_HOST", "127.0.0.1"),
+        "port": int(os.getenv("MYSQL_PORT", "3306")),
+        "user": os.getenv("MYSQL_USER", ""),
+        "password": os.getenv("MYSQL_PASSWORD", ""),
+        "database": os.getenv("MYSQL_DATABASE", ""),
+        "charset": "utf8mb4", "cursorclass": pymysql.cursors.DictCursor,
+        "autocommit": False,
+        # Preserve explicitly stored zero IDs when copying or rewriting inventory.
+        "init_command": "SET SESSION sql_mode = CONCAT_WS(',', @@SESSION.sql_mode, 'NO_AUTO_VALUE_ON_ZERO')",
+    }
+    if os.getenv("MYSQL_SSL_CA"):
+        MYSQL_SETTINGS["ssl"] = {"ca": os.environ["MYSQL_SSL_CA"], "check_hostname": True}
+
+
+class MySQLConnection:
+    """Keep the existing execute/fetch/iteration API for the app's SQL queries."""
+
+    def __init__(self):
+        if not all(MYSQL_SETTINGS[name] for name in ("database", "user", "password")):
+            raise ValueError("Set MYSQL_DATABASE, MYSQL_USER and MYSQL_PASSWORD")
+        self.connection = pymysql.connect(**MYSQL_SETTINGS)
+        self.cursors = []
+
+    def execute(self, sql, parameters=()):
+        cursor = self.connection.cursor()
+        self.cursors.append(cursor)
+        # Only the app's fixed queries pass here; values remain bound parameters.
+        cursor.execute(sql.replace("%", "%%").replace("?", "%s")
+                       .replace(" COLLATE NOCASE", ""), parameters)
+        return cursor
+
+    def executemany(self, sql, parameters):
+        cursor = self.connection.cursor()
+        self.cursors.append(cursor)
+        cursor.executemany(sql.replace("%", "%%").replace("?", "%s"), parameters)
+        return cursor
+
+    def commit(self):
+        self.connection.commit()
+
+    def rollback(self):
+        self.connection.rollback()
+
+    def close(self):
+        for cursor in self.cursors:
+            cursor.close()
+        self.connection.close()
+
+
+def init_mysql_schema(connection):
+    # MySQL 8+: hash the full component key instead of truncating a TEXT index.
+    for sql in (
+        """CREATE TABLE IF NOT EXISTS categories (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            name VARCHAR(255) COLLATE utf8mb4_0900_as_ci UNIQUE NOT NULL,
+            props LONGTEXT NOT NULL,
+            image_enabled INTEGER NOT NULL DEFAULT 0
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
+        """CREATE TABLE IF NOT EXISTS items (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            cat_id BIGINT NOT NULL,
+            props LONGTEXT NOT NULL,
+            `key` LONGTEXT NOT NULL,
+            key_hash BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(`key`, 256))) STORED,
+            qty BIGINT NOT NULL DEFAULT 0,
+            image LONGTEXT NOT NULL,
+            UNIQUE (cat_id, key_hash),
+            FOREIGN KEY (cat_id) REFERENCES categories(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
+        """CREATE TABLE IF NOT EXISTS meta (
+            `key` VARCHAR(255) PRIMARY KEY,
+            value LONGTEXT NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
+    ):
+        connection.execute(sql)
+
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", BASE_DIR / "uploads"))
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
@@ -140,15 +226,15 @@ def erro(msg, codigo=400):
 
 @contextmanager
 def db_connection():
-    # Abre uma ligacao SQLite e transforma a funcao num gestor de contexto.
+    # Abre a base configurada e transforma a funcao num gestor de contexto.
     # Ao sair do bloco with, confirma alteracoes ou desfaz tudo se houver erro.
-    connection = sqlite3.connect(DB_PATH)
+    connection = MySQLConnection() if DB_BACKEND == "mysql" else sqlite3.connect(DB_PATH)
     # Sem isto, as linhas seriam tuplos e teriamos de usar indices numericos.
     # Com isto, row["name"] e mais claro e menos sujeito a erros.
-    connection.row_factory = sqlite3.Row
-    # Ativa as chaves estrangeiras: apagar uma categoria tambem pode apagar
-    # os seus componentes relacionados, conforme definido no esquema SQL.
-    connection.execute("PRAGMA foreign_keys = ON")
+    if DB_BACKEND == "sqlite":
+        connection.row_factory = sqlite3.Row
+        # Ativa as chaves estrangeiras conforme definido no esquema SQLite.
+        connection.execute("PRAGMA foreign_keys = ON")
     try:
         yield connection
         connection.commit()
@@ -159,77 +245,91 @@ def db_connection():
         connection.close()
 
 
-def init_db():
+def init_db(seed=True):
     # Prepara a base de dados antes de qualquer leitura ou escrita.
     # Pode ser chamada muitas vezes porque CREATE TABLE IF NOT EXISTS nao
     # recria tabelas que ja existem.
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if DB_BACKEND == "sqlite":
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with db_connection() as connection:
-        # categories define os tipos de componentes e as suas propriedades.
-        # items guarda cada referencia concreta, ligada a uma categoria por cat_id.
-        # meta guarda estados internos, como "os valores padrao ja foram inseridos".
-        connection.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS categories (
-                id INTEGER PRIMARY KEY,
-                name TEXT UNIQUE NOT NULL COLLATE NOCASE,
-                props TEXT NOT NULL,
-                image_enabled INTEGER NOT NULL DEFAULT 0
-            );
-            CREATE TABLE IF NOT EXISTS items (
-                id INTEGER PRIMARY KEY,
-                cat_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
-                props TEXT NOT NULL,
-                key TEXT NOT NULL,
-                qty INTEGER NOT NULL DEFAULT 0,
-                image TEXT NOT NULL DEFAULT '',
-                UNIQUE (cat_id, key)
-            );
-            CREATE TABLE IF NOT EXISTS meta (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            );
-            """
+        if DB_BACKEND == "mysql":
+            init_mysql_schema(connection)
+        else:
+            init_sqlite_schema(connection)
+        if not seed:
+            return
+        seed_categories(connection)
+
+
+def init_sqlite_schema(connection):
+    # categories define os tipos de componentes e as suas propriedades.
+    # items guarda cada referencia concreta, ligada a uma categoria por cat_id.
+    # meta guarda estados internos, como "os valores padrao ja foram inseridos".
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL COLLATE NOCASE,
+            props TEXT NOT NULL,
+            image_enabled INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS items (
+            id INTEGER PRIMARY KEY,
+            cat_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+            props TEXT NOT NULL,
+            key TEXT NOT NULL,
+            qty INTEGER NOT NULL DEFAULT 0,
+            image TEXT NOT NULL DEFAULT '',
+            UNIQUE (cat_id, key)
+        );
+        CREATE TABLE IF NOT EXISTS meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        """
+    )
+    category_columns = {
+        row["name"] for row in connection.execute("PRAGMA table_info(categories)")
+    }
+    if "image_enabled" not in category_columns:
+        connection.execute(
+            "ALTER TABLE categories ADD COLUMN image_enabled INTEGER NOT NULL DEFAULT 0"
         )
-        category_columns = {
-            row["name"] for row in connection.execute("PRAGMA table_info(categories)")
+    item_columns = {
+        row["name"] for row in connection.execute("PRAGMA table_info(items)")
+    }
+    if "image" not in item_columns:
+        connection.execute("ALTER TABLE items ADD COLUMN image TEXT NOT NULL DEFAULT ''")
+
+
+def seed_categories(connection):
+    # As categorias padrao sao inseridas apenas uma vez. Isto preenche uma
+    # base nova sem voltar a recriar uma categoria que o utilizador apagou.
+    ja_semeado = connection.execute(
+        "SELECT 1 FROM meta WHERE `key` = 'defaults_seeded'"
+    ).fetchone()
+    if ja_semeado is None:
+        # casefold permite comparar nomes sem distinguir maiusculas/minusculas,
+        # evitando criar, por exemplo, "LEDs" e "leds" como duas categorias.
+        existentes = {
+            row["name"].casefold()
+            for row in connection.execute("SELECT name FROM categories")
         }
-        if "image_enabled" not in category_columns:
-            connection.execute(
-                "ALTER TABLE categories ADD COLUMN image_enabled INTEGER NOT NULL DEFAULT 0"
+        em_falta = [
+            (name, json.dumps(props, ensure_ascii=False))
+            for name, props in CATEGORIAS_INICIAIS.items()
+            if name.casefold() not in existentes
+        ]
+        if em_falta:
+            # Guarda as propriedades como JSON porque a coluna props e TEXT.
+            connection.executemany(
+                "INSERT INTO categories (name, props) VALUES (?, ?)",
+                em_falta,
             )
-        item_columns = {
-            row["name"] for row in connection.execute("PRAGMA table_info(items)")
-        }
-        if "image" not in item_columns:
-            connection.execute("ALTER TABLE items ADD COLUMN image TEXT NOT NULL DEFAULT ''")
-        # As categorias padrao sao inseridas apenas uma vez. Isto preenche uma
-        # base nova sem voltar a recriar uma categoria que o utilizador apagou.
-        ja_semeado = connection.execute(
-            "SELECT 1 FROM meta WHERE key = 'defaults_seeded'"
-        ).fetchone()
-        if ja_semeado is None:
-            # casefold permite comparar nomes sem distinguir maiusculas/minusculas,
-            # evitando criar, por exemplo, "LEDs" e "leds" como duas categorias.
-            existentes = {
-                row["name"].casefold()
-                for row in connection.execute("SELECT name FROM categories")
-            }
-            em_falta = [
-                (name, json.dumps(props, ensure_ascii=False))
-                for name, props in CATEGORIAS_INICIAIS.items()
-                if name.casefold() not in existentes
-            ]
-            if em_falta:
-                # Guarda as propriedades como JSON porque a coluna props e TEXT.
-                connection.executemany(
-                    "INSERT INTO categories (name, props) VALUES (?, ?)",
-                    em_falta,
-                )
-            connection.execute(
-                # Na proxima chamada, este registo impede novo preenchimento automatico.
-                "INSERT INTO meta (key, value) VALUES ('defaults_seeded', '1')"
-            )
+        connection.execute(
+            # Na proxima chamada, este registo impede novo preenchimento automatico.
+            "INSERT INTO meta (`key`, value) VALUES ('defaults_seeded', '1')"
+        )
 
 
 def db_items():
@@ -363,7 +463,7 @@ def sync_google_to_db():
                 categories[key] = cursor.lastrowid
         connection.execute("DELETE FROM items")
         connection.executemany(
-            "INSERT INTO items (id, cat_id, props, key, qty, image) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO items (id, cat_id, props, `key`, qty, image) VALUES (?, ?, ?, ?, ?, ?)",
             [
                 (
                     item["id"], categories[item["cat"].casefold()],
@@ -639,7 +739,7 @@ def sync_excel_to_db():
             # A lista Excel e considerada completa: primeiro removemos a versao
             # anterior e depois inserimos todos os itens novamente.
             connection.executemany(
-                "INSERT INTO items (id, cat_id, props, key, qty, image) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO items (id, cat_id, props, `key`, qty, image) VALUES (?, ?, ?, ?, ?, ?)",
                 [
                     (
                         item["id"],
@@ -728,7 +828,7 @@ def save_items(items):
             # Reescreve os itens para que apagamentos e alteracoes tambem sejam
             # refletidos na base, em vez de apenas adicionar novos registos.
             connection.executemany(
-                "INSERT INTO items (id, cat_id, props, key, qty, image) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO items (id, cat_id, props, `key`, qty, image) VALUES (?, ?, ?, ?, ?, ?)",
                 [
                     (
                         item["id"],
@@ -901,14 +1001,14 @@ def import_items():
                 movements = []
                 for category, properties, quantity in validated:
                     key = "|".join(norm(value) for value in properties.values())
-                    existing = connection.execute("SELECT id, qty FROM items WHERE cat_id = ? AND key = ?", (category["id"], key)).fetchone()
+                    existing = connection.execute("SELECT id, qty FROM items WHERE cat_id = ? AND `key` = ?", (category["id"], key)).fetchone()
                     before = existing["qty"] if existing else 0
                     if before + quantity > 9007199254740991:
                         raise ValueError("A quantidade total excede o limite permitido")
                     if existing:
                         connection.execute("UPDATE items SET qty = qty + ? WHERE id = ?", (quantity, existing["id"]))
                     else:
-                        connection.execute("INSERT INTO items (cat_id, props, key, qty, image) VALUES (?, ?, ?, ?, '')", (category["id"], json.dumps(properties, ensure_ascii=False), key, quantity))
+                        connection.execute("INSERT INTO items (cat_id, props, `key`, qty, image) VALUES (?, ?, ?, ?, '')", (category["id"], json.dumps(properties, ensure_ascii=False), key, quantity))
                     movements.append({"cat": category["name"], "props": properties, "qty": quantity, "before": before})
         units = sum(item["qty"] for item in movements)
         return jsonify(msg=f"{len(rows)} linha(s) importada(s) · {units} unidades adicionadas", rows=len(rows), units=units, movements=movements)
@@ -1037,11 +1137,11 @@ def editar_item(item_id):
                 if image and not (UPLOAD_DIR / Path(image).name).is_file():
                     return erro("Imagem não encontrada")
             connection.execute(
-                "UPDATE items SET props = ?, key = ?, qty = ?, image = ? WHERE id = ?",
+                "UPDATE items SET props = ?, `key` = ?, qty = ?, image = ? WHERE id = ?",
                 (json.dumps(props, ensure_ascii=False), "|".join(norm(value) for value in props.values()), int(raw_qty), image, item_id),
             )
         return jsonify(msg="Componente atualizado")
-    except sqlite3.IntegrityError:
+    except DB_INTEGRITY_ERRORS:
         return erro("Já existe um componente com essas propriedades. A edição não foi guardada.", 409)
     except Exception as exc:
         return erro(str(exc), 500)
@@ -1084,10 +1184,10 @@ def editar_categoria(original_name):
                                (name, json.dumps(names, ensure_ascii=False), int(bool(data.get("image"))), category["id"]))
             # Temporary keys let fields be reordered without transient uniqueness collisions.
             for _, _, item_id in updates:
-                connection.execute("UPDATE items SET key = ? WHERE id = ?", (uuid4().hex, item_id))
-            connection.executemany("UPDATE items SET props = ?, key = ? WHERE id = ?", updates)
+                connection.execute("UPDATE items SET `key` = ? WHERE id = ?", (uuid4().hex, item_id))
+            connection.executemany("UPDATE items SET props = ?, `key` = ? WHERE id = ?", updates)
         return jsonify(msg="Categoria atualizada")
-    except sqlite3.IntegrityError:
+    except DB_INTEGRITY_ERRORS:
         return erro("Já existe uma categoria com esse nome", 409)
     except Exception as exc:
         return erro(str(exc), 500)

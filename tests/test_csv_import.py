@@ -12,7 +12,7 @@ class CsvImportTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        with patch.dict(os.environ, {'STORAGE_MODE': 'local', 'DB_PATH': str(Path(self.temp.name) / 'stock.db')}):
+        with patch.dict(os.environ, {'DB_BACKEND': 'sqlite', 'STORAGE_MODE': 'local', 'DB_PATH': str(Path(self.temp.name) / 'stock.db')}):
             spec = importlib.util.spec_from_file_location('csv_server', ROOT / 'backend/app.py')
             self.module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(self.module)

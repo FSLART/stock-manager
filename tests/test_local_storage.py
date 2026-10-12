@@ -16,6 +16,7 @@ class LocalStorageTest(unittest.TestCase):
             with self.subTest(server=relative), tempfile.TemporaryDirectory() as temp:
                 with patch.dict(os.environ, {
                     'STORAGE_MODE': 'local',
+                    'DB_BACKEND': 'sqlite',
                     'DB_PATH': str(Path(temp) / 'stock.db'),
                     'EXCEL_PATH': str(Path(temp) / 'stock.xlsx'),
                     'UPLOAD_DIR': str(Path(temp) / 'uploads'),

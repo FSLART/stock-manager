@@ -7,3 +7,6 @@ data/*.db
 data/*.db-*
 backend/uploads/
 backend/Stock_sala.xlsx
+.env
+.env.*
+!.env.example
