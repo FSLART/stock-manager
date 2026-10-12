@@ -13,6 +13,7 @@ const data = {
 let wrapper
 beforeEach(() => {
   localStorage.clear()
+  window.history.replaceState(null, '', '/#/stock')
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => structuredClone(data) })))
   HTMLDialogElement.prototype.showModal = function () { this.open = true }
   HTMLDialogElement.prototype.close = function () { this.open = false }

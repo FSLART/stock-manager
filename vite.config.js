@@ -9,5 +9,5 @@ export default defineConfig({
       '/uploads': 'http://127.0.0.1:5000',
     },
   },
-  test: { environment: 'jsdom', restoreMocks: true },
+  test: { include: ['tests/**/*.test.js'], environment: 'jsdom', restoreMocks: true },
 })

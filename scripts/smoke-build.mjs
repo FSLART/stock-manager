@@ -13,7 +13,7 @@ for (const host of ['Flask', 'Apps Script']) {
   const virtualConsole = new VirtualConsole()
   virtualConsole.on('jsdomError', error => errors.push(error.message))
   const dom = new JSDOM(html, {
-    url: 'http://localhost:5179/', runScripts: 'dangerously', virtualConsole,
+    url: 'http://localhost:5179/#/stock', runScripts: 'dangerously', virtualConsole,
     beforeParse(window) {
       window.fetch = async url => {
         calls.push(url)

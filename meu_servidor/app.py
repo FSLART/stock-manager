@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 
 # Flask recebe pedidos HTTP; jsonify responde em JSON, render_template entrega
 # a pagina HTML e request permite ler os dados enviados pelo frontend.
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, g, jsonify, render_template, request, send_from_directory
 # Workbook cria um livro vazio; load_workbook abre o ficheiro ja existente.
 from openpyxl import Workbook, load_workbook
 # Estas classes pertencem ao formato antigo que criava uma tabela Excel.
@@ -108,6 +108,22 @@ CATEGORIAS_INICIAIS = {
     "Indutores": ["valor (µH)", "corrente (A)"],
     "Cristais": ["frequência (MHz)"],
 }
+
+
+@app.before_request
+def lock_local_stock_write():
+    # Protect the full read/modify/save sequence, including existing stock routes.
+    # ponytail: per-process lock; multi-worker deployments need database-level writes.
+    if STORAGE_MODE == "local" and request.method in {"POST", "PATCH", "DELETE"} and request.path.startswith("/api/"):
+        EXCEL_LOCK.acquire()
+        g.stock_write_locked = True
+
+
+@app.teardown_request
+def unlock_local_stock_write(_error):
+    if getattr(g, "stock_write_locked", False):
+        g.stock_write_locked = False
+        EXCEL_LOCK.release()
 
 
 def norm(value):
@@ -843,6 +859,61 @@ def dados():
     try:
         _, _, _, items = read_items()
         return jsonify(data_from_items(items))
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.post("/api/items/import")
+def import_items():
+    if STORAGE_MODE != "local":
+        return erro("A importação CSV requer armazenamento local no servidor")
+    data = request.get_json(silent=True)
+    rows = data.get("items") if isinstance(data, dict) else None
+    if not isinstance(rows, list) or not rows or len(rows) > 5000:
+        return erro("Envia entre 1 e 5000 componentes para importar")
+    try:
+        with EXCEL_LOCK:
+            init_db()
+            with db_connection() as connection:
+                categories = {
+                    row["name"].casefold(): row
+                    for row in connection.execute("SELECT id, name, props FROM categories")
+                }
+                validated = []
+                for index, item in enumerate(rows, start=2):
+                    if not isinstance(item, dict):
+                        raise ValueError(f"Linha {index}: componente inválido")
+                    name = item.get("cat")
+                    category = categories.get(name.strip().casefold()) if isinstance(name, str) else None
+                    if category is None:
+                        raise ValueError(f"Linha {index}: categoria desconhecida")
+                    quantity = item.get("qty")
+                    if type(quantity) is not int or not 1 <= quantity <= 9007199254740991:
+                        raise ValueError(f"Linha {index}: quantidade inválida")
+                    properties = item.get("props")
+                    required = json.loads(category["props"])
+                    if not isinstance(properties, dict) or set(properties) != set(required):
+                        raise ValueError(f"Linha {index}: propriedades diferentes das da categoria {category['name']}")
+                    if any(not isinstance(properties[key], str) or not properties[key].strip() for key in required):
+                        raise ValueError(f"Linha {index}: preenche todas as propriedades")
+                    properties = {key: properties[key].strip() for key in required}
+                    validated.append((category, properties, quantity))
+                movements = []
+                for category, properties, quantity in validated:
+                    key = "|".join(norm(value) for value in properties.values())
+                    existing = connection.execute("SELECT id, qty FROM items WHERE cat_id = ? AND key = ?", (category["id"], key)).fetchone()
+                    before = existing["qty"] if existing else 0
+                    if before + quantity > 9007199254740991:
+                        raise ValueError("A quantidade total excede o limite permitido")
+                    if existing:
+                        connection.execute("UPDATE items SET qty = qty + ? WHERE id = ?", (quantity, existing["id"]))
+                    else:
+                        connection.execute("INSERT INTO items (cat_id, props, key, qty, image) VALUES (?, ?, ?, ?, '')", (category["id"], json.dumps(properties, ensure_ascii=False), key, quantity))
+                    movements.append({"cat": category["name"], "props": properties, "qty": quantity, "before": before})
+        units = sum(item["qty"] for item in movements)
+        return jsonify(msg=f"{len(rows)} linha(s) importada(s) · {units} unidades adicionadas", rows=len(rows), units=units, movements=movements)
+    except ValueError as exc:
+        return erro(str(exc))
     except Exception as exc:
         return erro(str(exc), 500)
 

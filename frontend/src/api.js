@@ -14,6 +14,7 @@ export function writeStored(key, value) {
 const routes = {
   data: () => ['/api/data', 'GET'],
   move: () => ['/api/move', 'POST'],
+  importItems: () => ['/api/items/import', 'POST'],
   newCategory: () => ['/api/categories', 'POST'],
   deleteCategory: p => [`/api/categories/${encodeURIComponent(p.name)}`, 'DELETE'],
   deleteItem: p => [`/api/items/${p.id}`, 'DELETE'],
@@ -128,7 +129,7 @@ export function createApi() {
     return data.url
   }
 
-  return { request, load, syncPending, uploadImage }
+  return { request, load, syncPending, uploadImage, importInventory: items => direct('importItems', { items }) }
 }
 
 async function jpegBase64(file) {

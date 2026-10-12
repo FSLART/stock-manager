@@ -1,7 +1,35 @@
-# Gaveta · Stock de componentes
+# Stocklart · Stock de componentes
 
 Interface em **Vue 3**, com componentes Single File (`.vue`) e Vite. A mesma
 aplicação funciona com a API Flask e com o Google Apps Script.
+
+## Design e páginas
+
+O design segue `stocklart-vue-pcb-development`, com tema escuro, amarelo LART,
+menu responsivo e fotografias incluídas no HTML gerado. A página inicial mostra
+o stock real e permite consultar o inventário, gerir categorias e adicionar material.
+
+O menu inclui **Início**, **Inventário**, **Sinais de placas**, **Movimentos**,
+**PCB e os seus BOMs** e **Definições**. A navegação usa fragmentos (`#/stock`,
+`#/pcbs`, etc.), compatíveis com Flask e Apps Script sem configurar novas rotas
+no servidor. O inventário mantém filtros, ordenação, edição e sincronização offline.
+
+- **PCB/BOM**: importa CSV, BOM ou TXT separados por vírgulas ou ponto e vírgula,
+  incluindo campos entre aspas e descrições com várias linhas. Aceita cabeçalhos
+  usuais (Reference, Value, Quantity, MPN, Description, Footprint e equivalentes
+  portugueses); sem cabeçalhos, espera referência, valor e quantidade. Guarda
+  projetos e permite consultar os componentes e apagar projetos.
+- **Sinais de placas**: guarda placa, sinal, tensão de referência, ligação e notas.
+- **Movimentos**: histórico de entradas, saídas, ajustes e remoções feitos neste
+  navegador desde esta atualização. Operações registadas offline têm essa indicação;
+  este histórico não constitui um registo central do servidor.
+- **Definições**: modo compacto do inventário e confirmações de alterações.
+  Desativar confirmações mantém as mensagens de erro visíveis.
+
+Projetos PCB, sinais, histórico e preferências usam armazenamento do navegador.
+Não são partilhados entre dispositivos e não migram para a base de dados Flask.
+O stock continua a usar a API e as chaves offline existentes. Erros ao guardar
+os novos dados locais são apresentados, sem confirmar falsamente a gravação.
 
 ## Modo local (por defeito)
 
@@ -43,6 +71,30 @@ adicionar, renomear e remover propriedades. Renomear campos mantém os valores
 dos componentes. A remoção de campos pede confirmação e alterações que tornem
 dois componentes iguais são rejeitadas. Os controlos de edição só aparecem nas
 implementações que suportam estas operações (servidor principal em modo local).
+
+### Importar componentes por CSV
+
+No **Inventário**, seleciona **Importar CSV**, escolhe o ficheiro e revê a
+pré-visualização antes de confirmar. Disponível no servidor principal em modo
+local; requer ligação online. Não é adicionado à fila offline.
+
+O CSV deve ter `categoria`, `quantidade` e os nomes das propriedades configuradas
+para cada categoria. Aceita vírgulas ou ponto e vírgula, UTF-8 (com ou sem BOM),
+campos entre aspas e valores com quebras de linha. Quantidades devem ser inteiros
+positivos. O botão **Descarregar modelo** fornece os cabeçalhos da categoria
+selecionada (ou da primeira categoria), prontos para preencher. Por exemplo:
+
+```csv
+categoria;quantidade;cor;tamanho
+LEDs;10;vermelho;5 mm
+LEDs;20;azul;3 mm
+```
+
+Para misturar categorias, inclui as colunas necessárias para todas e deixa vazias
+as propriedades que não pertencem à categoria da linha. Uma categoria desconhecida,
+propriedade em falta ou quantidade inválida impede a importação completa.
+Componentes com as mesmas propriedades somam quantidades e mantêm ID e imagem.
+O servidor grava o lote numa única transação. Limites: 5 MB e 5000 linhas por CSV.
 
 ## Desenvolvimento
 

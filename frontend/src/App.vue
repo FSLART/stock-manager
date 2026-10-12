@@ -1,15 +1,22 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, shallowReactive, watch } from 'vue'
-import { createApi } from './api.js'
+import { computed, nextTick, onMounted, onUnmounted, provide, reactive, ref, shallowReactive, watch } from 'vue'
+import { createApi, readStored, writeStored } from './api.js'
+import InventoryCsvImport from './components/InventoryCsvImport.vue'
 import StockItem from './components/StockItem.vue'
 import StockMovement from './components/StockMovement.vue'
 import CategoryForm from './components/CategoryForm.vue'
-import lartBadge from './assets/lart-badge.png?inline'
+import AppNavigation from './components/AppNavigation.vue'
+import HomePage from './pages/HomePage.vue'
+import BoardSignalsPage from './pages/BoardSignalsPage.vue'
+import MovementsPage from './pages/MovementsPage.vue'
+import PcbBomPage from './pages/PcbBomPage.vue'
+import SettingsPage from './pages/SettingsPage.vue'
 
 const api = createApi()
 const categories = ref([]), items = ref([]), current = ref(null), query = ref('')
 const busy = ref(false), loading = ref(true), toastMessage = ref(''), formError = ref('')
 const movement = ref(null), categoryForm = ref(null)
+const csvImport = ref(null), csvError = ref('')
 const canEdit = ref(false), categoryError = ref('')
 const queues = shallowReactive(new Map())
 let timer, toastTimer, refreshing = false, disposed = false
@@ -64,7 +71,32 @@ const total = name => items.value.filter(item => !name || item.cat === name).red
 const color = name => `hsl(${[...name].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7)} 65% 48%)`
 const locked = computed(() => busy.value || queues.size > 0)
 
-function toast(message) {
+const pages = { home: HomePage, 'board-signals': BoardSignalsPage, movements: MovementsPage, pcbs: PcbBomPage, settings: SettingsPage }
+const routeKeys = { '/': 'home', '/stock': 'stock', '/board-signals': 'board-signals', '/movements': 'movements', '/pcbs': 'pcbs', '/settings': 'settings' }
+const page = ref(routeKeys[window.location.hash.slice(1)] || 'home')
+function readRoute() { page.value = routeKeys[window.location.hash.slice(1)] || 'home' }
+const navigation = { push(path) { window.location.hash = path; readRoute() } }
+provide('navigation', navigation)
+const storedMovements = readStored('stocklart-movements', [])
+const movements = ref(Array.isArray(storedMovements) ? storedMovements : [])
+const preferences = reactive({ compact: readStored('stocklart-compact-mode', false) === true, notifications: readStored('stocklart-notifications', true) !== false })
+provide('preferences', preferences)
+function recordMovement(item, delta, before, result, type) {
+  movements.value.unshift({ id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`, type: type || (delta >= 0 ? 'in' : 'out'), item: componentValue(item), category: item.cat, delta, before, after: before + delta, timestamp: new Date().toISOString(), queued: Boolean(result.queued) })
+  const saved = writeStored('stocklart-movements', movements.value)
+  if (!saved) toast('Movimento aplicado, mas não foi possível guardar o histórico neste navegador.', true)
+  return saved
+}
+provide('inventory', reactive({
+  movements,
+  totalUnits: computed(() => total()),
+  categoryCount: computed(() => categories.value.length),
+  async manageCategories() { navigation.push('/stock'); await nextTick(); document.querySelector('nav[aria-label="Categorias"]')?.focus() },
+  async addMaterial() { navigation.push('/stock'); await nextTick(); if (categories.value.length) movement.value.open(current.value) },
+}))
+
+function toast(message, important = false) {
+  if (!preferences.notifications && !important) return
   toastMessage.value = message || ''
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => { toastMessage.value = '' }, 3000)
@@ -83,14 +115,14 @@ async function act(action, payload, success) {
   toast('A sincronizar...')
   try {
     const result = await api.request(action, payload)
-    success?.(result)
-    toast(result.msg)
+    const saved = success?.(result)
+    if (saved !== false) toast(result.msg)
     if (!result.queued) await load()
-  } catch (error) { toast(error.message) }
+  } catch (error) { toast(error.message, true) }
   finally { busy.value = false }
 }
 function deleteItem(item) {
-  if (confirm('Apagar este item do stock?')) act('deleteItem', { id: item.id })
+  if (confirm('Apagar este item do stock?')) act('deleteItem', { id: item.id }, result => recordMovement(item, -item.qty, item.qty, result, 'delete'))
 }
 function deleteCategory(category) {
   const refs = items.value.filter(item => item.cat === category.name)
@@ -98,8 +130,11 @@ function deleteCategory(category) {
     ? `Isto vai apagar também ${refs.length} referência(s) (${total(category.name)} unidades) que estão lá dentro. Esta ação não pode ser desfeita.`
     : 'Esta ação não pode ser desfeita.'
   if (confirm(`Apagar a categoria "${category.name}"?\n\n${warning}`)) {
-    act('deleteCategory', { name: category.name }, () => {
+    act('deleteCategory', { name: category.name }, result => {
+      let saved = true
+      for (const item of refs) if (!recordMovement(item, -item.qty, item.qty, result, 'delete')) saved = false
       if (current.value === category.name) current.value = null
+      return saved
     })
   }
 }
@@ -123,12 +158,15 @@ async function processQueue(id, queue) {
       const delta = queue.pending
       queue.pending = 0
       try {
+        const item = items.value.find(item => item.id === id)
+        const before = item ? item.qty - delta : 0
         const result = await api.request('step', { id, delta })
+        if (item) recordMovement(item, delta, before, result)
         if (result.queued) toast(result.msg)
       } catch (error) {
         const item = items.value.find(item => item.id === id)
         if (item) item.qty = Math.max(0, item.qty - delta)
-        toast(error.message)
+        toast(error.message, true)
       }
     }
   } finally { queues.delete(id) }
@@ -139,14 +177,33 @@ async function submitMovement({ file, ...payload }) {
   formError.value = ''
   try {
     const editing = payload.id !== undefined
+    const category = payload.cat
+    const existing = items.value.find(item => editing ? item.id === payload.id : item.cat === category && Object.entries(payload.props).every(([key, value]) => normalize(item.props[key] ?? '') === normalize(value)))
+    const before = existing?.qty || 0
+    const delta = editing ? payload.qty - before : (payload.mode === 'out' ? -payload.qty : payload.qty)
     if (file) payload.image = await api.uploadImage(file)
     else if (!editing) payload.image = ''
     if (editing) { delete payload.mode; delete payload.cat }
     const result = await api.request(editing ? 'editItem' : 'move', payload)
+    const saved = recordMovement({ cat: existing?.cat || category, props: payload.props }, delta, before, result, editing ? 'edit' : undefined)
     movement.value.close()
-    toast(result.msg)
+    if (saved) toast(result.msg)
     if (!result.queued) await load()
   } catch (error) { formError.value = error.message }
+  finally { busy.value = false }
+}
+async function submitCsv(rows) {
+  if (locked.value || !rows.length) return
+  busy.value = true
+  csvError.value = ''
+  try {
+    const result = await api.importInventory(rows)
+    let saved = true
+    for (const item of result.movements || []) if (!recordMovement(item, item.qty, item.before, result, 'in')) saved = false
+    csvImport.value.close()
+    if (saved) toast(result.msg)
+    await load()
+  } catch (error) { csvError.value = error.message }
   finally { busy.value = false }
 }
 function openCategory(category) {
@@ -178,11 +235,12 @@ async function refresh() {
 }
 onMounted(async () => {
   window.addEventListener('online', refresh)
+  window.addEventListener('hashchange', readRoute)
   timer = setInterval(refresh, 15000)
   try {
     await api.syncPending(toast)
     await load()
-  } catch (error) { toast(error.message || 'Sem ligação ao servidor e sem dados guardados neste dispositivo') }
+  } catch (error) { toast(error.message || 'Sem ligação ao servidor e sem dados guardados neste dispositivo', true) }
   finally { loading.value = false }
 })
 onUnmounted(() => {
@@ -191,13 +249,18 @@ onUnmounted(() => {
   clearTimeout(toastTimer)
   for (const queue of queues.values()) clearTimeout(queue.timer)
   window.removeEventListener('online', refresh)
+  window.removeEventListener('hashchange', readRoute)
 })
 </script>
 
 <template>
-  <aside>
-    <div class="logo"><img class="brand-icon" :src="lartBadge" alt="LART" width="64" height="64"><div>Gaveta<small>Stock de componentes · LART</small></div></div>
-    <nav aria-label="Categorias">
+  <component :is="pages[page]" v-if="page !== 'stock'" />
+  <div v-else class="stock-page" :class="{ compact: preferences.compact }">
+  <AppNavigation active="stock" />
+  <div class="stock-shell">
+  <aside class="sidebar">
+    <div class="sidebar-heading"><span class="eyebrow">Organização</span><strong>Categorias</strong></div>
+    <nav class="category-nav" aria-label="Categorias" tabindex="-1">
       <div class="cat-row"><button :aria-current="!current" @click="current = null">Tudo <span class="n">{{ total() }}</span></button></div>
       <div v-for="category in categories" :key="category.name" class="cat-row">
         <button :aria-current="current === category.name" @click="current = category.name"><span><i class="dot" :style="{ background: color(category.name) }"></i>{{ category.name }}</span><span class="n">{{ total(category.name) }}</span></button>
@@ -207,12 +270,13 @@ onUnmounted(() => {
     </nav>
     <button class="side-btn" :disabled="locked" @click="openCategory()">+ Nova categoria</button>
   </aside>
-  <main>
+  <main class="stock-content">
     <div class="top">
       <div class="search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input v-model="query" type="search" aria-label="Pesquisar componentes" placeholder="Pesquisar por valor, tamanho, categoria…" autocomplete="off">
       </div>
+      <button v-if="canEdit" class="text-button import-csv-button" aria-label="Importar CSV" :disabled="locked || !categories.length" @click="csvImport.open()">Importar CSV</button>
       <button class="primary" :disabled="locked || !categories.length" @click="movement.open(current)">Adicionar / retirar</button>
     </div>
     <section class="filter-section" aria-label="Filtros de componentes">
@@ -238,7 +302,7 @@ onUnmounted(() => {
         <p v-if="!facets.length" class="filter-no-values">As propriedades das categorias aparecem aqui como filtros.</p>
       </div>
     </section>
-    <div class="heading"><h1>{{ current || 'Tudo' }}</h1><span class="sub">{{ shown.length }} referências · {{ units }} unidades</span></div>
+    <div class="heading"><h1>{{ current || 'Tudo em stock' }}</h1><span class="sub">{{ shown.length }} referências · {{ units }} unidades</span></div>
     <div class="list" :aria-busy="loading">
       <div v-if="loading" class="empty">A carregar stock…</div>
       <template v-else>
@@ -257,7 +321,10 @@ onUnmounted(() => {
       </template>
     </div>
   </main>
+  </div>
+  </div>
   <StockMovement ref="movement" :categories="categories" :items="items" :busy="busy" :error="formError" @submit="submitMovement" @clear-error="formError = ''" />
   <CategoryForm ref="categoryForm" :busy="busy" :error="categoryError" @submit="submitCategory" />
+  <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
   <div id="toast" role="status" :class="{ on: toastMessage }">{{ toastMessage }}</div>
 </template>
