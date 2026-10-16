@@ -950,6 +950,12 @@ def uploaded_image(filename):
     return send_from_directory(UPLOAD_DIR, filename)
 
 
+@app.get("/simulations/<path:filename>")
+def board_simulation(filename):
+    # Emuladores HTML das placas analogicas, mostrados na pagina Simulacao analogica.
+    return send_from_directory(BASE_DIR.parent / "board_emulation", filename)
+
+
 @app.route("/")
 def home():
     # Rota da pagina principal; o HTML trata da apresentacao e chama as APIs abaixo.

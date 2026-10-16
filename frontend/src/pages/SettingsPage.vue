@@ -22,7 +22,7 @@ function saveSettings(key, value) {
         <label class="setting-row"><span><strong>Notificações</strong><small>Mostra confirmações após alterações de stock. Erros continuam visíveis.</small></span><input :checked="preferences.notifications" aria-label="Notificações" type="checkbox" @change="saveSettings('notifications', $event.target.checked)"></label>
         <p v-if="error" class="upload-error" role="alert">{{ error }}</p>
       </article>
-      <article class="workspace-card"><p class="eyebrow">Persistência atual</p><h2>Inventário ligado à API</h2><p class="card-muted">O inventário é gerido pelo servidor Flask ou pelo Google Apps Script, com cache e fila offline. Projetos PCB, sinais, histórico de movimentos e preferências são guardados apenas neste navegador.</p></article>
+      <article class="workspace-card"><p class="eyebrow">Persistência atual</p><h2>Inventário ligado à API</h2><p class="card-muted">O inventário é gerido pelo servidor Flask ou pelo Google Apps Script, com cache e fila offline. Projetos PCB, histórico de movimentos e preferências são guardados apenas neste navegador.</p></article>
     </section>
   </WorkspacePage>
 </template>

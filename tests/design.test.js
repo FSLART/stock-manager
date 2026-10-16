@@ -20,7 +20,7 @@ it('opens the reference home and navigates all six pages without losing backend 
   wrapper = mount(App)
   await flushPromises()
   expect(wrapper.find('.home-summary').text()).toContain('3')
-  for (const [label, title] of [['Inventário', 'Tudo em stock'], ['Sinais de placas', 'Sinais de placas'], ['Movimentos', 'Movimentos'], ['PCB e os seus BOMs', 'PCB e os seus BOMs'], ['Definições', 'Definições']]) {
+  for (const [label, title] of [['Inventário', 'Tudo em stock'], ['Simulação analógica', 'Simulação analógica'], ['Movimentos', 'Movimentos'], ['PCB e os seus BOMs', 'PCB e os seus BOMs'], ['Definições', 'Definições']]) {
     await open(label)
     expect(wrapper.find('h1').text()).toBe(title)
   }
@@ -48,19 +48,16 @@ it('imports a quoted BOM, persists it and reopens it after mounting again', asyn
   await wrapper.find('.saved-project-open').trigger('click')
   expect(wrapper.find('.pcb-project-detail h2').text()).toBe('Motor V1')
 })
-it('saves a board signal and displays it after remounting', async () => {
+it('lists analog boards with a 3D preview and opens the board simulation', async () => {
   wrapper = mount(App)
   await flushPromises()
-  await open('Sinais de placas')
-  await wrapper.find('input[aria-label="Placa"]').setValue('Motor V1')
-  await wrapper.find('input[aria-label="Nome do sinal"]').setValue('PWM')
-  await wrapper.find('input[aria-label="Tensão de referência"]').setValue('3.3 V')
-  await wrapper.find('.signal-form').trigger('submit')
-  expect(wrapper.find('.signal-list').text()).toContain('PWM')
-  wrapper.unmount()
-  wrapper = mount(App)
-  await flushPromises()
-  expect(wrapper.find('.signal-list').text()).toContain('Motor V1')
+  await open('Simulação analógica')
+  expect(wrapper.findAll('.board-card h2').map(title => title.text())).toEqual(['TSAL Green', 'TSAL Red', 'BSPD 2.2', 'Latch Board', 'Voltage Indicator'])
+  expect(wrapper.findAll('iframe.board-preview').map(frame => frame.attributes('src'))).toEqual(['/simulations/bspd_emulator.html#preview'])
+  await wrapper.find('.board-card .primary-button').trigger('click')
+  expect(wrapper.find('.simulation-frame').attributes('src')).toBe('/simulations/bspd_emulator.html')
+  await wrapper.findAll('.text-button').find(button => button.text() === '← Placas').trigger('click')
+  expect(wrapper.find('.board-card').exists()).toBe(true)
 })
 it('applies compact preferences and records completed stock changes in the local history', async () => {
   vi.useFakeTimers()

@@ -7,6 +7,7 @@ export default defineConfig({
     proxy: {
       '/api': 'http://127.0.0.1:5000',
       '/uploads': 'http://127.0.0.1:5000',
+      '/simulations': 'http://127.0.0.1:5000',
     },
   },
   test: { include: ['tests/**/*.test.js'], environment: 'jsdom', restoreMocks: true },

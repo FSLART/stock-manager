@@ -84,7 +84,7 @@ migração sem confirmar dados parciais.
 
 Os ficheiros de imagens não estão na base de dados: copia
 `backend/uploads/` ou configura `UPLOAD_DIR` para a pasta correspondente.
-Dados de PCB/BOM, sinais, movimentos e preferências guardados apenas no
+Dados de PCB/BOM, movimentos e preferências guardados apenas no
 navegador não fazem parte desta migração.
 
 ## 4. Iniciar e confirmar

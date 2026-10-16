@@ -13,7 +13,7 @@ defineProps({
 const links = [
   { label: 'Início', route: '/', key: 'home' },
   { label: 'Inventário', route: '/stock', key: 'stock' },
-  { label: 'Sinais de placas', route: '/board-signals', key: 'board-signals' },
+  { label: 'Simulação analógica', route: '/analog-simulation', key: 'analog-simulation' },
   { label: 'Movimentos', route: '/movements', key: 'movements' },
   { label: 'PCB e os seus BOMs', route: '/pcbs', key: 'pcbs' },
   { label: 'Definições', route: '/settings', key: 'settings' }

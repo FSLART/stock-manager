@@ -7,7 +7,7 @@ import StockMovement from './components/StockMovement.vue'
 import CategoryForm from './components/CategoryForm.vue'
 import AppNavigation from './components/AppNavigation.vue'
 import HomePage from './pages/HomePage.vue'
-import BoardSignalsPage from './pages/BoardSignalsPage.vue'
+import AnalogSimulationPage from './pages/AnalogSimulationPage.vue'
 import MovementsPage from './pages/MovementsPage.vue'
 import PcbBomPage from './pages/PcbBomPage.vue'
 import SettingsPage from './pages/SettingsPage.vue'
@@ -71,8 +71,8 @@ const total = name => items.value.filter(item => !name || item.cat === name).red
 const color = name => `hsl(${[...name].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7)} 65% 48%)`
 const locked = computed(() => busy.value || queues.size > 0)
 
-const pages = { home: HomePage, 'board-signals': BoardSignalsPage, movements: MovementsPage, pcbs: PcbBomPage, settings: SettingsPage }
-const routeKeys = { '/': 'home', '/stock': 'stock', '/board-signals': 'board-signals', '/movements': 'movements', '/pcbs': 'pcbs', '/settings': 'settings' }
+const pages = { home: HomePage, 'analog-simulation': AnalogSimulationPage, movements: MovementsPage, pcbs: PcbBomPage, settings: SettingsPage }
+const routeKeys = { '/': 'home', '/stock': 'stock', '/analog-simulation': 'analog-simulation', '/movements': 'movements', '/pcbs': 'pcbs', '/settings': 'settings' }
 const page = ref(routeKeys[window.location.hash.slice(1)] || 'home')
 function readRoute() { page.value = routeKeys[window.location.hash.slice(1)] || 'home' }
 const navigation = { push(path) { window.location.hash = path; readRoute() } }

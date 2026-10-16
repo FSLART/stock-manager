@@ -9,7 +9,7 @@ O design usa tema escuro, amarelo LART,
 menu responsivo e fotografias incluídas no HTML gerado. A página inicial mostra
 o stock real e permite consultar o inventário, gerir categorias e adicionar material.
 
-O menu inclui **Início**, **Inventário**, **Sinais de placas**, **Movimentos**,
+O menu inclui **Início**, **Inventário**, **Simulação analógica**, **Movimentos**,
 **PCB e os seus BOMs** e **Definições**. A navegação usa fragmentos (`#/stock`,
 `#/pcbs`, etc.), compatíveis com Flask e Apps Script sem configurar novas rotas
 no servidor. O inventário mantém filtros, ordenação, edição e sincronização offline.
@@ -19,14 +19,14 @@ no servidor. O inventário mantém filtros, ordenação, edição e sincronizaç
   usuais (Reference, Value, Quantity, MPN, Description, Footprint e equivalentes
   portugueses); sem cabeçalhos, espera referência, valor e quantidade. Guarda
   projetos e permite consultar os componentes e apagar projetos.
-- **Sinais de placas**: guarda placa, sinal, tensão de referência, ligação e notas.
+- **Simulação analógica**: lista as placas analógicas com o modelo 3D e abre o emulador de cada uma (`board_emulation/`).
 - **Movimentos**: histórico de entradas, saídas, ajustes e remoções feitos neste
   navegador desde esta atualização. Operações registadas offline têm essa indicação;
   este histórico não constitui um registo central do servidor.
 - **Definições**: modo compacto do inventário e confirmações de alterações.
   Desativar confirmações mantém as mensagens de erro visíveis.
 
-Projetos PCB, sinais, histórico e preferências usam armazenamento do navegador.
+Projetos PCB, histórico e preferências usam armazenamento do navegador.
 Não são partilhados entre dispositivos e não migram para a base de dados Flask.
 O stock continua a usar a API e as chaves offline existentes. Erros ao guardar
 os novos dados locais são apresentados, sem confirmar falsamente a gravação.
