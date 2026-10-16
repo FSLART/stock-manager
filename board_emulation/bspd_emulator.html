@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BSPD 2.2 Emulator</title>
-<script>try { const th = localStorage.getItem('bspd.theme'); if (th) document.documentElement.dataset.theme = th; } catch { /* no storage */ }
-if (location.hash === '#preview') document.documentElement.classList.add('preview');   // 3D-only thumbnail for the Stocklart board list</script>
+<script>if (location.hash === '#preview') document.documentElement.classList.add('pv');   // embedded thumbnail (the Stocklart card): rotating 3D board only
+try { const th = localStorage.getItem('bspd.theme'); if (th) document.documentElement.dataset.theme = th; } catch { /* no storage */ }</script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <style>
 :root{
@@ -124,6 +124,7 @@ input[type=range]{width:100%;margin:0}
   .inputs .grp + .grp{border-top:0;padding-top:0}
 }
 @media (max-width:1099px){ .app{grid-template-columns:minmax(0,1fr);grid-template-areas:"stage" "inputs" "trims" "lower"} .rail{position:static;max-height:none} }
+@media (min-width:700px) and (max-width:1099px){ .app{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"stage stage" "inputs trims" "lower lower";align-items:start} .inputs{display:flex;flex-direction:column} }
 @media (max-width:899px){ .app{padding:var(--s3)} }
 .grp{display:flex;flex-direction:column;gap:var(--s2)}
 .grp + .grp{border-top:1px solid var(--line);padding-top:16px}
@@ -302,9 +303,10 @@ dl.gloss dd{margin:0;color:var(--muted)}
 .f{font-size:12px;color:var(--muted);font-family:ui-monospace,Consolas,monospace}
 
 footer{max-width:1760px;margin:0 auto;padding:var(--s2) var(--s4) var(--s5);color:var(--muted);font-size:12.5px;display:flex;flex-wrap:wrap;gap:var(--s2) var(--s5)}
+/* thumbnail mode: opened as bspd_emulator.html#preview inside a small iframe */
+html.pv body{overflow:hidden}
+html.pv #w3d{position:fixed;inset:0;z-index:50;height:auto}
 @media (prefers-reduced-motion: reduce){ *{transition:none!important} }
-html.preview body{overflow:hidden}
-html.preview #w3d{position:fixed;inset:0;z-index:50;height:auto}
 </style>
 </head>
 <body>
@@ -1834,7 +1836,7 @@ function build3D(THREE, OrbitControls) {
   const cx = (bb[0] + bb[3]) / 2, cy = (bb[1] + bb[4]) / 2, span = Math.max(bb[3] - bb[0], bb[4] - bb[1]);
   const home = () => { ctl.target.set(cx, cy, 0); cam.position.set(cx - span * 0.15, cy - span * 1.25, span * 1.35); ctl.update(); };
   home(); $('cam3d').onclick = home;
-  ctl.autoRotate = document.documentElement.classList.contains('preview') && !reduceMotion.matches;
+  ctl.autoRotate = document.documentElement.classList.contains('pv') && !reduceMotion.matches;
 
   // ---- picking ----
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
@@ -2200,7 +2202,7 @@ readCfg(); buildPots(); restorePots(); buildCircuit(); EV = evEls(); ACC = accEl
 buildSchematic(); fit(); readCols(); derive();
 $('findList').innerHTML = [...new Set([...SCH.comps.map(c => c.des), ...NETNAME])].sort().map(v => `<option value="${esc(v)}">`).join('');
 showGuide(store.get('guide') !== 'hidden');
-showTab(document.documentElement.classList.contains('preview') ? 'w3d' : 'blkWrap');
+showTab(document.documentElement.classList.contains('pv') ? 'w3d' : 'blkWrap');
 applyLang(); syncTheme();
 // self-check: trimmer target inversion round-trips
 POTS.forEach(p => { const tv = +$('t_' + p.id).value, x0 = p.x; p.x = clamp(targetX(p), 0, 1); const v = p.val(p.x), want = p.tgt.unit === 'bar' ? barToV(tv) : p.tgt.unit === 'kW' ? ampToV(tv * 1000 / cfg.vhv) : tv;
