@@ -168,3 +168,10 @@ it('previews a CSV before importing its components through the backend', async (
   await open('Movimentos')
   expect(wrapper.find('.movement-row').text()).toContain('verde')
 })
+it('links the menu and the home page to the harness site', async () => {
+  wrapper = mount(App)
+  await flushPromises()
+  const harness = 'https://stocklart.pt/harness/'
+  expect(wrapper.findAll('a.menu-link').map((a) => [a.text(), a.attributes('href')])).toContainEqual(['Cablagem', harness])
+  expect(wrapper.find(`a.home-option[href="${harness}"]`).text()).toContain('Cablagem')
+})

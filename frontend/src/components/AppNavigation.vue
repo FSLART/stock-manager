@@ -18,6 +18,8 @@ const links = [
   { label: 'PCB e os seus BOMs', route: '/pcbs', key: 'pcbs' },
   { label: 'Definições', route: '/settings', key: 'settings' }
 ]
+// site à parte (não é uma rota desta app); endereço completo para funcionar também no Apps Script
+const external = [{ label: 'Cablagem', href: 'https://stocklart.pt/harness/', key: 'harness' }]
 </script>
 
 <template>
@@ -36,6 +38,7 @@ const links = [
       >
         {{ link.label }}
       </button>
+      <a v-for="link in external" :key="link.key" class="menu-link" :href="link.href">{{ link.label }}</a>
     </nav>
   </header>
 </template>

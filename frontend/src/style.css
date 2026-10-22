@@ -509,6 +509,11 @@ button:disabled {
   clip-path: polygon(35% 0, 100% 0, 100% 100%, 0 100%);
   pointer-events: none;
 }
+/* ligações para outros sites (Cablagem) com o mesmo aspeto dos botões */
+a.home-option,
+a.menu-link {
+  text-decoration: none;
+}
 .home-option:hover {
   filter: brightness(1.08);
   transform: translateX(8px) rotate(0);

@@ -69,6 +69,9 @@ function nextSlide(delta) { slideIndex.value = (slideIndex.value + delta + slide
           <button class="home-option" @click="inventory.addMaterial" :disabled="!inventory.categoryCount">
             <strong>Adicionar material</strong><span>→</span>
           </button>
+          <a class="home-option" href="https://stocklart.pt/harness/">
+            <strong>Cablagem do T26e</strong><span>→</span>
+          </a>
           <div class="home-summary">
             <strong>{{ inventory.totalUnits }}</strong
             ><span>unidades em stock · {{ inventory.categoryCount }} categorias</span>
