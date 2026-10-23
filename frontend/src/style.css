@@ -1,7 +1,26 @@
 
-/* Variaveis, tipografia e estilos base da aplicacao. */
-:root{--bg:#E8EDF1;--panel:#fff;--ink:#13202C;--muted:#5E6E7C;--line:#D3DCE3;--accent:#2B4BFF;--accent-soft:#E3E8FF;--warn:#B84A0B;--warn-soft:#FFEBDB;--side:#13202C;
---head:'Bricolage Grotesque','Segoe UI',sans-serif;--body:'DM Sans','Segoe UI',system-ui,sans-serif}
+/* Tokens (única fonte), tipografia e estilos base da aplicacao. */
+:root {
+  /* Superfícies e texto (tema escuro da LART: é o único tema). */
+  --bg: #20211f;          /* fundo da página e dos campos */
+  --panel: #292a27;       /* cartões, diálogos, listas */
+  --side: #181914;        /* barra lateral das categorias */
+  --ink: #f4f2e9;         /* texto principal */
+  --muted: #a7a99e;       /* texto secundário */
+  --line: #454740;        /* separadores e contornos */
+  --line-strong: #5a5d54; /* contornos de realce (pílulas, vazios) */
+  /* Marca */
+  --accent: #ffd400;      /* amarelo LART: ação principal, foco, seleção */
+  --accent-soft: #fff3a6;
+  --on-accent: #181914;   /* texto sobre o amarelo */
+  /* Estados */
+  --warn: #ff9e8b;        /* erro e stock baixo (texto) */
+  --warn-soft: #4a2a22;   /* fundo de etiquetas de aviso */
+  --danger-text: #ffb09e; /* ações destrutivas */
+  /* Tipografia */
+  --head: Impact, Haettenschweiler, 'Arial Narrow Bold', 'Arial Black', sans-serif;
+  --body: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+}
 *{box-sizing:border-box;margin:0}
 html,body{height:100%}
 body{font:15px/1.45 var(--body);background:var(--bg);color:var(--ink)}
@@ -182,21 +201,6 @@ button:disabled{cursor:wait;opacity:.6}
  .stock-table td{padding:7px 10px}
 }
 
-/* Stocklart reference design. */
-:root {
-  --bg: #20211f;
-  --panel: #292a27;
-  --ink: #f4f2e9;
-  --muted: #a7a99e;
-  --line: #454740;
-  --accent: #ffd400;
-  --accent-soft: #fff3a6;
-  --warn: #b83d24;
-  --warn-soft: #ffe0d7;
-  --side: #181914;
-  --head: Impact, Haettenschweiler, 'Arial Narrow Bold', 'Arial Black', sans-serif;
-  --body: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
-}
 
 * {
   box-sizing: border-box;
@@ -233,7 +237,7 @@ button:disabled {
 .home-page {
   min-height: 100vh;
   overflow: hidden;
-  background: #20211f;
+  background: var(--bg);
 }
 .stock-page {
   min-height: 100vh;
@@ -258,7 +262,7 @@ button:disabled {
 }
 .home-brand strong {
   display: block;
-  color: #f4f2e9;
+  color: var(--ink);
   font: 900 24px var(--head);
   letter-spacing: -0.06em;
   text-transform: uppercase;
@@ -332,12 +336,12 @@ button:disabled {
   position: relative;
   height: 610px;
   overflow: hidden;
-  border: 1px solid #ffd400;
+  border: 1px solid var(--accent);
   border-radius: 26px 10px 24px 10px;
   background: #151714;
   box-shadow:
     0 0 0 4px #151714,
-    0 0 0 5px #ffd400,
+    0 0 0 5px var(--accent),
     0 16px 0 #121311,
     0 24px 30px #0008;
 }
@@ -365,11 +369,11 @@ button:disabled {
   background: linear-gradient(
     105deg,
     transparent 0 12%,
-    #ffd400 12% 19%,
+    var(--accent) 12% 19%,
     transparent 19% 27%,
-    #ffd400 27% 34%,
+    var(--accent) 27% 34%,
     transparent 34% 42%,
-    #ffd400 42% 49%,
+    var(--accent) 42% 49%,
     transparent 49%
   );
   content: '';
@@ -484,10 +488,10 @@ button:disabled {
   min-height: 88px;
   padding: 14px 24px 14px 26px;
   overflow: hidden;
-  border: 1px solid #ffd400;
+  border: 1px solid var(--accent);
   border-radius: 7px;
   background: #272925;
-  color: #f4f2e9;
+  color: var(--ink);
   text-align: left;
   box-shadow:
     0 5px 0 #121311,
@@ -503,7 +507,7 @@ button:disabled {
   bottom: 0;
   width: 9px;
   z-index: 0;
-  background: #ffd400;
+  background: var(--accent);
   content: '';
   opacity: 0.95;
   clip-path: polygon(35% 0, 100% 0, 100% 100%, 0 100%);
@@ -524,7 +528,7 @@ a.menu-link {
   z-index: 3;
 }
 .home-option strong {
-  color: #f4f2e9;
+  color: var(--ink);
   font:
     900 clamp(20px, 1.8vw, 27px) 'Arial Black',
     Impact,
@@ -632,9 +636,9 @@ h2,
   gap: 14px;
   width: 100%;
   padding: 16px;
-  border: 1px solid #5a5d54;
+  border: 1px solid var(--line-strong);
   border-radius: 10px;
-  background: #20211f;
+  background: var(--bg);
   color: var(--ink);
   text-align: left;
 }
@@ -670,7 +674,7 @@ h2,
   border: 1px solid var(--warn);
   border-radius: 8px;
   background: #b83d2420;
-  color: #ffb09e;
+  color: var(--danger-text);
   font-size: 13px;
 }
 .pcb-file-actions {
@@ -695,7 +699,7 @@ h2,
   border: 1px solid var(--line);
   border-radius: 9px;
   outline: 0;
-  background: #20211f;
+  background: var(--bg);
   color: var(--ink);
 }
 .project-name-field input:focus {
@@ -709,7 +713,7 @@ h2,
   padding: 14px;
   border: 1px dashed #697066;
   border-radius: 10px;
-  background: #20211f;
+  background: var(--bg);
   cursor: pointer;
 }
 .file-dropzone:hover,
@@ -772,7 +776,7 @@ h2,
   padding: 24px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #20211f;
+  background: var(--bg);
   text-align: center;
 }
 .step-file-mark {
@@ -786,7 +790,7 @@ h2,
   max-height: 230px;
   object-fit: contain;
   border-radius: 8px;
-  background: #f4f2e9;
+  background: var(--ink);
 }
 .pcb-project-detail {
   margin-top: 18px;
@@ -808,7 +812,7 @@ h2,
   padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #20211f;
+  background: var(--bg);
   color: var(--ink);
   text-align: left;
 }
@@ -841,7 +845,7 @@ h2,
 }
 .saved-project-delete:hover {
   background: #b83d2420;
-  color: #ffb09e;
+  color: var(--danger-text);
 }
 .pcb-detail-grid {
   display: grid;
@@ -854,7 +858,7 @@ h2,
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #20211f;
+  background: var(--bg);
 }
 .pcb-model-canvas {
   display: block;
@@ -940,7 +944,7 @@ h2,
   min-height: 130px;
   place-items: center;
   padding: 24px;
-  border: 1px dashed #5a5d54;
+  border: 1px dashed var(--line-strong);
   border-radius: 10px;
   color: var(--muted);
   text-align: center;
@@ -1001,7 +1005,7 @@ h2,
 }
 .status-pill {
   padding: 5px 9px;
-  border: 1px solid #5a5d54;
+  border: 1px solid var(--line-strong);
   border-radius: 999px;
   color: var(--muted);
   font-size: 11px;
@@ -1173,25 +1177,25 @@ h2 {
 .home-brand .brand-mark{display:block;flex:none;width:52px;height:52px}
 .home-brand .brand-mark img{display:block;width:100%;height:100%;object-fit:contain}
 .category-nav{display:flex;flex-direction:column}
-.category-nav button[aria-current=true]{background:var(--accent);color:#181914}
+.category-nav button[aria-current=true]{background:var(--accent);color:var(--on-accent)}
 .sidebar .side-btn{color:var(--ink);border-color:var(--line)}
 .sidebar .cat-edit,.sidebar .cat-del{color:var(--muted)}
 .sidebar .cat-del{opacity:1}
-.stock-content .primary,.primary-button,.floating-stock-action{background:var(--accent);color:#181914}
+.stock-content .primary,.primary-button,.floating-stock-action{background:var(--accent);color:var(--on-accent)}
 .stock-content .row:hover{background:#ffffff08}
 .stock-content .filter-panel h2,.stock-table th{background:#32342e}
 .stock-content .filter-panel>input,.stock-table .item-image.default-image,.stock-table .qty button{background:#36382f}
-.stock-content .qty button:hover{background:var(--accent);color:#181914}
+.stock-content .qty button:hover{background:var(--accent);color:var(--on-accent)}
 .stock-content .edit{background:transparent;color:var(--accent)}
-.stock-content .filter-count{background:var(--accent);color:#181914}
+.stock-content .filter-count{background:var(--accent);color:var(--on-accent)}
 .stock-content .filter-option:hover{background:#ffd40020}
 .stock-content .stock-table .val{color:var(--ink)}
 .stock-page.compact .stock-table td{padding:3px 10px}
 .stock-page.compact .stock-content{gap:14px}
 dialog{background:var(--panel);color:var(--ink)}
 dialog input,dialog select{background:var(--bg);color:var(--ink);border:1px solid var(--line)}
-dialog .seg button[aria-pressed=true]{background:var(--accent);color:#181914}
-#toast{z-index:20;background:var(--ink);color:#181914;max-width:calc(100vw - 32px)}
+dialog .seg button[aria-pressed=true]{background:var(--accent);color:var(--on-accent)}
+#toast{z-index:20;background:var(--ink);color:var(--on-accent);max-width:calc(100vw - 32px)}
 .simulation-content{padding:0;gap:0}
 .simulation-toolbar{display:flex;align-items:center;gap:16px;padding:8px 16px;border-bottom:1px solid var(--line)}
 .simulation-toolbar h2{margin:0;margin-right:auto;font-size:18px}
@@ -1211,7 +1215,7 @@ a.text-button{display:inline-flex;align-items:center;text-decoration:none}
 .saved-project-open>span:first-child{display:grid;gap:4px;min-width:0;overflow-wrap:anywhere}
 .file-dropzone:focus-within{outline:2px solid var(--accent);outline-offset:3px}
 @media(max-width:560px){.main-menu{display:flex;gap:6px 18px}.main-menu .menu-link{font-size:12px}.workspace-card{padding:20px}.card-heading{flex-wrap:wrap}.movement-row{flex-wrap:wrap}.home-carousel{height:420px}.carousel-copy{left:24px;right:24px}.home-content{padding-top:24px}.workspace-header h1{font-size:36px}}
-.card-icon,.file-dropzone-icon{color:#181914}
+.card-icon,.file-dropzone-icon{color:var(--on-accent)}
 @media(max-width:560px){.movement-row{grid-template-columns:auto minmax(0,1fr);padding:12px}.movement-quantity{grid-column:2;text-align:left}.movement-main{overflow-wrap:anywhere}}
 
 /* Secondary actions share the dark theme instead of browser button defaults. */
@@ -1232,8 +1236,8 @@ a.text-button{display:inline-flex;align-items:center;text-decoration:none}
   background: #ffd40012;
   color: var(--accent);
 }
-.text-button.danger { color: #ffb09e; border-color: #b83d2466; }
-.text-button.danger:hover { background: #b83d2420; border-color: #ffb09e; }
+.text-button.danger { color: var(--danger-text); border-color: #b83d2466; }
+.text-button.danger:hover { background: #b83d2420; border-color: var(--danger-text); }
 .category-nav .cat-row > button:first-child { gap: 8px; }
 .category-nav .cat-row > button:first-child > span:first-child {
   min-width: 0;
@@ -1282,7 +1286,8 @@ a.notion-login{display:inline-flex;align-items:center;text-decoration:none}
  .filter-section:not(.open) .quick-filters{display:none}
  .sidebar .side-btn{margin-top:0}
  .stock-shell .heading{order:4}
- .stock-shell .list{order:5}
+ .stock-shell .mobile-sort{order:5}
+ .stock-shell .list{order:6}
  .sidebar-heading{display:none}
  .category-nav{gap:6px}
  .category-nav .cat-row{flex:none;max-width:100%}
@@ -1314,3 +1319,111 @@ a.notion-login{display:inline-flex;align-items:center;text-decoration:none}
  .stock-table .edit{min-height:40px;padding:0 12px}
  .stock-table .del{width:40px;height:40px}
 }
+
+/* Ordenar só aparece onde os cabeçalhos da tabela desaparecem (cartões). */
+.mobile-sort{display:none}
+@media(max-width:820px){
+ .mobile-sort{display:flex;align-items:flex-end;gap:10px}
+ .mobile-sort label{flex:1;min-width:0}
+ .mobile-sort select{min-height:44px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:0 12px}
+}
+/* Toque: 44px em todos os controlos, em ecrãs estreitos ou com ponteiro grosso. */
+@media(max-width:820px),(pointer:coarse){
+ .menu-link{min-height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:center}
+ .carousel-controls button{width:44px;height:44px}
+ /* Pontos: a barra continua fina, a área de toque tem 44px de altura. */
+ .carousel-dots{bottom:20px}
+ .carousel-dots button{height:44px;border-top:20px solid transparent;border-bottom:20px solid transparent;background-clip:padding-box}
+ .text-button,.home-button,.filter-toggle,.clear-filters,.sidebar .side-btn,.ghost{min-height:44px}
+ .text-button,.clear-filters{display:inline-flex;align-items:center;justify-content:center}
+ select,.quick-filters select{min-height:44px}
+ .mobile-sort button{min-height:44px;min-width:44px}
+ .category-nav .cat-row>button:first-child,.category-nav .cat-edit,.category-nav .cat-del{min-height:44px}
+ .stock-table .qty button,.stock-table .edit,.stock-table .del{min-height:44px}
+ .stock-table .qty button,.stock-table .del{min-width:44px}
+ .stock-table .qty button{height:44px}
+ dialog .actions .primary,dialog .actions .text-button{min-height:44px}
+ .people-actions .text-button{min-height:44px}
+}
+
+/* Barra de cima numa linha: marca, menu e sessão sem encavalitar. */
+.home-nav{max-width:1440px;gap:24px;padding:18px clamp(16px,4vw,48px)}
+.home-nav .main-menu{gap:2px}
+.home-nav .main-menu .menu-link{padding:10px 10px;white-space:nowrap}
+.home-nav .menu-link.active::after{left:10px;right:10px}
+.session-box{position:relative;flex:none;margin-left:auto}
+@media(min-width:1001px){.home-nav .main-menu{flex-wrap:nowrap}}
+@media(min-width:1001px) and (max-width:1300px){
+ .home-brand small{display:none}
+ .home-nav .main-menu .menu-link{padding:10px 7px;font-size:13px}
+ .home-nav .menu-link.active::after{left:7px;right:7px}
+}
+
+/* Sessão: avatar com foto do Notion (ou iniciais) e menu pessoal. */
+.avatar{display:inline-grid;place-items:center;flex:none;width:var(--avatar-size);height:var(--avatar-size);overflow:hidden;border-radius:50%;background:hsl(var(--avatar-hue) 45% 32%);color:#fff;font:700 calc(var(--avatar-size) * .38)/1 var(--body);letter-spacing:.02em;box-shadow:0 0 0 2px var(--side),0 0 0 3px var(--line)}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.user-chip{display:flex;align-items:center;gap:9px;min-height:44px;padding:4px 10px 4px 5px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--ink);font-weight:700;font-size:14px}
+.user-chip:hover,.user-chip[aria-expanded=true]{border-color:var(--accent)}
+.user-chip .chevron{width:16px;height:16px;fill:none;stroke:var(--muted);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:rotate .2s cubic-bezier(.22,1,.36,1)}
+.user-chip[aria-expanded=true] .chevron{rotate:180deg}
+.user-menu{position:absolute;z-index:30;top:calc(100% + 10px);right:0;width:min(320px,calc(100vw - 32px));padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--panel);box-shadow:0 18px 40px #0000008c;color:var(--ink);font-weight:400;animation:menu-in .18s cubic-bezier(.22,1,.36,1)}
+@keyframes menu-in{from{opacity:0;translate:0 -6px}}
+.user-menu-head{display:flex;align-items:center;gap:12px}
+.user-menu-head div{display:grid;gap:2px;min-width:0}
+.user-menu-head strong{font-size:16px;overflow-wrap:anywhere}
+.user-menu-head span{color:var(--muted);font-size:12px}
+.user-menu-stats{display:flex;gap:16px;margin:14px 0 0;padding:10px 12px;border-radius:10px;background:var(--bg);color:var(--muted);font-size:13px}
+.user-menu-stats b{color:var(--ink);font-size:16px;font-variant-numeric:tabular-nums}
+.user-menu-recent{display:grid;gap:2px;margin:10px 0 0;padding:0;list-style:none}
+.user-menu-recent li{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:baseline;gap:8px;padding:6px 4px;font-size:13px}
+.user-menu-recent b{font-variant-numeric:tabular-nums;text-align:right}
+.user-menu-recent .positive{color:#7be0ad}
+.user-menu-recent .negative{color:var(--warn)}
+.user-menu-recent span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user-menu-recent time{color:var(--muted);font-size:12px}
+.user-menu-empty{margin:10px 4px 0;color:var(--muted);font-size:13px}
+.user-menu-actions{display:grid;gap:2px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.user-menu-actions button{min-height:40px;padding:0 10px;border:0;border-radius:8px;background:none;color:var(--ink);font-size:14px;font-weight:600;text-align:left}
+.user-menu-actions button:hover{background:#ffffff0d}
+.user-menu-actions .danger{color:var(--danger-text)}
+@media(max-width:560px){.user-first{display:none}.user-chip{padding-right:8px}}
+
+/* Barra lateral até ao fundo; conteúdo fixo no topo; "Nova" junto ao título. */
+.stock-shell .sidebar{position:static;height:auto;padding:0;align-self:stretch;overflow:visible}
+/* A página ocupa o ecrã todo, por isso a barra lateral chega ao fundo seja qual for a altura do cabeçalho. */
+.stock-page{display:flex;flex-direction:column;min-height:100vh}
+.stock-page .stock-shell{flex:1;width:100%;min-height:0}
+.sidebar-inner{position:sticky;top:0;display:flex;flex-direction:column;gap:12px;max-height:100vh;overflow-y:auto;padding:24px 20px 28px}
+.sidebar-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 10px 12px;border-bottom:1px solid #ffffff12}
+.sidebar-heading h2{font:700 18px var(--body);color:var(--ink)}
+.new-category{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px 0 10px;border:1px solid var(--accent);border-radius:999px;background:transparent;color:var(--accent);font-size:13px;font-weight:700}
+.new-category:hover{background:var(--accent);color:var(--on-accent)}
+.new-category svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round}
+@media(max-width:820px){
+ .sidebar-inner{position:static;max-height:none;overflow:visible;padding:0}
+ .sidebar-heading{display:flex;padding:0 0 4px;border:0}
+ .sidebar-heading h2{font-size:15px;color:var(--muted)}
+ .new-category{min-height:44px}
+}
+
+/* Login: cartão centrado, LART ligado ao Notion, uma ação clara. */
+.login-dialog{width:min(420px,92vw);border:1px solid var(--line);border-radius:22px}
+.login-dialog form{align-items:center;gap:0;padding:32px 28px 22px;text-align:center}
+.login-marks{display:flex;align-items:center;gap:10px;margin-bottom:22px}
+.login-mark{display:grid;place-items:center;width:64px;height:64px;border-radius:18px;box-shadow:0 10px 24px #00000059}
+.login-mark-lart{background:var(--side);border:1px solid var(--line)}
+.login-mark-lart img{width:42px;height:42px;object-fit:contain}
+.login-mark-notion{background:#fff}
+.login-mark-notion svg{width:44px;height:44px}
+.login-link{width:34px;height:2px;background:repeating-linear-gradient(90deg,var(--muted) 0 4px,transparent 4px 8px)}
+.login-dialog h2{font:700 24px/1.2 var(--body);letter-spacing:-.01em;text-wrap:balance}
+.login-lead{max-width:34ch;margin-top:8px;color:var(--muted);font-size:14px;text-wrap:pretty}
+.login-facts{display:grid;gap:8px;width:100%;margin:20px 0 22px;padding:14px 16px;border-radius:12px;background:var(--bg);list-style:none;text-align:left;font-size:13px;color:var(--ink)}
+.login-facts li{display:grid;grid-template-columns:16px 1fr;gap:10px;align-items:start}
+.login-facts li::before{content:'';width:8px;height:8px;margin-top:6px;border-radius:50%;background:var(--accent)}
+.login-dialog .notion-login{justify-content:center;gap:10px;width:100%;min-height:52px;color:var(--on-accent);font-size:15px;font-weight:700}
+.login-dialog .notion-login svg{width:24px;height:24px}
+.login-dialog .ghost{min-height:44px;margin-top:6px;padding:0 16px;color:var(--muted)}
+.login-dialog .ghost:hover{color:var(--ink)}
+.login-dialog .hint.error{margin-bottom:12px}
+@media(prefers-reduced-motion:reduce){.user-menu{animation:none}}

@@ -27,6 +27,7 @@ const auth = reactive({
 })
 provide('api', api)
 provide('auth', auth)
+provide('movementFilter', ref(''))
 // Com sessão a ação corre logo; sem sessão abre o popup e continua depois do login.
 function guard(fn) {
   return (...args) => !auth.enabled || auth.user ? fn(...args) : loginDialog.value.open().then(ok => ok && fn(...args))
@@ -70,6 +71,8 @@ function toggleProperty(key, value) {
   const selected = propertyFilters.value[key] || []
   propertyFilters.value[key] = selected.includes(value) ? selected.filter(entry => entry !== value) : [...selected, value]
 }
+// Nos cartões do telemóvel não há cabeçalhos clicáveis: um seletor faz o mesmo papel.
+const sortChoice = computed({ get: () => sortKey.value, set: key => { sortKey.value = key; sortDirection.value = 1 } })
 function sortBy(key) {
   sortDirection.value = sortKey.value === key ? -sortDirection.value : 1
   sortKey.value = key
@@ -272,7 +275,9 @@ onUnmounted(() => {
   <AppNavigation active="stock" />
   <div class="stock-shell">
   <aside class="sidebar">
-    <div class="sidebar-heading"><span class="eyebrow">Organização</span><strong>Categorias</strong></div>
+    <!-- O fundo da barra vai até ao fim da página; o conteúdo fica fixo no topo enquanto a lista desce. -->
+    <div class="sidebar-inner">
+    <div class="sidebar-heading"><h2>Categorias</h2><button class="new-category" aria-label="Nova categoria" :disabled="locked" @click="guarded.openCategory()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nova</button></div>
     <nav class="category-nav" aria-label="Categorias" tabindex="-1">
       <div class="cat-row"><button :aria-current="!current" @click="current = null">Tudo <span class="n">{{ total() }}</span></button></div>
       <div v-for="category in categories" :key="category.name" class="cat-row">
@@ -281,7 +286,7 @@ onUnmounted(() => {
         <button class="cat-del" :aria-label="`Apagar categoria ${category.name}`" title="Apagar categoria" :disabled="locked" @click="guarded.deleteCategory(category)">✕</button>
       </div>
     </nav>
-    <button class="side-btn" :disabled="locked" @click="guarded.openCategory()">+ Nova categoria</button>
+    </div>
   </aside>
   <main class="stock-content">
     <div class="top">
@@ -316,6 +321,12 @@ onUnmounted(() => {
       </div>
     </section>
     <div class="heading"><h1>{{ current || 'Tudo em stock' }}</h1><span class="sub">{{ shown.length }} referências · {{ units }} unidades</span></div>
+    <div class="mobile-sort">
+      <label>Ordenar por
+        <select v-model="sortChoice"><option value="">Ordem original</option><option v-for="column in columns" :key="column.key" :value="column.key">{{ column.label }}</option></select>
+      </label>
+      <button class="text-button" :disabled="!sortKey" :aria-label="sortDirection === 1 ? 'Ordem crescente, inverter' : 'Ordem decrescente, inverter'" @click="sortDirection = -sortDirection">{{ sortDirection === 1 ? '↑' : '↓' }}</button>
+    </div>
     <div class="list" :aria-busy="loading">
       <div v-if="loading" class="empty">A carregar stock…</div>
       <template v-else>

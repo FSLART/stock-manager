@@ -187,3 +187,14 @@ it('starts with the property filters closed and offers undo after deleting an it
   await flushPromises()
   expect(fetch).toHaveBeenCalledWith('/api/move', expect.objectContaining({ body: JSON.stringify({ cat: 'LEDs', props: { cor: '<1A & azul' }, qty: 3, mode: 'in', image: '' }) }))
 })
+
+it('offers a sort selector that mirrors the table headers for the phone cards', async () => {
+  wrapper = mount(App)
+  await flushPromises()
+  const select = wrapper.find('.mobile-sort select')
+  expect(select.findAll('option').map(option => option.text())).toEqual(['Ordem original', 'Categoria', 'Componente', 'Descrição', 'Quantidade'])
+  await select.setValue('qty')
+  expect(wrapper.findAll('tbody output').map(row => row.text())).toEqual(['3', '20'])
+  await wrapper.find('.mobile-sort button').trigger('click')
+  expect(wrapper.findAll('tbody output').map(row => row.text())).toEqual(['20', '3'])
+})

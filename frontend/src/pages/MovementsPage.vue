@@ -1,10 +1,13 @@
 <script setup>
-import { computed, inject, onMounted, ref } from 'vue'
+import { computed, inject, onMounted, ref, watch } from 'vue'
 import WorkspacePage from '../components/WorkspacePage.vue'
 
 const api = inject('api')
 const movementLabels = { in: 'Entrada', out: 'Saída', delete: 'Remoção', edit: 'Ajuste' }
 const movements = ref([]), loading = ref(true), error = ref(''), query = ref('')
+// "Os meus movimentos" no menu da sessão chega aqui com o nome já na pesquisa.
+const movementFilter = inject('movementFilter', null)
+watch(() => movementFilter?.value, value => { if (value) { query.value = value; movementFilter.value = '' } }, { immediate: true })
 const plain = value => String(value).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 const shown = computed(() => movements.value.filter(movement =>
   plain([movement.person, movement.cat, ...Object.values(movement.props)].join(' ')).includes(plain(query.value))))

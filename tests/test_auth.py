@@ -31,12 +31,12 @@ class AuthTest(unittest.TestCase):
                 (2, 'Rui', generate_password_hash('9999'), 'notion-rui', 0),
             ])
 
-    def notion_login(self, client, notion_id, workspace='other-workspace', name='X'):
+    def notion_login(self, client, notion_id, workspace='other-workspace', name='X', avatar='https://img/rui.png'):
         client.get('/api/auth/notion')
         with client.session_transaction() as session:
             state = session['notion_state']
         body = io.BytesIO(json.dumps({'access_token': 't', 'workspace_id': workspace,
-                                      'owner': {'type': 'user', 'user': {'id': notion_id, 'name': name}}}).encode())
+                                      'owner': {'type': 'user', 'user': {'id': notion_id, 'name': name, 'avatar_url': avatar}}}).encode())
         with patch.object(self.module.urllib.request, 'urlopen', return_value=body) as urlopen:
             response = client.get(f'/api/auth/notion/callback?code=c&state={state}')
         self.assertEqual(urlopen.call_args.args[0].get_header('Authorization'), 'Basic Y2lkOnNlY3JldA==')
@@ -93,10 +93,10 @@ class AuthTest(unittest.TestCase):
         # Conta desconhecida do LART entra como pessoa normal; nome repetido ganha sufixo.
         newcomer = self.module.app.test_client()
         self.assertEqual(self.notion_login(newcomer, 'notion-new-1234', workspace=LART.replace('-', ''), name='Rui').status_code, 302)
-        self.assertEqual(self.user(newcomer), {'id': 3, 'name': 'Rui (1234)', 'admin': False, 'notion': True})
+        self.assertEqual(self.user(newcomer), {'id': 3, 'name': 'Rui (1234)', 'admin': False, 'notion': True, 'avatar': 'https://img/rui.png'})
         again = self.module.app.test_client()
-        self.notion_login(again, 'notion-new-1234')
-        self.assertEqual(self.user(again)['id'], 3)
+        self.notion_login(again, 'notion-new-1234', avatar='javascript:alert(1)')
+        self.assertEqual((self.user(again)['id'], self.user(again)['avatar']), (3, ''))
         with self.module.db_connection() as connection:
             self.assertEqual(connection.execute('SELECT COUNT(*) AS n FROM people').fetchone()['n'], 3)
 

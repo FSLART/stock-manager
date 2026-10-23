@@ -43,6 +43,8 @@ from dotenv import load_dotenv
 # Este objeto regista as rotas e configura o servidor web da aplicacao.
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
+# Ficheiros de /static (imagens da pagina Inicio) ficam em cache uma semana no browser.
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = timedelta(days=7)
 # Evita que o Flask reorganize alfabeticamente os campos enviados ao frontend.
 app.json.sort_keys = False
 # Permite construir caminhos relativos ao projeto, independentemente da pasta
@@ -143,7 +145,8 @@ def init_mysql_schema(connection):
             name VARCHAR(255) COLLATE utf8mb4_0900_as_ci UNIQUE NOT NULL,
             pin_hash VARCHAR(255) NOT NULL DEFAULT '',
             notion_id VARCHAR(64) UNIQUE NULL,
-            is_admin INTEGER NOT NULL DEFAULT 0
+            is_admin INTEGER NOT NULL DEFAULT 0,
+            avatar VARCHAR(1000) NOT NULL DEFAULT ''
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
         """CREATE TABLE IF NOT EXISTS movements (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -162,6 +165,9 @@ def init_mysql_schema(connection):
         if mariadb:
             sql = sql.replace("utf8mb4_0900_as_ci", "utf8mb4_uca1400_as_ci").replace("utf8mb4_0900_bin", "utf8mb4_bin")
         connection.execute(sql)
+    # Bases criadas antes da foto do Notion: acrescenta a coluna uma vez.
+    if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'people' AND COLUMN_NAME = 'avatar'").fetchone():
+        connection.execute("ALTER TABLE people ADD COLUMN avatar VARCHAR(1000) NOT NULL DEFAULT ''")
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", BASE_DIR / "uploads"))
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
@@ -245,8 +251,8 @@ def current_person():
         return None
     init_db()
     with db_connection() as connection:
-        row = connection.execute("SELECT id, name, is_admin, notion_id FROM people WHERE id = ?", (person_id,)).fetchone()
-    return {"id": row["id"], "name": row["name"], "admin": bool(row["is_admin"]), "notion": bool(row["notion_id"])} if row else None
+        row = connection.execute("SELECT id, name, is_admin, notion_id, avatar FROM people WHERE id = ?", (person_id,)).fetchone()
+    return {"id": row["id"], "name": row["name"], "admin": bool(row["is_admin"]), "notion": bool(row["notion_id"]), "avatar": row["avatar"]} if row else None
 
 
 def start_session(person_id):
@@ -375,7 +381,8 @@ def init_sqlite_schema(connection):
             name TEXT UNIQUE NOT NULL COLLATE NOCASE,
             pin_hash TEXT NOT NULL DEFAULT '',
             notion_id TEXT UNIQUE,
-            is_admin INTEGER NOT NULL DEFAULT 0
+            is_admin INTEGER NOT NULL DEFAULT 0,
+            avatar TEXT NOT NULL DEFAULT ''
         );
         -- Sem FK para items: save_items reescreve a tabela items a cada escrita.
         CREATE TABLE IF NOT EXISTS movements (
@@ -405,6 +412,8 @@ def init_sqlite_schema(connection):
     }
     if "image" not in item_columns:
         connection.execute("ALTER TABLE items ADD COLUMN image TEXT NOT NULL DEFAULT ''")
+    if "avatar" not in {row["name"] for row in connection.execute("PRAGMA table_info(people)")}:
+        connection.execute("ALTER TABLE people ADD COLUMN avatar TEXT NOT NULL DEFAULT ''")
 
 
 def seed_categories(connection):
@@ -1494,6 +1503,10 @@ def notion_callback():
             if connection.execute("SELECT 1 FROM people WHERE name = ? COLLATE NOCASE", (name,)).fetchone():
                 name = f"{name} ({notion_id[-4:]})"  # outra conta Notion com o mesmo nome
             row = {"id": connection.execute("INSERT INTO people (name, notion_id) VALUES (?, ?)", (name, notion_id)).lastrowid}
+        if row is not None:
+            # Foto do perfil Notion para o menu da sessao; so URLs https, atualizada a cada login.
+            avatar = str(notion_user.get("avatar_url") or "")
+            connection.execute("UPDATE people SET avatar = ? WHERE id = ?", (avatar[:1000] if avatar.startswith("https://") else "", row["id"]))
     if row is None:
         return notion_page("Esta conta Notion não está na lista do Stocklart. Entra outra vez e escolhe o workspace LART no ecrã do Notion.")
     next_page = session.get("notion_next", "/#/stock")

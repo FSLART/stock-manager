@@ -1,9 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import circuito from '../assets/lart-circuito.jpg?inline'
-import garagem from '../assets/lart-garagem.jpg?inline'
-import testes from '../assets/lart-testes.jpg?inline'
-import soldadura from '../assets/lart-soldadura.jpg?inline'
+import homeImages from 'home-images'
 import AppNavigation from '../components/AppNavigation.vue'
 import { useInventoryContext } from '../composables/useInventoryContext'
 import { useNavigation } from '../composables/useNavigation.js'
@@ -11,10 +8,10 @@ const router = useNavigation()
 
 const inventory = useInventoryContext()
 const slides = [
-  { url: circuito, title: 'Eletrónica feita pela equipa' },
-  { url: garagem, title: 'O laboratório onde tudo acontece' },
-  { url: testes, title: 'Testar no terreno' },
-  { url: soldadura, title: 'Mãos à obra' },
+  { url: homeImages[0], title: 'Eletrónica feita pela equipa' },
+  { url: homeImages[1], title: 'O laboratório onde tudo acontece' },
+  { url: homeImages[2], title: 'Testar no terreno' },
+  { url: homeImages[3], title: 'Mãos à obra' },
 ]
 const slideIndex = ref(0)
 const slide = computed(() => slides[slideIndex.value])
