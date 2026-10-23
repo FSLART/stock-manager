@@ -9,7 +9,7 @@ const api = inject('api', null)
 const movementFilter = inject('movementFilter', null)
 
 // Menu da sessão: quem és, o que fizeste ultimamente e os atalhos que interessam.
-const menuOpen = ref(false), box = ref(null), mine = ref(null)
+const menuOpen = ref(false), box = ref(null), chip = ref(null), mine = ref(null)
 const firstName = computed(() => auth?.user?.name.split(/\s+/)[0] || '')
 const sameDay = timestamp => new Date(timestamp).toDateString() === new Date().toDateString()
 const ago = timestamp => {
@@ -32,7 +32,8 @@ function go(route, filter = '') {
 }
 function logout() { menuOpen.value = false; auth.logout() }
 const closeOutside = event => { if (menuOpen.value && !box.value?.contains(event.target)) menuOpen.value = false }
-const closeOnEscape = event => { if (event.key === 'Escape') menuOpen.value = false }
+// Esc fecha o menu e devolve o foco ao botão que o abriu, para o teclado não ficar perdido no corpo da página.
+const closeOnEscape = event => { if (event.key === 'Escape' && menuOpen.value) { menuOpen.value = false; chip.value?.focus() } }
 onMounted(() => { document.addEventListener('pointerdown', closeOutside); document.addEventListener('keydown', closeOnEscape) })
 onUnmounted(() => { document.removeEventListener('pointerdown', closeOutside); document.removeEventListener('keydown', closeOnEscape) })
 
@@ -76,7 +77,7 @@ const external = [{ label: 'Cablagem', href: 'https://stocklart.pt/harness/', ke
     <div v-if="auth?.enabled" ref="box" class="session-box">
       <button v-if="!auth.user" class="text-button" @click="auth.login()">Entrar</button>
       <template v-else>
-        <button class="user-chip" :aria-expanded="menuOpen" aria-controls="user-menu" :aria-label="`Sessão de ${auth.user.name}`" @click="toggleMenu">
+        <button ref="chip" class="user-chip" :aria-expanded="menuOpen" aria-controls="user-menu" :aria-label="`Sessão de ${auth.user.name}`" @click="toggleMenu">
           <UserAvatar :name="auth.user.name" :src="auth.user.avatar" />
           <span class="user-first">{{ firstName }}</span>
           <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>

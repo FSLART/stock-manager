@@ -31,7 +31,7 @@ it('renders safe text, filters search and categories, and reports totals', async
   await wrapper.find('input[type=search]').setValue('')
   await wrapper.findAll('nav .cat-row > button:first-child')[1].trigger('click')
   expect(wrapper.find('h1').text()).toBe('LEDs')
-  expect(wrapper.find('.sub').text()).toBe('1 referências · 3 unidades')
+  expect(wrapper.find('.sub').text()).toBe('1 referência · 3 unidades')
 })
 
 it('clamps a decrement at zero and sends only the actual stock change', async () => {

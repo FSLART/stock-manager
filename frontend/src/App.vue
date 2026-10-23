@@ -320,7 +320,7 @@ onUnmounted(() => {
         <p v-if="!facets.length" class="filter-no-values">As propriedades das categorias aparecem aqui como filtros.</p>
       </div>
     </section>
-    <div class="heading"><h1>{{ current || 'Tudo em stock' }}</h1><span class="sub">{{ shown.length }} referências · {{ units }} unidades</span></div>
+    <div class="heading"><h1>{{ current || 'Tudo em stock' }}</h1><span class="sub">{{ shown.length }} {{ shown.length === 1 ? 'referência' : 'referências' }} · {{ units }} {{ units === 1 ? 'unidade' : 'unidades' }}</span></div>
     <div class="mobile-sort">
       <label>Ordenar por
         <select v-model="sortChoice"><option value="">Ordem original</option><option v-for="column in columns" :key="column.key" :value="column.key">{{ column.label }}</option></select>

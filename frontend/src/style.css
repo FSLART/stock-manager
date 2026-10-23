@@ -18,7 +18,7 @@
   --warn-soft: #4a2a22;   /* fundo de etiquetas de aviso */
   --danger-text: #ffb09e; /* ações destrutivas */
   /* Tipografia */
-  --head: Impact, Haettenschweiler, 'Arial Narrow Bold', 'Arial Black', sans-serif;
+  --head: 'Bricolage Grotesque', 'DM Sans', 'Segoe UI', system-ui, sans-serif;
   --body: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
 }
 *{box-sizing:border-box;margin:0}
@@ -31,7 +31,7 @@ button{cursor:pointer}
 
 /* barra lateral */
 aside{background:var(--side);color:#E8EDF1;padding:28px 18px;display:flex;flex-direction:column;gap:22px;position:sticky;top:0;height:100vh;overflow:auto}
-.logo{display:flex;align-items:center;gap:8px;font:800 26px var(--head);letter-spacing:-.02em;padding:0 10px}
+.logo{display:flex;align-items:center;gap:8px;font:700 26px var(--head);letter-spacing:-.02em;padding:0 10px}
 .brand-icon{display:block;width:64px;height:64px;object-fit:contain;flex:none}
 .logo small{display:block;font:400 13px var(--body);color:#8FA1B2;letter-spacing:0;margin-top:2px}
 nav{display:flex;flex-direction:column;gap:2px}
@@ -57,7 +57,7 @@ main{padding:32px clamp(18px,4vw,48px);display:flex;flex-direction:column;gap:22
 .primary{background:var(--accent);color:#fff;border:0;border-radius:14px;padding:0 24px;font-weight:600;min-height:52px}
 .primary:hover{filter:brightness(1.1)}
 .heading{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
-h1{font:800 34px var(--head);letter-spacing:-.025em}
+h1{font:700 34px var(--head);letter-spacing:-.02em}
 .sub{color:var(--muted)}
 
 /* marca de agua */
@@ -105,7 +105,7 @@ nav .dot{margin-right:9px}
 dialog{border:0;border-radius:20px;padding:0;width:min(460px,92vw);box-shadow:0 30px 80px #13202C55;margin:auto}
 dialog::backdrop{background:#13202C99}
 form{padding:26px;display:flex;flex-direction:column;gap:14px}
-form h2{font:800 24px var(--head);letter-spacing:-.02em}
+form h2{font:700 24px var(--head);letter-spacing:-.02em}
 label{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600;color:var(--muted)}
 label input,label select{padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-weight:400;color:var(--ink);font-size:15px}
 label input:focus,label select:focus{border-color:var(--accent);outline:0}
@@ -243,8 +243,12 @@ button:disabled {
 }
 .stock-page {
   min-height: 100vh;
-  background: linear-gradient(var(--bg) 0 108px, #2c2d2a 108px);
+  background: #2c2d2a;
 }
+/* A faixa do cabeçalho acompanha a altura real da barra (quebra de linha incluída) em vez de 108px fixos. */
+.stock-page{overflow-x:clip}
+.stock-page .home-nav{position:relative;z-index:40}
+.stock-page .home-nav::before{content:'';position:absolute;z-index:-1;inset:0 -100vmax;background:var(--bg)}
 .home-nav {
   max-width: 1320px;
   margin: 0 auto;
@@ -265,8 +269,8 @@ button:disabled {
 .home-brand strong {
   display: block;
   color: var(--ink);
-  font: 900 24px var(--head);
-  letter-spacing: -0.06em;
+  font:700 24px var(--head);
+  letter-spacing:-.02em;
   text-transform: uppercase;
 }
 .home-brand small {
@@ -315,7 +319,7 @@ button:disabled {
   border-radius: 4px;
   background: var(--ink);
   color: var(--accent);
-  font-weight: 800;
+  font-weight: 700;
   text-transform: uppercase;
 }
 .nav-stock-button span,
@@ -414,7 +418,7 @@ button:disabled {
   margin: 8px 0 12px;
   font-size: clamp(32px, 4vw, 56px);
   line-height: 1;
-  letter-spacing: -0.05em;
+  letter-spacing:-.02em;
 }
 .carousel-copy p:last-child {
   max-width: 430px;
@@ -478,7 +482,7 @@ button:disabled {
   margin: -4px 0 16px;
   color: var(--ink);
   font-size: clamp(27px, 3vw, 38px);
-  letter-spacing: -0.05em;
+  letter-spacing:-.02em;
 }
 .home-option {
   position: relative;
@@ -531,11 +535,8 @@ a.menu-link {
 }
 .home-option strong {
   color: var(--ink);
-  font:
-    900 clamp(20px, 1.8vw, 27px) 'Arial Black',
-    Impact,
-    sans-serif;
-  letter-spacing: 0.025em;
+  font: 700 clamp(20px, 1.8vw, 27px) var(--head);
+  letter-spacing: 0.01em;
   line-height: 1.12;
   text-transform: uppercase;
 }
@@ -543,13 +544,13 @@ a.menu-link {
   color: var(--accent);
   margin-left: 16px;
   font-size: 26px;
-  font-weight: 900;
+  font-weight: 700;
 }
 .home-options h2,
 h1,
 h2,
 .carousel-copy h1 {
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: 0.01em;
 }
 .home-summary {
@@ -563,7 +564,7 @@ h2,
 }
 .home-summary strong {
   color: var(--accent);
-  font: 800 28px var(--head);
+  font:700 28px var(--head);
 }
 .home-summary span {
   font-size: 12px;
@@ -691,7 +692,7 @@ h2,
   margin-top: 20px;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -747,7 +748,7 @@ h2,
   background: var(--accent);
   color: var(--ink);
   font-size: 10px;
-  font-weight: 900;
+  font-weight: 700;
 }
 .file-dropzone input {
   position: absolute;
@@ -834,7 +835,7 @@ h2,
 }
 .saved-project-count {
   color: var(--accent);
-  font: 800 24px var(--head);
+  font:700 24px var(--head);
 }
 .saved-project-delete {
   display: grid;
@@ -880,7 +881,7 @@ h2,
 }
 .project-stat strong {
   color: var(--accent);
-  font: 800 44px var(--head);
+  font:700 44px var(--head);
 }
 .project-stat span {
   color: var(--muted);
@@ -934,7 +935,7 @@ h2,
   background: var(--accent);
   color: var(--ink);
   font-size: 20px;
-  font-weight: 900;
+  font-weight: 700;
 }
 .card-muted {
   max-width: 620px;
@@ -971,7 +972,7 @@ h2,
   border-radius: 999px;
   text-align: center;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
 }
 .movement-badge.in {
   background: #1f6348;
@@ -1011,7 +1012,7 @@ h2,
   border-radius: 999px;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -1020,6 +1021,7 @@ h2,
 }
 .setting-row {
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
@@ -1073,15 +1075,15 @@ h2,
 .eyebrow {
   color: var(--accent);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   margin: 0 0 5px;
 }
 h1,
 h2 {
-  font: 800 34px var(--head);
-  letter-spacing: -0.025em;
+  font:700 34px var(--head);
+  letter-spacing:-.02em;
   margin: 0;
 }
 h2 {
@@ -1098,7 +1100,7 @@ h2 {
   border-radius: 8px;
   background: #343731;
   color: var(--ink);
-  font-weight: 800;
+  font-weight: 700;
 }
 .primary-button:hover {
   background: var(--accent);
