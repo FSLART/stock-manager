@@ -76,6 +76,12 @@ function pickPart(label = null) {
     return
   }
   if (props.categories.some(c => c.name === part?.category)) category.value = part.category
+  // Numa categoria sem P/N (ex. Resistências, a primeira em "Tudo") o número perdia-se: usa uma que o tenha,
+  // de preferência também com fabricante, como as de CIs (Díodos só tem "referência").
+  else if (!partNumberField.value) {
+    const withPartNumber = props.categories.filter(c => c.props.some(isPartNumber))
+    category.value = (withPartNumber.find(c => c.props.some(isBrand)) ?? withPartNumber[0])?.name ?? category.value
+  }
   values.value = Object.fromEntries((selected.value?.props || []).map(field => [field,
     isPartNumber(field) ? part?.mpn ?? label.mpn : isBrand(field) ? part?.manufacturer || label?.manufacturer || '' : part?.props[field] ?? '']))
 }

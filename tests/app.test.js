@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import App from '../frontend/src/App.vue'
+import LabelScanner from '../frontend/src/components/LabelScanner.vue'
 
 const data = {
   can_edit: true,
@@ -455,4 +456,16 @@ it('offers a sort selector that mirrors the table headers for the phone cards', 
   expect(wrapper.findAll('tbody output').map(row => row.text())).toEqual(['3', '20'])
   await wrapper.find('.mobile-sort button').trigger('click')
   expect(wrapper.findAll('tbody output').map(row => row.text())).toEqual(['20', '3'])
+})
+
+it('opens a scanned label in a category that has a P/N field when the current one has none', async () => {
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), categories: [...data.categories, { name: 'Díodos', props: ['referência', 'tipo'], image: false }, { name: 'CIs', props: ['P/N', 'Fabricante'], image: false }] }) })
+  wrapper = mount(App)
+  await flushPromises()
+  wrapper.findComponent(LabelScanner).vm.$emit('use', { mpn: 'MCP6C02T-100E/CHY', manufacturer: 'Microchip', qty: 3 })
+  await flushPromises()
+  const form = wrapper.find('dialog form')
+  expect(form.find('select').element.value).toBe('CIs')
+  expect(form.findAll('.fields input').map(input => input.element.value)).toEqual(['MCP6C02T-100E/CHY', 'Microchip'])
+  expect(form.find('input[type=number]').element.value).toBe('3')
 })

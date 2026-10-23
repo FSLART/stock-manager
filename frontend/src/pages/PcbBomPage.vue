@@ -85,7 +85,7 @@ function addLabel({ mpn, manufacturer, qty }) {
   const same = item => item.partNumber.toUpperCase() === mpn.toUpperCase()
   const items = project.items.some(same)
     ? project.items.map(item => same(item) ? { ...item, quantity: item.quantity + qty } : item)
-    : [...project.items, { reference: '—', value: mpn, description: manufacturer || '—', footprint: '—', partNumber: mpn, quantity: qty }]
+    : [...project.items, { reference: '—', value: 'Componente sem valor', description: manufacturer || '—', footprint: '—', partNumber: mpn, quantity: qty }]
   const updated = { ...project, items }
   if (saveProjects(projects.value.map(entry => entry.id === project.id ? updated : entry))) selectedProject.value = updated
 }
