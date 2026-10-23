@@ -7,11 +7,11 @@ const emit = defineEmits(['use'])
 const dialog = ref(null), video = ref(null), overlay = ref(null)
 const label = ref(null), status = ref(''), camera = ref(false), paused = ref(false), reading = ref(false), photo = ref('')
 const FORMATS = ['DataMatrix', 'PDF417']
-let stream = null, liveTimer = null
+let stream = null, liveTimer = null, liveTick = 0
 
 async function startCamera() {
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } } })
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } })
     video.value.srcObject = stream
     camera.value = true
     track()
@@ -33,11 +33,11 @@ function togglePause() {
   else video.value.pause()
   paused.value = !paused.value
 }
-// Lê da imagem em tamanho real, até 4000 px para não esgotar a memória.
-async function pixels(source) {
+// Lê da imagem em tamanho real (ou ampliada), até 4000 px para não esgotar a memória.
+async function pixels(source, zoom = 1) {
   const image = source instanceof Blob ? await createImageBitmap(source) : source
   const width = image.videoWidth || image.width, height = image.videoHeight || image.height
-  const scale = Math.min(1, 4000 / Math.max(width, height))
+  const scale = Math.min(zoom, 4000 / Math.max(width, height))
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(width * scale)
   canvas.height = Math.round(height * scale)
@@ -73,13 +73,18 @@ function drawBoxes(codes, { width, height }) {
   }
 }
 const clearBoxes = () => overlay.value?.getContext('2d').clearRect(0, 0, overlay.value.width, overlay.value.height)
-// Com a câmara a correr, uma leitura rápida a cada 300 ms mostra onde está o código, para apontar e focar.
+// Fotografias pouco nítidas (ex. enviadas por WhatsApp) só se leem realçadas ou com outro limiar de preto e branco;
+// códigos pequenos numa webcam de 720p só se leem com a imagem ampliada para o dobro. Cada passagem: [zoom, realçar, limiar].
+const PASSES = [[1, false, 'LocalAverage'], [1, false, 'GlobalHistogram'], [1, true, 'LocalAverage'], [1, true, 'GlobalHistogram'], [2, true, 'LocalAverage']]
+// Com a câmara a correr, uma leitura a cada 300 ms mostra onde está o código, para apontar e focar.
+// Cada imagem usa a passagem seguinte, porque as webcams (foco fixo, pouca resolução) muitas vezes só se leem realçadas.
 async function track() {
   if (!stream) return
   if (!paused.value && !reading.value && video.value.videoWidth) {
     try {
-      const image = await pixels(video.value)
-      const codes = await readBarcodesFromImageData(image, { formats: FORMATS, textMode: 'Plain' })
+      const [zoom, sharpened, binarizer] = PASSES[liveTick++ % PASSES.length]
+      const image = await pixels(video.value, zoom)
+      const codes = await readBarcodesFromImageData(sharpened ? sharpen(image) : image, { formats: FORMATS, textMode: 'Plain', binarizer })
       // Entretanto pode ter sido pausado ou lido: não apaga a caixa da imagem congelada.
       if (!paused.value && !reading.value) {
         drawBoxes(codes, image)
@@ -95,8 +100,6 @@ async function track() {
   }
   liveTimer = setTimeout(track, 300)
 }
-// Fotografias pouco nítidas (ex. enviadas por WhatsApp) só se leem realçadas ou com outro limiar de preto e branco.
-const PASSES = [[false, 'LocalAverage'], [false, 'GlobalHistogram'], [true, 'LocalAverage'], [true, 'GlobalHistogram']]
 // O descodificador (zxing-wasm) só é descarregado na primeira leitura.
 async function read(source) {
   reading.value = true
@@ -104,18 +107,20 @@ async function read(source) {
   label.value = null
   clearBoxes()
   try {
-    const image = await pixels(source)
-    let sharp = null, seen = []
-    for (const [sharpened, binarizer] of PASSES) {
-      if (sharpened) sharp ||= sharpen(image)
-      const codes = await readBarcodesFromImageData(sharpened ? sharp : image, { formats: FORMATS, textMode: 'Plain', binarizer })
-      if (codes.length) seen = codes
+    const images = {}, sharp = {}
+    let seen = { codes: [], image: null }
+    for (const [zoom, sharpened, binarizer] of PASSES) {
+      const image = images[zoom] ||= await pixels(source, zoom)
+      // Uma fotografia grande não cresce mais (limite de 4000 px): a passagem ampliada repetiria outra.
+      if (zoom > 1 && image.width <= images[1].width) continue
+      const codes = await readBarcodesFromImageData(sharpened ? sharp[zoom] ||= sharpen(image) : image, { formats: FORMATS, textMode: 'Plain', binarizer })
+      if (codes.length) seen = { codes, image }
       // shortcut: uses the first label found in the image, add a list if people photograph several labels at once.
       label.value = codes.map(code => parseLabel(code.text)).find(Boolean) || null
       if (label.value) break
     }
-    drawBoxes(seen, image)
-    status.value = label.value ? '' : seen.length ? 'O código encontrado (a laranja) não é de uma etiqueta de componente.'
+    drawBoxes(seen.codes, seen.image || images[1])
+    status.value = label.value ? '' : seen.codes.length ? 'O código encontrado (a laranja) não é de uma etiqueta de componente.'
       : 'Não encontrei o código 2D da etiqueta. Aproxima, foca e tenta de novo.'
   } catch { status.value = 'Não foi possível ler a imagem. Verifica a ligação à Internet e tenta de novo.' }
   finally { reading.value = false }
