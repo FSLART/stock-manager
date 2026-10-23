@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
-const props = defineProps({ categories: Array, items: Array, busy: Boolean, error: String })
+import { isBrand, isPartNumber, partNumberOf } from '../stockText.js'
+const props = defineProps({ categories: Array, items: Array, parts: { type: Array, default: () => [] }, busy: Boolean, error: String })
 const emit = defineEmits(['submit', 'clear-error'])
 const dialog = ref(null)
 const fileInput = ref(null)
@@ -8,7 +9,7 @@ const category = ref('')
 const values = ref({})
 const mode = ref('in')
 const qty = ref(1)
-const editing = ref(null), removeImage = ref(false), imageUrl = ref('')
+const editing = ref(null), removeImage = ref(false), imageUrl = ref(''), partQuery = ref('')
 const selected = computed(() => props.categories.find(c => c.name === category.value))
 const hint = computed(() => mode.value === 'in'
   ? 'Se já existir um item com as mesmas propriedades, a quantidade é somada.'
@@ -21,6 +22,7 @@ function resetFields() {
 }
 function open(current) {
   editing.value = null
+  partQuery.value = ''
   removeImage.value = false
   category.value = props.categories.some(c => c.name === current) ? current : props.categories[0]?.name || ''
   mode.value = 'in'
@@ -39,6 +41,23 @@ function edit(item) {
 }
 function suggestions(prop) {
   return [...new Set(props.items.filter(it => it.cat === category.value).map(it => it.props[prop]).filter(Boolean))]
+}
+// Escolher uma peça do catálogo preenche o formulário. Se esse P/N já está em stock, usa os valores do item
+// existente, para a entrada somar a quantidade em vez de criar um item quase igual.
+function pickPart() {
+  const mpn = partQuery.value.trim().toUpperCase()
+  const part = props.parts.find(p => p.mpn.toUpperCase() === mpn)
+  if (!part) return
+  emit('clear-error')
+  const stocked = props.items.find(item => partNumberOf(item).toUpperCase() === mpn)
+  if (stocked) {
+    category.value = stocked.cat
+    values.value = { ...stocked.props }
+    return
+  }
+  if (props.categories.some(c => c.name === part.category)) category.value = part.category
+  values.value = Object.fromEntries((selected.value?.props || []).map(field => [field,
+    isPartNumber(field) ? part.mpn : isBrand(field) ? part.manufacturer : part.props[field] ?? '']))
 }
 // Ctrl+V ou arrastar uma imagem preenche o campo de ficheiro, por isso o envio segue o caminho normal.
 // Uma imagem arrastada de outra página chega só como link.
@@ -77,6 +96,10 @@ defineExpose({ open, edit, close: () => dialog.value.close() })
       <div v-if="!editing" class="seg" role="group" aria-label="Tipo de movimento">
         <button v-for="m in ['in', 'out']" :key="m" type="button" :aria-pressed="mode === m" @click="mode = m; emit('clear-error')">{{ m === 'in' ? 'Entrada' : 'Saída' }}</button>
       </div>
+      <label v-if="!editing && parts.length">Peça do catálogo
+        <input v-model="partQuery" list="catalog-parts" placeholder="P/N ou descrição" autocomplete="off" @change="pickPart">
+        <datalist id="catalog-parts"><option v-for="part in parts" :key="part.mpn" :value="part.mpn">{{ part.manufacturer }} · {{ part.description }}</option></datalist>
+      </label>
       <label>Categoria <select v-model="category" :disabled="!!editing" required @change="resetFields"><option v-for="c in categories" :key="c.name">{{ c.name }}</option></select></label>
       <div class="fields">
         <label v-for="(p, i) in selected?.props || []" :key="category + p">{{ p }}

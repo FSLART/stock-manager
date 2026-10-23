@@ -164,6 +164,16 @@ def init_mysql_schema(connection):
             before_qty BIGINT NOT NULL,
             after_qty BIGINT NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
+        # Catalogo de pecas (carrinhos Mouser/DigiKey), separado do stock: preenche o formulario e da o preco.
+        """CREATE TABLE IF NOT EXISTS parts (
+            mpn VARCHAR(255) COLLATE utf8mb4_0900_as_ci PRIMARY KEY,
+            manufacturer VARCHAR(255) NOT NULL DEFAULT '',
+            description TEXT NOT NULL,
+            category VARCHAR(255) NOT NULL DEFAULT '',
+            props LONGTEXT NOT NULL,
+            price DOUBLE NULL,
+            source VARCHAR(255) NOT NULL DEFAULT ''
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
     ):
         if mariadb:
             sql = sql.replace("utf8mb4_0900_as_ci", "utf8mb4_uca1400_as_ci").replace("utf8mb4_0900_bin", "utf8mb4_bin")
@@ -402,6 +412,15 @@ def init_sqlite_schema(connection):
             before_qty INTEGER NOT NULL,
             after_qty INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS parts (
+            mpn TEXT PRIMARY KEY COLLATE NOCASE,
+            manufacturer TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL DEFAULT '',
+            category TEXT NOT NULL DEFAULT '',
+            props TEXT NOT NULL DEFAULT '{}',
+            price REAL,
+            source TEXT NOT NULL DEFAULT ''
+        );
         """
     )
     category_columns = {
@@ -493,6 +512,26 @@ def db_categories():
         }
         for row in rows
     ]
+
+
+def db_parts():
+    init_db()
+    with db_connection() as connection:
+        rows = connection.execute("SELECT * FROM parts ORDER BY mpn").fetchall()
+    return [{**dict(row), "props": json.loads(row["props"])} for row in rows]
+
+
+def save_parts(parts):
+    # Substitui cada peca pelo mpn: reimportar um carrinho atualiza o preco em vez de duplicar.
+    init_db()
+    with db_connection() as connection:
+        for part in parts:
+            connection.execute("DELETE FROM parts WHERE mpn = ?", (part["mpn"],))
+            connection.execute(
+                "INSERT INTO parts (mpn, manufacturer, description, category, props, price, source) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (part["mpn"], part.get("manufacturer", ""), part.get("description", ""), part.get("category", ""),
+                 json.dumps(part.get("props", {}), ensure_ascii=False), part.get("price"), part.get("source", "")),
+            )
 
 
 def google_sheet():
@@ -1028,6 +1067,7 @@ def data_from_items(items):
     return {
         "categories": db_categories(),
         "items": items,
+        "parts": db_parts(),
         "can_edit": STORAGE_MODE == "local",
         "auth": True,
         "user": current_person(),

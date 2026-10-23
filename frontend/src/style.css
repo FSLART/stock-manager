@@ -59,6 +59,7 @@ main{padding:32px clamp(18px,4vw,48px);display:flex;flex-direction:column;gap:22
 .heading{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
 h1{font:700 34px var(--head);letter-spacing:-.02em}
 .sub{color:var(--muted)}
+.estimate{cursor:help;text-decoration:underline dotted;text-underline-offset:3px}
 
 /* marca de agua */
 .watermark {

@@ -248,6 +248,33 @@ it('previews a real image in the middle of the page while hovered, but not the d
   expect(document.querySelector('.image-preview')).toBe(null)
 })
 
+it('fills the movement form from a catalog part and reuses the stocked item with the same part number', async () => {
+  const catalog = {
+    ...structuredClone(data),
+    categories: [...data.categories, { name: 'CIs', props: ['Brand', 'P/N', 'Footprint'], image: false }],
+    items: [...data.items, { id: 3, cat: 'CIs', props: { Brand: 'TI', 'P/N': 'SN74HC02PWRG4', Footprint: 'TSSOP-14' }, qty: 3, image: '' }],
+    parts: [
+      { mpn: 'SN74HC02PWRG4', manufacturer: 'Texas Instruments', description: 'Logic Gates', category: '', props: {}, price: 0.85 },
+      { mpn: 'LAN8720AI', manufacturer: 'Microchip', description: 'Ethernet PHY', category: 'CIs', props: {}, price: 1.1 },
+    ],
+  }
+  fetch.mockResolvedValue({ ok: true, json: async () => structuredClone(catalog) })
+  wrapper = mount(App)
+  await flushPromises()
+  expect(wrapper.find('.estimate').text()).toBe('≈ 2,55\u00a0€')
+  await wrapper.findAll('button').find(button => button.text() === 'Adicionar / retirar').trigger('click')
+  const form = wrapper.find('dialog form')
+  const picker = form.find('input[list="catalog-parts"]')
+  expect(form.findAll('#catalog-parts option').map(option => option.element.value)).toEqual(['SN74HC02PWRG4', 'LAN8720AI'])
+  await picker.setValue('sn74hc02pwrg4')
+  await picker.trigger('change')
+  expect(form.find('select').element.value).toBe('CIs')
+  expect(form.findAll('.fields input').map(input => input.element.value)).toEqual(['TI', 'SN74HC02PWRG4', 'TSSOP-14'])
+  await picker.setValue('LAN8720AI')
+  await picker.trigger('change')
+  expect(form.findAll('.fields input').map(input => input.element.value)).toEqual(['Microchip', 'LAN8720AI', ''])
+})
+
 it('keeps rejected edits open with the server error and does not offer editing on unsupported backends', async () => {
   wrapper = mount(App)
   await flushPromises()

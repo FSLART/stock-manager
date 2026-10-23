@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, provide, reactive, ref, shallowReactive, watch } from 'vue'
 import { createApi, readStored } from './api.js'
 import { componentValue, describe } from './stockText.js'
+import { priceEstimator } from './prices.js'
 import InventoryCsvImport from './components/InventoryCsvImport.vue'
 import StockItem from './components/StockItem.vue'
 import StockMovement from './components/StockMovement.vue'
@@ -32,7 +33,7 @@ provide('movementFilter', ref(''))
 function guard(fn) {
   return (...args) => !auth.enabled || auth.user ? fn(...args) : loginDialog.value.open().then(ok => ok && fn(...args))
 }
-const categories = ref([]), items = ref([]), current = ref(null), query = ref('')
+const categories = ref([]), items = ref([]), parts = ref([]), current = ref(null), query = ref('')
 const busy = ref(false), loading = ref(true), toastMessage = ref(''), toastUndo = ref(null), formError = ref('')
 const movement = ref(null), categoryForm = ref(null)
 const csvImport = ref(null), csvError = ref('')
@@ -90,6 +91,12 @@ const shown = computed(() => items.value.filter(item =>
   return sortDirection.value * (sortKey.value === 'qty' ? av - bv : String(av).localeCompare(String(bv), 'pt', { numeric: true, sensitivity: 'base' }))
 }))
 const units = computed(() => shown.value.reduce((sum, item) => sum + item.qty, 0))
+const priceOf = computed(() => priceEstimator(parts.value))
+const estimate = computed(() => {
+  const priced = shown.value.map(item => [item, priceOf.value(item)]).filter(([, price]) => price != null)
+  return { value: priced.reduce((sum, [item, price]) => sum + item.qty * price, 0), missing: shown.value.length - priced.length }
+})
+const euros = value => value.toLocaleString('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: value < 100 ? 2 : 0 })
 const total = name => items.value.filter(item => !name || item.cat === name).reduce((sum, item) => sum + item.qty, 0)
 const color = name => `hsl(${[...name].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7)} 65% 48%)`
 const locked = computed(() => busy.value || queues.size > 0)
@@ -122,6 +129,7 @@ async function load() {
   if (disposed) return
   categories.value = data.categories
   items.value = data.items
+  parts.value = data.parts || []
   canEdit.value = Boolean(data.can_edit)
   Object.assign(auth, { enabled: Boolean(data.auth), user: data.user || null, notion: Boolean(data.notion_login) })
   if (current.value && !categories.value.some(c => c.name === current.value)) current.value = null
@@ -320,7 +328,7 @@ onUnmounted(() => {
         <p v-if="!facets.length" class="filter-no-values">As propriedades das categorias aparecem aqui como filtros.</p>
       </div>
     </section>
-    <div class="heading"><h1>{{ current || 'Tudo em stock' }}</h1><span class="sub">{{ shown.length }} {{ shown.length === 1 ? 'referência' : 'referências' }} · {{ units }} {{ units === 1 ? 'unidade' : 'unidades' }}</span></div>
+    <div class="heading"><h1>{{ current || 'Tudo em stock' }}</h1><span class="sub">{{ shown.length }} {{ shown.length === 1 ? 'referência' : 'referências' }} · {{ units }} {{ units === 1 ? 'unidade' : 'unidades' }}<template v-if="estimate.value"> · <span class="estimate" :title="`Estimativa: preço do catálogo pelo P/N; sem P/N, mediana de peças da mesma categoria e tamanho.${estimate.missing ? ` ${estimate.missing} sem preço.` : ''}`">≈ {{ euros(estimate.value) }}</span></template></span></div>
     <div class="mobile-sort">
       <label>Ordenar por
         <select v-model="sortChoice"><option value="">Ordem original</option><option v-for="column in columns" :key="column.key" :value="column.key">{{ column.label }}</option></select>
@@ -347,7 +355,7 @@ onUnmounted(() => {
   </main>
   </div>
   </div>
-  <StockMovement ref="movement" :categories="categories" :items="items" :busy="busy" :error="formError" @submit="submitMovement" @clear-error="formError = ''" />
+  <StockMovement ref="movement" :categories="categories" :items="items" :parts="parts" :busy="busy" :error="formError" @submit="submitMovement" @clear-error="formError = ''" />
   <CategoryForm ref="categoryForm" :categories="categories" :busy="busy" :error="categoryError" @submit="submitCategory" />
   <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
   <LoginDialog ref="loginDialog" @login="user => { auth.user = user; toast(`Sessão iniciada: ${user.name}`) }" />
