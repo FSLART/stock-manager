@@ -146,6 +146,21 @@ it('edits category and field names while sending the original field identity', a
   expect(JSON.parse(request[1].body)).toEqual({ originalName: 'LEDs', name: 'Luzes', fields: [{ source: 'cor', name: 'tonalidade' }], image: true })
 })
 
+it('creates a category with one input per property, like the edit form', async () => {
+  wrapper = mount(App)
+  await flushPromises()
+  await wrapper.find('button[aria-label="Nova categoria"]').trigger('click')
+  const form = wrapper.findAll('dialog form')[1]
+  await form.find('input').setValue('Díodos')
+  await form.find('.property-editor input').setValue('tipo')
+  await form.find('button.ghost').trigger('click')
+  await form.findAll('.property-editor input')[1].setValue(' tensão ')
+  await form.trigger('submit')
+  await flushPromises()
+  const request = fetch.mock.calls.find(([url, options]) => url === '/api/categories' && options.method === 'POST')
+  expect(JSON.parse(request[1].body)).toEqual({ name: 'Díodos', props: ['tipo', 'tensão'], image: false })
+})
+
 it('keeps rejected edits open with the server error and does not offer editing on unsupported backends', async () => {
   wrapper = mount(App)
   await flushPromises()
