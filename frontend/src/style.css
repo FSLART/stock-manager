@@ -1258,3 +1258,59 @@ a.notion-login{display:inline-flex;align-items:center;text-decoration:none}
 .people-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
 @media(max-width:1000px){.home-nav .main-menu{order:2}}
 @media(max-width:560px){.people-admin .setting-row{flex-wrap:wrap}}
+
+/* Inventário: ações sempre visíveis, vista "Tudo" com Descrição, cartões no telemóvel. */
+.stock-content{color-scheme:dark}
+.stock-table .property-cell,.stock-table .desc-cell{white-space:normal;min-width:70px;max-width:none}
+.stock-table .desc-cell{color:var(--muted);width:100%}
+.stock-table .card-sub{display:none}
+.stock-table .qty button{min-width:32px;height:32px;font-size:12px}
+.stock-table .qty button.step-one{font-size:18px}
+.stock-table .actions-cell{padding-left:12px}
+.stock-table .item-actions{gap:14px}
+.stock-table .edit{min-height:32px;padding:5px 12px;font-size:12px}
+.stock-table .del{width:32px;height:32px;font-size:15px}
+.toast-undo{margin-left:16px;padding:4px 0;border:0;background:none;color:inherit;font:inherit;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+#toast.on{pointer-events:auto}
+@media(max-width:820px){
+ /* Pesquisa primeiro, categorias em chips logo a seguir, depois filtros e lista. */
+ .stock-shell{display:flex;flex-direction:column;gap:16px;padding:14px 16px 24px}
+ .stock-content{display:contents}
+ .stock-shell .top{order:1}
+ .stock-shell .sidebar{order:2;padding:0;border:0;background:none;height:auto}
+ .stock-shell .filter-section{order:3}
+ .filter-section:not(.open) .quick-filters{display:none}
+ .sidebar .side-btn{margin-top:0}
+ .stock-shell .heading{order:4}
+ .stock-shell .list{order:5}
+ .sidebar-heading{display:none}
+ .category-nav{gap:6px}
+ .category-nav .cat-row{flex:none;max-width:100%}
+ .category-nav .cat-row>button:first-child{min-height:40px;padding:6px 14px;border:1px solid var(--line);border-radius:999px}
+ .category-nav .cat-row>button:first-child[aria-current=true]{border-color:var(--accent)}
+ .category-nav .cat-edit,.category-nav .cat-del{display:none}
+ .category-nav .cat-row:has(>button[aria-current=true]) .cat-edit,.category-nav .cat-row:has(>button[aria-current=true]) .cat-del{display:inline-flex;align-items:center;min-height:40px}
+ .sidebar .side-btn{margin-top:8px;min-height:40px}
+ .stock-content{gap:16px;padding-top:14px}
+ /* Cada componente é um cartão: nome, quantidade com +/− largos, ações. Sem scroll lateral. */
+ .list{overflow:visible}
+ .stock-table,.stock-table tbody{display:block}
+ .stock-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+ .stock-table .row{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px 12px;align-items:center;padding:12px 14px;border-top:1px solid var(--line)}
+ .stock-table .row:first-child{border-top:0}
+ .stock-table td{display:block;padding:0;border:0}
+ .stock-table .category-cell,.stock-table .desc-cell,.stock-table .property-cell{display:none}
+ .stock-table .image-cell{grid-column:1;grid-row:1;width:auto}
+ .stock-table .item-image{width:44px;height:44px}
+ .stock-table .component-cell{grid-column:2;grid-row:1;white-space:normal;overflow-wrap:anywhere}
+ .stock-table .val{font-size:16px}
+ .stock-table .card-sub{display:block;margin-top:2px;color:var(--muted);font-size:12px}
+ .stock-table .qty-cell{grid-column:1/4;grid-row:2}
+ .stock-table .actions-cell{grid-column:3;grid-row:1;padding:0}
+ .stock-table .qty{width:100%;justify-content:space-between}
+ .stock-table .qty button{min-width:44px;height:40px;font-size:13px}
+ .stock-table .qty output{min-width:44px;font-size:16px}
+ .stock-table .item-actions{gap:8px}
+ .stock-table .edit{min-height:40px;padding:0 12px}
+ .stock-table .del{width:40px;height:40px}
+}

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, provide, reactive, ref, shallowReactive, watch } from 'vue'
 import { createApi, readStored } from './api.js'
+import { componentValue, describe } from './stockText.js'
 import InventoryCsvImport from './components/InventoryCsvImport.vue'
 import StockItem from './components/StockItem.vue'
 import StockMovement from './components/StockMovement.vue'
@@ -31,7 +32,7 @@ function guard(fn) {
   return (...args) => !auth.enabled || auth.user ? fn(...args) : loginDialog.value.open().then(ok => ok && fn(...args))
 }
 const categories = ref([]), items = ref([]), current = ref(null), query = ref('')
-const busy = ref(false), loading = ref(true), toastMessage = ref(''), formError = ref('')
+const busy = ref(false), loading = ref(true), toastMessage = ref(''), toastUndo = ref(null), formError = ref('')
 const movement = ref(null), categoryForm = ref(null)
 const csvImport = ref(null), csvError = ref('')
 const canEdit = ref(false), categoryError = ref('')
@@ -39,7 +40,7 @@ const queues = shallowReactive(new Map())
 let timer, toastTimer, refreshing = false, disposed = false
 const normalize = value => String(value).toLowerCase().replace(/\s+/g, '')
 const propertyFilters = ref({}), filterSearch = ref({}), stockFilter = ref(''), imageFilter = ref('')
-const filtersOpen = ref(true), sortKey = ref(''), sortDirection = ref(1)
+const filtersOpen = ref(false), sortKey = ref(''), sortDirection = ref(1)
 const scopedItems = computed(() => items.value.filter(item => !current.value || item.cat === current.value))
 const propertyKeys = computed(() => [...new Set([
   ...scopedItems.value.flatMap(item => Object.keys(item.props)),
@@ -47,9 +48,12 @@ const propertyKeys = computed(() => [...new Set([
 const facets = computed(() => propertyKeys.value.map(key => ({ key, values: [...new Set(
   scopedItems.value.map(item => String(item.props[key] ?? '')).filter(Boolean)
 )].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true })) })))
+// "Tudo" mistura categorias com propriedades diferentes: uma coluna Descrição em vez de uma por propriedade.
+// Dentro de uma categoria cada propriedade tem a sua coluna, para ordenar e filtrar.
+const showCategory = computed(() => !current.value)
 const columns = computed(() => [
-  { key: 'cat', label: 'Categoria' }, { key: 'component', label: 'Componente' },
-  ...propertyKeys.value.map(key => ({ key: `prop:${key}`, label: key })),
+  ...(showCategory.value ? [{ key: 'cat', label: 'Categoria' }] : []), { key: 'component', label: 'Componente' },
+  ...(showCategory.value ? [{ key: 'desc', label: 'Descrição' }] : propertyKeys.value.map(key => ({ key: `prop:${key}`, label: key }))),
   { key: 'qty', label: 'Quantidade' },
 ])
 const activeFilters = computed(() => Object.values(propertyFilters.value).reduce((sum, values) => sum + values.length, 0) + Number(Boolean(stockFilter.value)) + Number(Boolean(imageFilter.value)))
@@ -70,8 +74,7 @@ function sortBy(key) {
   sortDirection.value = sortKey.value === key ? -sortDirection.value : 1
   sortKey.value = key
 }
-const componentValue = item => item.props.valor || item.props.capacidade || Object.values(item.props)[0] || '—'
-const sortValue = (item, key) => key === 'component' ? componentValue(item) : key.startsWith('prop:') ? item.props[key.slice(5)] ?? '' : item[key]
+const sortValue = (item, key) => key === 'component' ? componentValue(item) : key === 'desc' ? describe(item) : key.startsWith('prop:') ? item.props[key.slice(5)] ?? '' : item[key]
 const shown = computed(() => items.value.filter(item =>
   (!current.value || item.cat === current.value) &&
   normalize(item.cat + Object.values(item.props).join('')).includes(normalize(query.value)) &&
@@ -103,11 +106,13 @@ provide('inventory', reactive({
   addMaterial: guard(async () => { navigation.push('/stock'); await nextTick(); if (categories.value.length) movement.value.open(current.value) }),
 }))
 
-function toast(message, important = false) {
-  if (!preferences.notifications && !important) return
+function toast(message, important = false, undo = null) {
+  if (!preferences.notifications && !important && !undo) return
   toastMessage.value = message || ''
+  toastUndo.value = undo
   clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => { toastMessage.value = '' }, 3000)
+  // Quem pode desfazer precisa de mais tempo para ler e decidir.
+  toastTimer = setTimeout(() => { toastMessage.value = ''; toastUndo.value = null }, undo ? 8000 : 3000)
 }
 async function load() {
   const data = await api.load()
@@ -131,7 +136,15 @@ async function act(action, payload, success) {
   finally { busy.value = false }
 }
 function deleteItem(item) {
-  if (confirm('Apagar este item do stock?')) act('deleteItem', { id: item.id })
+  if (!confirm(`Apagar ${componentValue(item)} (${item.cat}, ${item.qty} un.) do stock?`)) return
+  act('deleteItem', { id: item.id }, () => {
+    // Desfazer repõe o componente com as mesmas propriedades, quantidade e imagem (ganha um id novo).
+    if (item.qty > 0) toast(`Apagado: ${componentValue(item)}`, false, async () => {
+      toastMessage.value = ''; toastUndo.value = null
+      await act('move', { cat: item.cat, props: item.props, qty: item.qty, mode: 'in', image: item.image || '' })
+    })
+    return false
+  })
 }
 function deleteCategory(category) {
   const refs = items.value.filter(item => item.cat === category.name)
@@ -274,12 +287,12 @@ onUnmounted(() => {
     <div class="top">
       <div class="search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input v-model="query" type="search" aria-label="Pesquisar componentes" placeholder="Pesquisar por valor, tamanho, categoria…" autocomplete="off">
+        <input v-model="query" type="search" aria-label="Pesquisar componentes" placeholder="Pesquisar componentes…" autocomplete="off">
       </div>
       <button v-if="canEdit" class="text-button import-csv-button" aria-label="Importar CSV" :disabled="locked || !categories.length" @click="guarded.importCsv()">Importar CSV</button>
       <button class="primary" :disabled="locked || !categories.length" @click="guarded.openMovement()">Adicionar / retirar</button>
     </div>
-    <section class="filter-section" aria-label="Filtros de componentes">
+    <section class="filter-section" :class="{ open: filtersOpen || activeFilters }" aria-label="Filtros de componentes">
       <div class="filter-toolbar">
         <button class="filter-toggle" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen">Filtros <span v-if="activeFilters" class="filter-count">{{ activeFilters }}</span><span aria-hidden="true">{{ filtersOpen ? '⌃' : '⌄' }}</span></button>
         <div class="quick-filters">
@@ -315,7 +328,7 @@ onUnmounted(() => {
             </th>
             <th scope="col">Ações</th>
           </tr></thead>
-          <tbody><StockItem v-for="item in shown" :key="item.id" :item="item" :property-keys="propertyKeys" :busy="busy" :locked="locked" :can-edit="canEdit" @edit="guarded.editItem(item)" @step="delta => guarded.step(item, delta)" @delete="guarded.deleteItem(item)" /></tbody>
+          <tbody><StockItem v-for="item in shown" :key="item.id" :item="item" :property-keys="showCategory ? [] : propertyKeys" :show-category="showCategory" :busy="busy" :locked="locked" :can-edit="canEdit" @edit="guarded.editItem(item)" @step="delta => guarded.step(item, delta)" @delete="guarded.deleteItem(item)" /></tbody>
         </table>
         <div v-if="!shown.length" class="empty"><b>Nada encontrado.</b><br>Tenta outra pesquisa ou adiciona um item novo.</div>
       </template>
@@ -327,5 +340,5 @@ onUnmounted(() => {
   <CategoryForm ref="categoryForm" :busy="busy" :error="categoryError" @submit="submitCategory" />
   <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
   <LoginDialog ref="loginDialog" @login="user => { auth.user = user; toast(`Sessão iniciada: ${user.name}`) }" />
-  <div id="toast" role="status" :class="{ on: toastMessage }">{{ toastMessage }}</div>
+  <div id="toast" role="status" :class="{ on: toastMessage }">{{ toastMessage }}<button v-if="toastUndo" class="toast-undo" @click="toastUndo()">Desfazer</button></div>
 </template>
