@@ -118,6 +118,7 @@ class EditingTest(unittest.TestCase):
                 patch.object(self.module.IMAGE_OPENER, 'open', return_value=Response(b'<html>not an image</html>')):
             response = self.client.post('/api/images', data={'url': 'https://example.com/page'})
         self.assertEqual(response.status_code, 400)
+        self.assertIn('Ctrl+V', response.json['error'])
 
 
 if __name__ == '__main__':

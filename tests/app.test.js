@@ -259,7 +259,8 @@ it('joins the other properties in one Descrição column in Tudo and gives each 
   expect(wrapper.findAll('th').map(th => th.text().replace(/\s*[↕↑↓]$/, ''))).toEqual(['Imagem', 'Categoria', 'Componente', 'Descrição', 'Quantidade', 'Ações'])
   expect(wrapper.find('tbody .row .desc-cell').text()).toBe('0603 · 1%')
   await wrapper.findAll('nav .cat-row > button:first-child')[1].trigger('click')
-  expect(wrapper.findAll('th').map(th => th.text().replace(/\s*[↕↑↓]$/, ''))).toEqual(['Imagem', 'Componente', 'valor (Ω)', 'tamanho', 'tol', 'Quantidade', 'Ações'])
+  expect(wrapper.findAll('th').map(th => th.text().replace(/\s*[↕↑↓]$/, ''))).toEqual(['Imagem', 'valor (Ω)', 'tamanho', 'tol', 'Quantidade', 'Ações'])
+  expect(wrapper.find('tbody .component-cell').classes()).toContain('card-only')
 })
 
 it('starts with the property filters closed and offers undo after deleting an item', async () => {

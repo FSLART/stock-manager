@@ -50,10 +50,10 @@ const facets = computed(() => propertyKeys.value.map(key => ({ key, values: [...
   scopedItems.value.map(item => String(item.props[key] ?? '')).filter(Boolean)
 )].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true })) })))
 // "Tudo" mistura categorias com propriedades diferentes: uma coluna Descrição em vez de uma por propriedade.
-// Dentro de uma categoria cada propriedade tem a sua coluna, para ordenar e filtrar.
+// Dentro de uma categoria cada propriedade tem a sua coluna, para ordenar e filtrar, e Componente seria repetida.
 const showCategory = computed(() => !current.value)
 const columns = computed(() => [
-  ...(showCategory.value ? [{ key: 'cat', label: 'Categoria' }] : []), { key: 'component', label: 'Componente' },
+  ...(showCategory.value ? [{ key: 'cat', label: 'Categoria' }, { key: 'component', label: 'Componente' }] : []),
   ...(showCategory.value ? [{ key: 'desc', label: 'Descrição' }] : propertyKeys.value.map(key => ({ key: `prop:${key}`, label: key }))),
   { key: 'qty', label: 'Quantidade' },
 ])

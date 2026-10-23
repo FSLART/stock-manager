@@ -186,6 +186,7 @@ button:disabled{cursor:wait;opacity:.6}
 .stock-table .pill{background:none;padding:0;font-weight:400;font-size:13px}
 .stock-table .val{font:600 13px var(--body);color:var(--accent)}
 .stock-table .tag{font-size:10px;padding:2px 6px}
+.stock-table .card-only{display:none}
 .stock-table .qty{width:max-content;padding:2px;border-radius:6px;gap:2px}
 .stock-table .qty button{min-width:24px;height:26px;border-radius:4px;font-size:11px}
 .stock-table .qty button.step-one{font-size:16px}
@@ -1309,6 +1310,7 @@ a.notion-login{display:inline-flex;align-items:center;text-decoration:none}
  .stock-table .image-cell{grid-column:1;grid-row:1;width:auto}
  .stock-table .item-image{width:44px;height:44px}
  .stock-table .component-cell{grid-column:2;grid-row:1;white-space:normal;overflow-wrap:anywhere}
+ .stock-table .card-only{display:block}
  .stock-table .val{font-size:16px}
  .stock-table .card-sub{display:block;margin-top:2px;color:var(--muted);font-size:12px}
  .stock-table .qty-cell{grid-column:1/4;grid-row:2}

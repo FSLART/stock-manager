@@ -19,7 +19,8 @@ const color = computed(() => `hsl(${[...props.item.cat].reduce((a, c) => (a * 31
     <img class="item-image" :class="{ 'default-image': usesDefaultImage }" :src="imageSource" :alt="`${usesDefaultImage ? 'Ícone padrão' : 'Imagem'} de ${item.cat}`" :title="usesDefaultImage ? `Ícone padrão de ${item.cat}` : item.cat" @error="imageFailed = true">
     </td>
     <td v-if="showCategory" class="category-cell"><span class="pill"><i class="dot" :style="{ background: color }"></i>{{ item.cat }}</span></td>
-    <td class="component-cell">
+    <!-- Numa categoria a coluna repetiria uma propriedade; fica só como título do cartão no telemóvel. -->
+    <td class="component-cell" :class="{ 'card-only': !showCategory }">
       <span class="val">{{ mainValue }}</span><span v-if="item.qty <= 5" class="tag">{{ item.qty === 0 ? 'sem stock' : 'pouco stock' }}</span>
       <!-- Só no telemóvel, onde a linha vira cartão e as colunas desaparecem. -->
       <span class="card-sub">{{ item.cat }}<template v-if="description"> · {{ description }}</template></span>

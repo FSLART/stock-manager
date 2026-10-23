@@ -1078,8 +1078,9 @@ def upload_image():
     if image is not None and image.filename:
         if Path(image.filename).suffix.lower() not in ALLOWED_IMAGE_EXTENSIONS:
             return erro("Formato de imagem não suportado")
-        stream = image.stream
+        stream, from_link = image.stream, False
     elif url:
+        from_link = True
         try:
             stream = BytesIO(download_image(url))
         except ImageLinkError as exc:
@@ -1093,6 +1094,8 @@ def upload_image():
         source.load()
         source = ImageOps.exif_transpose(source).convert("RGB")
     except (UnidentifiedImageError, OSError):
+        if from_link:
+            return erro("Esse link não devolveu uma imagem (sites como a Mouser bloqueiam downloads). Copia a imagem no site e cola-a aqui com Ctrl+V.")
         return erro("O ficheiro enviado não é uma imagem válida")
 
     contained = ImageOps.contain(source, NORMALIZED_IMAGE_SIZE, Image.Resampling.LANCZOS)
