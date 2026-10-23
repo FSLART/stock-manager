@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 const props = defineProps({ categories: Array, busy: Boolean, error: String })
-const emit = defineEmits(['submit'])
+const emit = defineEmits(['submit', 'delete'])
 const dialog = ref(null)
 const name = ref(''), image = ref(false)
 const originalName = ref(null), fields = ref([]), originalFields = ref([])
@@ -45,7 +45,7 @@ defineExpose({ open, close: () => dialog.value.close() })
       <label class="check"><input v-model="image" type="checkbox"> Permitir uma imagem por componente</label>
       <p class="hint">{{ originalName ? 'Renomear ou reordenar uma propriedade mantém os valores existentes. Novas propriedades ficam vazias até editares cada componente.' : 'Itens com todas as propriedades iguais ficam agrupados e a quantidade soma.' }}</p>
       <p v-if="error" class="hint error" role="alert">{{ error }}</p>
-      <div class="actions"><button type="button" class="ghost" :disabled="busy" @click="dialog.close()">Cancelar</button><button class="primary" :disabled="busy">{{ originalName ? 'Guardar alterações' : 'Criar categoria' }}</button></div>
+      <div class="actions"><button v-if="originalName" type="button" class="ghost delete-category" :disabled="busy" @click="emit('delete', originalName)">Apagar categoria</button><button type="button" class="ghost" :disabled="busy" @click="dialog.close()">Cancelar</button><button class="primary" :disabled="busy">{{ originalName ? 'Guardar alterações' : 'Criar categoria' }}</button></div>
     </form>
   </dialog>
 </template>

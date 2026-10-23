@@ -7,6 +7,7 @@ import InventoryCsvImport from './components/InventoryCsvImport.vue'
 import StockItem from './components/StockItem.vue'
 import StockMovement from './components/StockMovement.vue'
 import CategoryForm from './components/CategoryForm.vue'
+import PartsCatalog from './components/PartsCatalog.vue'
 import AppNavigation from './components/AppNavigation.vue'
 import LoginDialog from './components/LoginDialog.vue'
 import HomePage from './pages/HomePage.vue'
@@ -35,7 +36,7 @@ function guard(fn) {
 }
 const categories = ref([]), items = ref([]), parts = ref([]), current = ref(null), query = ref('')
 const busy = ref(false), loading = ref(true), toastMessage = ref(''), toastUndo = ref(null), formError = ref('')
-const movement = ref(null), categoryForm = ref(null)
+const movement = ref(null), categoryForm = ref(null), partsCatalog = ref(null)
 const csvImport = ref(null), csvError = ref('')
 const canEdit = ref(false), categoryError = ref('')
 const queues = shallowReactive(new Map())
@@ -199,7 +200,7 @@ async function processQueue(id, queue) {
     }
   } finally { queues.delete(id) }
 }
-async function submitMovement({ file, imageUrl, ...payload }) {
+async function submitMovement({ file, imageUrl, partPrice, priceOnly, ...payload }) {
   if (busy.value || queues.size) return
   busy.value = true
   formError.value = ''
@@ -208,7 +209,8 @@ async function submitMovement({ file, imageUrl, ...payload }) {
     if (file || imageUrl) payload.image = await api.uploadImage(file || imageUrl)
     else if (!editing) payload.image = ''
     if (editing) { delete payload.mode; delete payload.cat }
-    const result = await api.request(editing ? 'editItem' : 'move', payload)
+    const result = priceOnly ? await api.request('savePart', partPrice) : await api.request(editing ? 'editItem' : 'move', payload)
+    if (partPrice && !priceOnly) await api.request('savePart', partPrice)
     movement.value.close()
     toast(result.msg)
     if (!result.queued) await load()
@@ -226,6 +228,23 @@ async function submitCsv(rows) {
     await load()
   } catch (error) { csvError.value = error.message }
   finally { busy.value = false }
+}
+const partError = ref('')
+async function savePart(part) {
+  if (busy.value || queues.size) return
+  busy.value = true
+  partError.value = ''
+  try {
+    const result = await api.request('savePart', part)
+    partsCatalog.value.closeForm()
+    toast(result.msg)
+    if (!result.queued) await load()
+  } catch (error) { partError.value = error.message }
+  finally { busy.value = false }
+}
+function deleteFromForm(name) {
+  categoryForm.value.close()
+  deleteCategory(categories.value.find(category => category.name === name))
 }
 function openCategory(category) {
   categoryError.value = ''
@@ -255,7 +274,7 @@ async function refresh() {
   finally { refreshing = false }
 }
 const guarded = {
-  step: guard(stepItem), deleteItem: guard(deleteItem), deleteCategory: guard(deleteCategory), openCategory: guard(openCategory),
+  step: guard(stepItem), deleteItem: guard(deleteItem), deleteCategory: guard(deleteCategory), openCategory: guard(openCategory), savePart: guard(savePart),
   openMovement: guard(() => movement.value.open(current.value)), editItem: guard(item => movement.value.edit(item)), importCsv: guard(() => csvImport.value.open()),
 }
 onMounted(async () => {
@@ -291,10 +310,12 @@ onUnmounted(() => {
       <div class="cat-row"><button :aria-current="!current" @click="current = null">Tudo <span class="n">{{ total() }}</span></button></div>
       <div v-for="category in categories" :key="category.name" class="cat-row">
         <button :aria-current="current === category.name" @click="current = category.name"><span><i class="dot" :style="{ background: color(category.name) }"></i>{{ category.name }}</span><span class="n">{{ total(category.name) }}</span></button>
-        <button v-if="canEdit" class="cat-edit" :aria-label="`Editar categoria ${category.name}`" :disabled="locked" @click="guarded.openCategory(category)">Editar</button>
-        <button class="cat-del" :aria-label="`Apagar categoria ${category.name}`" title="Apagar categoria" :disabled="locked" @click="guarded.deleteCategory(category)">✕</button>
+        <!-- Um só botão discreto por categoria; apagar fica dentro do formulário de edição. -->
+        <button v-if="canEdit" class="cat-edit" :aria-label="`Editar categoria ${category.name}`" title="Editar categoria" :disabled="locked" @click="guarded.openCategory(category)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg></button>
+        <button v-else class="cat-del" :aria-label="`Apagar categoria ${category.name}`" title="Apagar categoria" :disabled="locked" @click="guarded.deleteCategory(category)">✕</button>
       </div>
     </nav>
+    <button v-if="parts.length" type="button" class="catalog-btn" @click="partsCatalog.open()">Catálogo de peças <span class="n">{{ parts.length }}</span></button>
     </div>
   </aside>
   <main class="stock-content">
@@ -357,8 +378,9 @@ onUnmounted(() => {
   </div>
   </div>
   <StockMovement ref="movement" :categories="categories" :items="items" :parts="parts" :busy="busy" :error="formError" @submit="submitMovement" @clear-error="formError = ''" />
-  <CategoryForm ref="categoryForm" :categories="categories" :busy="busy" :error="categoryError" @submit="submitCategory" />
+  <CategoryForm ref="categoryForm" :categories="categories" :busy="busy" :error="categoryError" @submit="submitCategory" @delete="deleteFromForm" />
   <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
   <LoginDialog ref="loginDialog" @login="user => { auth.user = user; toast(`Sessão iniciada: ${user.name}`) }" />
+  <PartsCatalog v-if="parts.length" ref="partsCatalog" :parts="parts" :items="items" :categories="categories" :busy="busy" :error="partError" @save="guarded.savePart" @clear-error="partError = ''" />
   <div id="toast" role="status" :class="{ on: toastMessage }">{{ toastMessage }}<button v-if="toastUndo" class="toast-undo" @click="toastUndo()">Desfazer</button></div>
 </template>

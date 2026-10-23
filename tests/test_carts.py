@@ -9,6 +9,8 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from backend.carts import parse_cart, stock_fields  # noqa: E402
+sys.path.insert(0, str(ROOT / 'tests'))
+from auth_helper import as_person  # noqa: E402
 
 MOUSER = [
     [''] * 11,
@@ -36,7 +38,7 @@ class CartParsingTest(unittest.TestCase):
         self.assertEqual((resistor['category'], resistor['props']['valor (Ω)'], resistor['props']['tamanho'], resistor['price']), ('Resistências', '15', '1206', 0.071))
         # A descrição diz ".1pF"; o código 104 do fabricante é que está certo.
         self.assertEqual((capacitor['category'], capacitor['props']['capacidade'], capacitor['props']['tipo'], capacitor['props']['Tensão']), ('Condensadores', '100nF', '0603', '50V'))
-        self.assertEqual((connector['category'], connector['props'], connector['manufacturer'], connector['source']), ('', {}, 'Molex', 'Compras.xls 2025-09-30'))
+        self.assertEqual((connector['category'], connector['props'], connector['manufacturer'], connector['source']), ('Conectores', {}, 'Molex', 'Compras.xls 2025-09-30'))
 
     def test_digikey_prices_are_converted_from_usd(self):
         _, [part] = parse_cart(DIGIKEY, 'DigiKey.xlsx')
@@ -56,6 +58,23 @@ class CartParsingTest(unittest.TestCase):
             self.assertEqual((category, props['valor (Ω)'], props['tamanho']), ('Resistências', *expected), mpn)
         self.assertEqual(stock_fields('35WR20KLFTR', 'Trimmer Resistors - SMD 3mm 20K Open Type Trimmer'), ('', {}))
 
+    def test_other_parts_get_a_catalog_category_from_the_description(self):
+        from backend.carts import catalog_category
+        cases = {
+            'Transistor Output Optocouplers Phototransistor Out': 'Optoacopladores',
+            'Headers & Wire Housings XH HEADER (SIDE)': 'Conectores',
+            'Distribuidores e Alojamento de Fios FEMALE TERM 20-24': 'Conectores',
+            'Hook-up Wire 782201 BLUE 100 FT': 'Cabos e fios',
+            'Small Signal Switching Diodes 1000V,General Purpose Rectifiers': 'Díodos',
+            'Single Colour LEDs WL-SMCD SMD Mono SMD 0603 Blue 465nm': 'LEDs',
+            'TRANS PNP 100V 3A DPAK': 'Transístores',
+            'Analog Comparators Quad 18V Open Drain Comparator E temp': 'CIs Amplificadores',
+            'Thermal Interface Products Slow Cure Thermally Conductive Adhesive': 'Materiais térmicos',
+            'Something unknown': '',
+        }
+        for description, category in cases.items():
+            self.assertEqual(catalog_category(description), category, description)
+
 
 class PartsStorageTest(unittest.TestCase):
     def setUp(self):
@@ -73,6 +92,29 @@ class PartsStorageTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         [part] = response.json['parts']
         self.assertEqual((part['mpn'], part['description'], part['props'], part['price']), ('abc-1', 'new', {'tamanho': '603'}, 0.5))
+
+
+    def test_price_edits_update_the_catalog_and_bad_prices_are_refused(self):
+        as_person(self, self.module)
+        client = self.module.app.test_client()
+        self.module.save_parts([{'mpn': 'ABC-1', 'manufacturer': 'X', 'description': 'kept', 'category': 'Resistências', 'props': {'tamanho': '603'}, 'price': 1.0}])
+        self.assertEqual(client.post('/api/parts', json={'mpn': 'abc-1', 'price': 0.25}).status_code, 200)
+        self.assertEqual(client.post('/api/parts', json={'mpn': 'NEW-9', 'price': '2.5', 'manufacturer': 'Y'}).status_code, 200)
+        for body in [{'mpn': '-', 'price': 1}, {'mpn': 'ABC-1', 'price': -1}, {'mpn': 'ABC-1', 'price': 'nan'}, {'mpn': 'ABC-1', 'price': 'x'}, {'price': 1}]:
+            self.assertEqual(client.post('/api/parts', json=body).status_code, 400, body)
+        parts = {part['mpn']: part for part in self.module.db_parts()}
+        self.assertEqual((parts['ABC-1']['price'], parts['ABC-1']['description'], parts['ABC-1']['props']), (0.25, 'kept', {'tamanho': '603'}))
+        self.assertEqual((parts['NEW-9']['price'], parts['NEW-9']['manufacturer']), (2.5, 'Y'))
+        self.assertTrue(parts['NEW-9']['source'].startswith('editado à mão'))
+
+    def test_parts_can_be_added_and_corrected_field_by_field(self):
+        as_person(self, self.module)
+        client = self.module.app.test_client()
+        added = client.post('/api/parts', json={'mpn': 'STM32F103CBT6', 'manufacturer': 'ST', 'description': 'MCU', 'category': 'Microcontroladores', 'price': ''})
+        self.assertEqual((added.status_code, added.json['msg']), (200, 'Peça adicionada ao catálogo'))
+        self.assertEqual(client.post('/api/parts', json={'mpn': 'stm32f103cbt6', 'category': 'MCUs'}).json['msg'], 'Peça guardada')
+        [part] = self.module.db_parts()
+        self.assertEqual((part['manufacturer'], part['description'], part['category'], part['price']), ('ST', 'MCU', 'MCUs', None))
 
 
 if __name__ == '__main__':

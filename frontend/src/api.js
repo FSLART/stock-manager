@@ -21,6 +21,7 @@ const routes = {
   step: p => [`/api/items/${p.id}/step`, 'POST'],
   editItem: p => [`/api/items/${p.id}`, 'PATCH'],
   editCategory: p => [`/api/categories/${encodeURIComponent(p.originalName)}`, 'PATCH'],
+  savePart: () => ['/api/parts', 'POST'],
   movements: () => ['/api/movements', 'GET'],
   // PIN (desativado): authPeople: () => ['/api/auth/people', 'GET'],
   // PIN (desativado): login: () => ['/api/auth/login', 'POST'],

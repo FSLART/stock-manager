@@ -97,6 +97,45 @@ def stock_fields(mpn, description):
     return "", {}
 
 
+# Categoria do catalogo pelas palavras da descricao (categorias da Mouser em PT/EN), pela ordem:
+# a primeira regra que bate ganha, por isso "Transistor Output Optocouplers" fica em Optoacopladores.
+# Usa o nome das categorias do stock quando existe; as restantes seguem os nomes da Mouser em portugues.
+CATEGORY_RULES = (
+    (r"optocoupler|optoacoplador", "Optoacopladores"),
+    (r"conector|connector|header|housing|alojamento", "Conectores"),
+    (r"\bleds?\b", "LEDs"),
+    (r"diod|zener|\btvs\b|rectifier", "Díodos"),
+    (r"mosfet|transist|\bbjt\b|^trans (pnp|npn)", "Transístores"),
+    (r"inductor|choke|indutor", "Indutores"),
+    (r"trimmer|potentiometer|potenci", "Potenciómetros"),
+    (r"varist", "Varístores"),
+    (r"thermistor|termistor", "Termístores"),
+    (r"fuse|fusí", "Fusíveis"),
+    (r"microcontroller|\bmcu\b", "Microcontroladores"),
+    (r"can interface|ethernet|transceiver|rs-?485", "CI de comunicação e redes"),
+    (r"logic|portas lógicas|\bgate\b", "CIs de Portas Lógicas"),
+    (r"amplifier|op amp|comparator|comparador", "CIs Amplificadores"),
+    (r"\badc\b|analog to digital|\bdac\b", "CIs de Conversão"),
+    (r"dc/dc|dc-dc", "DCDC"),
+    (r"regulator|switching controller|power management", "Reguladores de tensão"),
+    (r"timer", "Temporizadores"),
+    (r"sensor", "Sensores"),
+    (r"\bfan\b|ventilador", "Ventoinhas"),
+    (r"contator|contactor|chaves de controle|relay|relé", "Contactores e relés"),
+    (r"transformer|transformador", "Transformadores"),
+    (r"ferrite", "Ferrites"),
+    (r"\bswitch\b", "Interruptores"),
+    (r"wire|cabo", "Cabos e fios"),
+    (r"thermal", "Materiais térmicos"),
+    (r"development board|raspberry", "Placas de Desenvolvimento"),
+)
+
+
+def catalog_category(description):
+    text = description.lower()
+    return next((category for pattern, category in CATEGORY_RULES if re.search(pattern, text)), "")
+
+
 def parse_cart(rows, name):
     """Devolve as pecas de um carrinho. Precos em EUR; a DigiKey vem em USD e e convertida."""
     header_index = next(i for i, row in enumerate(rows) if {str(cell).strip() for cell in row} & set(COLUMNS["mpn"]))
@@ -115,6 +154,7 @@ def parse_cart(rows, name):
         if price is not None and usd:
             price = round(price * USD_TO_EUR, 4)
         category, props = stock_fields(mpn, description)
+        category = category or catalog_category(description)
         parts.append({
             "mpn": mpn, "manufacturer": manufacturer, "description": description, "category": category,
             "props": props,

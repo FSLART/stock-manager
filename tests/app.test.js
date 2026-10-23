@@ -126,7 +126,7 @@ it('opens an item with its values and saves an absolute quantity without clearin
   expect(form.find('h2').text()).toBe('Editar componente')
   expect(form.find('.fields input').element.value).toBe('<1A & azul')
   await form.find('.fields input').setValue('verde')
-  await form.find('input[type=number]').setValue(0)
+  await form.find('input[type=number]:not([step=any])').setValue(0)
   await form.trigger('submit')
   await flushPromises()
   const request = fetch.mock.calls.find(([url, options]) => url === '/api/items/1' && options.method === 'PATCH')
@@ -276,6 +276,114 @@ it('fills the movement form from a catalog part and reuses the stocked item with
   await picker.setValue('LAN8720AI')
   await picker.trigger('change')
   expect(form.findAll('.fields input').map(input => input.element.value)).toEqual(['Microchip', 'LAN8720AI', ''])
+})
+
+it('edits a category from one discreet button and deletes it from inside the edit form', async () => {
+  vi.stubGlobal('confirm', vi.fn(() => true))
+  wrapper = mount(App)
+  await flushPromises()
+  expect(wrapper.find('button[aria-label="Apagar categoria LEDs"]').exists()).toBe(false)
+  await wrapper.find('button[aria-label="Editar categoria LEDs"]').trigger('click')
+  const dialog = wrapper.findAll('dialog')[1]
+  await dialog.find('button.delete-category').trigger('click')
+  await flushPromises()
+  expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Apagar a categoria "LEDs"?'))
+  expect(dialog.element.open).toBe(false)
+  expect(fetch.mock.calls.some(([url, options]) => url === '/api/categories/LEDs' && options.method === 'DELETE')).toBe(true)
+})
+
+it('edits the unit price of a part number from the component form', async () => {
+  const priced = {
+    ...structuredClone(data),
+    categories: [...data.categories, { name: 'CIs', props: ['Brand', 'P/N'], image: false }],
+    items: [...data.items,
+      { id: 3, cat: 'CIs', props: { Brand: 'TI', 'P/N': 'SN74HC02PWRG4' }, qty: 3, image: '' },
+      { id: 4, cat: 'CIs', props: { Brand: 'TI', 'P/N': '-' }, qty: 1, image: '' }],
+    parts: [{ mpn: 'SN74HC02PWRG4', manufacturer: 'Texas Instruments', description: '', category: '', props: {}, price: 0.85 }],
+  }
+  fetch.mockImplementation(async () => ({ ok: true, json: async () => structuredClone(priced) }))
+  wrapper = mount(App)
+  await flushPromises()
+  const editRow = async match => {
+    await wrapper.findAll('tbody tr').find(tr => match(tr.text())).find('button[aria-label="Editar componente"]').trigger('click')
+    return wrapper.find('dialog form')
+  }
+  let form = await editRow(text => text.includes('SN74HC02PWRG4'))
+  const price = () => form.find('input[type=number][step=any]')
+  expect(price().element.value).toBe('0.85')
+  await price().setValue('0.9')
+  await form.trigger('submit')
+  await flushPromises()
+  const calls = () => fetch.mock.calls.filter(([, options]) => options?.method && options.method !== 'GET').map(([url, options]) => [url, options.method, JSON.parse(options.body)])
+  expect(calls()).toEqual([['/api/parts', 'POST', { mpn: 'SN74HC02PWRG4', price: 0.9 }]])
+
+  fetch.mockClear()
+  form = await editRow(text => text.includes('SN74HC02PWRG4'))
+  await price().setValue('1.2')
+  await form.find('input[type=number]:not([step=any])').setValue(5)
+  await form.trigger('submit')
+  await flushPromises()
+  expect(calls().map(([url, method]) => [url, method])).toEqual([['/api/items/3', 'PATCH'], ['/api/parts', 'POST']])
+
+  form = await editRow(text => text.includes('TI') && !text.includes('SN74'))
+  expect(price().element.disabled).toBe(true)
+  expect(form.text()).toContain('Preenche o P/N para guardar o preço.')
+})
+
+it('lists every catalog part from the corner button, marks what is in stock and searches', async () => {
+  fetch.mockResolvedValue({ ok: true, json: async () => ({
+    ...structuredClone(data),
+    categories: [...data.categories, { name: 'CIs', props: ['P/N'], image: false }],
+    items: [...data.items, { id: 3, cat: 'CIs', props: { 'P/N': 'SN74HC02PWRG4' }, qty: 3, image: '' }],
+    parts: [
+      { mpn: 'SN74HC02PWRG4', manufacturer: 'Texas Instruments', description: 'NOR gate', category: '', props: {}, price: 0.851, source: 'Batch_Mouser_2.xls' },
+      { mpn: 'RC0603JR-071KL', manufacturer: 'YAGEO', description: 'Chip Resistor 0603 1k', category: 'Resistências', props: {}, price: 0.004, source: 'Compras_Mouser_3' },
+    ],
+  }) })
+  wrapper = mount(App)
+  await flushPromises()
+  const button = wrapper.find('.catalog-btn')
+  expect(button.text()).toBe('Catálogo de peças 2')
+  await button.trigger('click')
+  const dialog = wrapper.find('.catalog-dialog')
+  expect(dialog.element.open).toBe(true)
+  const rows = () => dialog.findAll('tbody tr').map(tr => tr.findAll('td').map(td => td.text()))
+  expect(rows()).toEqual([
+    ['SN74HC02PWRG4', 'Texas Instruments', 'NOR gate', '—', '0,85 €', 'Sim'],
+    ['RC0603JR-071KL', 'YAGEO', 'Chip Resistor 0603 1k', 'Resistências', '0,004 €', ''],
+  ])
+  await dialog.find('input[type=search]').setValue('yageo')
+  expect(rows().map(row => row[0])).toEqual(['RC0603JR-071KL'])
+  expect(dialog.find('.sub').text()).toBe('1 de 2')
+})
+
+it('adds a part to the catalog and corrects only the changed fields of an existing one', async () => {
+  const catalog = { ...structuredClone(data), parts: [{ mpn: 'TL082BCDT', manufacturer: 'ST', description: 'Op Amps', category: '', props: {}, price: 0.4, source: 'cart' }] }
+  fetch.mockImplementation(async (url, options) => ({ ok: true, json: async () => options?.method === 'POST' ? { msg: 'ok' } : structuredClone(catalog) }))
+  wrapper = mount(App)
+  await flushPromises()
+  await wrapper.find('.catalog-btn').trigger('click')
+  const dialog = wrapper.find('.catalog-dialog')
+  await dialog.find('button.add-part').trigger('click')
+  let form = dialog.find('form.catalog-form')
+  const inputs = () => form.findAll('input')
+  await inputs()[0].setValue(' SC0915 ')
+  await inputs()[1].setValue('Raspberry Pi')
+  await inputs()[3].setValue('Placas de Desenvolvimento')
+  await inputs()[4].setValue('4.2')
+  await form.trigger('submit')
+  await flushPromises()
+  const posts = () => fetch.mock.calls.filter(([url, options]) => url === '/api/parts' && options.method === 'POST').map(([, options]) => JSON.parse(options.body))
+  expect(posts()).toEqual([{ mpn: 'SC0915', manufacturer: 'Raspberry Pi', description: '', category: 'Placas de Desenvolvimento', price: 4.2 }])
+  expect(dialog.find('form.catalog-form').exists()).toBe(false)
+
+  await dialog.find('.catalog-row').trigger('click')
+  form = dialog.find('form.catalog-form')
+  expect(inputs()[0].element.readOnly).toBe(true)
+  await inputs()[3].setValue('CIs Amplificadores')
+  await form.trigger('submit')
+  await flushPromises()
+  expect(posts()[1]).toEqual({ mpn: 'TL082BCDT', category: 'CIs Amplificadores' })
 })
 
 it('keeps rejected edits open with the server error and does not offer editing on unsupported backends', async () => {

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { isBrand, isPartNumber, partNumberOf } from '../stockText.js'
+import { euros, priceEstimator } from '../prices.js'
 const props = defineProps({ categories: Array, items: Array, parts: { type: Array, default: () => [] }, busy: Boolean, error: String })
 const emit = defineEmits(['submit', 'clear-error'])
 const dialog = ref(null)
@@ -9,7 +10,7 @@ const category = ref('')
 const values = ref({})
 const mode = ref('in')
 const qty = ref(1)
-const editing = ref(null), removeImage = ref(false), imageUrl = ref(''), partQuery = ref('')
+const editing = ref(null), removeImage = ref(false), imageUrl = ref(''), partQuery = ref(''), unitPrice = ref(''), savedPrice = ref(null)
 const selected = computed(() => props.categories.find(c => c.name === category.value))
 const hint = computed(() => mode.value === 'in'
   ? 'Se já existir um item com as mesmas propriedades, a quantidade é somada.'
@@ -30,9 +31,19 @@ function open(current) {
   resetFields()
   dialog.value.showModal()
 }
+// O preço pertence ao P/N no catálogo, por isso só se guarda quando o item tem um P/N a sério.
+const partNumberField = computed(() => (selected.value?.props || []).find(isPartNumber))
+const partNumber = computed(() => String(values.value[partNumberField.value] ?? '').trim())
+const canPrice = computed(() => Boolean(partNumber.value) && partNumber.value !== '-')
+const catalogPrice = mpn => props.parts.find(part => part.mpn.toUpperCase() === mpn.toUpperCase())?.price ?? null
+const estimatedPrice = computed(() => editing.value && priceEstimator(props.parts)(editing.value))
+const priceHint = computed(() => !partNumberField.value ? 'Esta categoria não tem P/N, por isso o preço não pode ser guardado.'
+  : !canPrice.value ? 'Preenche o P/N para guardar o preço.' : `Fica no catálogo para todos os itens com o P/N ${partNumber.value}.`)
 function edit(item) {
   category.value = item.cat
   editing.value = { ...item }
+  savedPrice.value = catalogPrice(partNumberOf(item))
+  unitPrice.value = savedPrice.value ?? ''
   removeImage.value = false
   qty.value = item.qty
   resetFields()
@@ -83,6 +94,15 @@ function submit() {
   if (editing.value) {
     payload.id = editing.value.id
     if (removeImage.value) payload.image = ''
+    if (canPrice.value && unitPrice.value !== '' && Number(unitPrice.value) !== savedPrice.value) {
+      // A marca do item só serve para uma peça nova; não substitui o fabricante que o catálogo já tem.
+      const brand = savedPrice.value == null && !props.parts.some(part => part.mpn.toUpperCase() === partNumber.value.toUpperCase())
+        ? { manufacturer: String(Object.entries(values.value).find(([key]) => isBrand(key))?.[1] ?? '') } : {}
+      payload.partPrice = { mpn: partNumber.value, price: Number(unitPrice.value), ...brand }
+    }
+    // Só o preço mudou: não regista uma edição vazia no histórico de movimentos.
+    payload.priceOnly = Boolean(payload.partPrice) && !payload.file && !payload.imageUrl && !removeImage.value && payload.qty === editing.value.qty &&
+      Object.entries(payload.props).every(([key, value]) => value === String(editing.value.props[key] ?? '').trim())
   }
   emit('submit', payload)
 }
@@ -111,6 +131,10 @@ defineExpose({ open, edit, close: () => dialog.value.close() })
       <label v-if="editing?.image" class="check"><input v-model="removeImage" type="checkbox"> Remover imagem atual</label>
       <label v-show="selected?.image">{{ editing ? 'Substituir imagem' : 'Imagem' }} <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp"><span class="hint">Ou cola (Ctrl+V) ou arrasta uma imagem para aqui.</span></label>
       <label v-show="selected?.image">Link da imagem <input v-model="imageUrl" type="url" placeholder="https://…"></label>
+      <label v-if="editing">Preço unitário (€)
+        <input v-model="unitPrice" type="number" min="0" step="any" :disabled="!canPrice" :placeholder="estimatedPrice?.estimated ? `≈ ${euros(estimatedPrice.price)} (estimativa)` : ''">
+        <span class="hint">{{ priceHint }}</span>
+      </label>
       <label>Quantidade <input v-model.number="qty" type="number" :min="editing ? 0 : 1" step="1" required></label>
       <p class="hint" :class="{ error }" role="status">{{ error || (editing ? 'A quantidade indicada substitui o stock atual. Sem nova imagem, a existente é mantida.' : hint) }}</p>
       <div class="actions"><button type="button" class="ghost" :disabled="busy" @click="dialog.close()">Cancelar</button><button class="primary" :disabled="busy || !selected">{{ editing ? 'Guardar alterações' : mode === 'in' ? 'Adicionar ao stock' : 'Retirar do stock' }}</button></div>

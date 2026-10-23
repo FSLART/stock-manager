@@ -1375,6 +1375,37 @@ def editar_item(item_id):
         return erro(str(exc), 500)
 
 
+@app.post("/api/parts")
+def guardar_peca():
+    # Acrescenta ou corrige uma peca do catalogo. So os campos enviados mudam; o preco pode ficar vazio.
+    data = request.get_json(silent=True) or {}
+    mpn = str(data.get("mpn", "")).strip()
+    if not mpn or mpn == "-":
+        return erro("Indica o P/N da peça")
+    changes = {field: str(data[field]).strip() for field in ("manufacturer", "description", "category") if field in data}
+    if "price" in data:
+        if data["price"] in (None, ""):
+            changes["price"] = None
+        else:
+            try:
+                price = float(data["price"])
+            except (TypeError, ValueError):
+                price = -1.0
+            # A comparacao tambem rejeita NaN e infinito.
+            if not 0 <= price < 1_000_000:
+                return erro("Indica um preço válido")
+            changes["price"] = round(price, 4)
+    try:
+        existing = next((part for part in db_parts() if part["mpn"].casefold() == mpn.casefold()), None)
+        base = existing or {"mpn": mpn, "manufacturer": "", "description": "", "category": "", "props": {}, "price": None}
+        # A origem diz de onde veio o preco: so muda quando o preco muda (ou a peca e nova).
+        source = f"editado à mão {datetime.now().date().isoformat()}" if "price" in changes or not existing else existing["source"]
+        save_parts([{**base, **changes, "source": source}])
+        return jsonify(msg="Peça guardada" if existing else "Peça adicionada ao catálogo")
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
 @app.patch("/api/categories/<path:original_name>")
 def editar_categoria(original_name):
     if STORAGE_MODE != "local":
