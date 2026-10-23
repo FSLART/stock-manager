@@ -32,11 +32,13 @@ defineExpose({ open, close: () => dialog.value.close() })
       <label>Nome <input v-model="name" placeholder="Ex.: Díodos" required></label>
       <div v-for="(field, index) in fields" :key="index" class="property-editor">
         <label>Propriedade <input v-model="field.name" required></label>
+        <button type="button" class="move" :disabled="index === 0" aria-label="Subir propriedade" @click="fields.splice(index - 1, 0, ...fields.splice(index, 1))">↑</button>
+        <button type="button" class="move" :disabled="index === fields.length - 1" aria-label="Descer propriedade" @click="fields.splice(index + 1, 0, ...fields.splice(index, 1))">↓</button>
         <button type="button" class="del" :disabled="fields.length === 1" aria-label="Remover propriedade" @click="fields.splice(index, 1)">✕</button>
       </div>
       <button type="button" class="ghost" @click="fields.push({ source: null, name: '' })">+ Adicionar propriedade</button>
       <label class="check"><input v-model="image" type="checkbox"> Permitir uma imagem por componente</label>
-      <p class="hint">{{ originalName ? 'Renomear uma propriedade mantém os valores existentes. Novas propriedades ficam vazias até editares cada componente.' : 'Itens com todas as propriedades iguais ficam agrupados e a quantidade soma.' }}</p>
+      <p class="hint">{{ originalName ? 'Renomear ou reordenar uma propriedade mantém os valores existentes. Novas propriedades ficam vazias até editares cada componente.' : 'Itens com todas as propriedades iguais ficam agrupados e a quantidade soma.' }}</p>
       <p v-if="error" class="hint error" role="alert">{{ error }}</p>
       <div class="actions"><button type="button" class="ghost" :disabled="busy" @click="dialog.close()">Cancelar</button><button class="primary" :disabled="busy">{{ originalName ? 'Guardar alterações' : 'Criar categoria' }}</button></div>
     </form>

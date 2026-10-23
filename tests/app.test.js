@@ -161,6 +161,43 @@ it('creates a category with one input per property, like the edit form', async (
   expect(JSON.parse(request[1].body)).toEqual({ name: 'Díodos', props: ['tipo', 'tensão'], image: false })
 })
 
+it('reorders category properties and sends them in the new order', async () => {
+  wrapper = mount(App)
+  await flushPromises()
+  await wrapper.find('button[aria-label="Editar categoria LEDs"]').trigger('click')
+  const form = wrapper.findAll('dialog form')[1]
+  expect(form.find('button[aria-label="Subir propriedade"]').element.disabled).toBe(true)
+  await form.find('button.ghost').trigger('click')
+  await form.findAll('.property-editor input')[1].setValue('tamanho')
+  await form.findAll('button[aria-label="Subir propriedade"]')[1].trigger('click')
+  expect(form.findAll('.property-editor input').map(input => input.element.value)).toEqual(['tamanho', 'cor'])
+  await form.trigger('submit')
+  await flushPromises()
+  const request = fetch.mock.calls.find(([url, options]) => url === '/api/categories/LEDs' && options.method === 'PATCH')
+  expect(JSON.parse(request[1].body).fields).toEqual([{ source: null, name: 'tamanho' }, { source: 'cor', name: 'cor' }])
+})
+
+it('puts a pasted image into the image field and ignores pasted text', async () => {
+  const added = []
+  vi.stubGlobal('DataTransfer', class { items = { add: file => added.push(file) }; files = added })
+  wrapper = mount(App)
+  await flushPromises()
+  await wrapper.find('button[aria-label="Editar componente"]').trigger('click')
+  const input = wrapper.find('dialog input[type=file]').element
+  let assigned = null
+  Object.defineProperty(input, 'files', { set: files => { assigned = files }, get: () => assigned || [] })
+  const image = new File(['x'], 'image.png', { type: 'image/png' })
+  const paste = files => Object.assign(new Event('paste', { bubbles: true, cancelable: true }), { clipboardData: { files } })
+  const textPaste = paste([])
+  wrapper.find('dialog').element.dispatchEvent(textPaste)
+  expect(textPaste.defaultPrevented).toBe(false)
+  expect(assigned).toBe(null)
+  const imagePaste = paste([image])
+  wrapper.find('dialog').element.dispatchEvent(imagePaste)
+  expect(imagePaste.defaultPrevented).toBe(true)
+  expect(assigned).toEqual([image])
+})
+
 it('keeps rejected edits open with the server error and does not offer editing on unsupported backends', async () => {
   wrapper = mount(App)
   await flushPromises()

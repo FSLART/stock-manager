@@ -91,7 +91,8 @@ h1{font:800 34px var(--head);letter-spacing:-.025em}
 .qty output{min-width:52px;text-align:center;font:700 18px var(--head);font-variant-numeric:tabular-nums}
 .low output{color:var(--warn)}
 .tag{font-size:12px;background:var(--warn-soft);color:var(--warn);padding:2px 8px;border-radius:99px;margin-left:8px;font-weight:600}
-.del{background:none;border:0;color:var(--muted);width:34px;height:34px;border-radius:9px;font-size:18px}
+.del,.move{background:none;border:0;color:var(--muted);width:34px;height:34px;border-radius:9px;font-size:18px}
+.move:hover:not(:disabled){background:var(--line);color:var(--ink)}
 .del:hover{background:var(--warn-soft);color:var(--warn)}
 .empty{padding:56px 20px;text-align:center;color:var(--muted)}
 

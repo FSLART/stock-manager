@@ -39,6 +39,15 @@ function edit(item) {
 function suggestions(prop) {
   return [...new Set(props.items.filter(it => it.cat === category.value).map(it => it.props[prop]).filter(Boolean))]
 }
+// Ctrl+V de uma imagem preenche o campo de ficheiro, por isso o envio segue o caminho normal.
+function pasteImage(event) {
+  const file = [...(event.clipboardData?.files || [])].find(f => f.type.startsWith('image/'))
+  if (!file || !selected.value?.image) return
+  event.preventDefault()
+  const transfer = new DataTransfer()
+  transfer.items.add(file)
+  fileInput.value.files = transfer.files
+}
 function submit() {
   const payload = {
     cat: category.value,
@@ -55,7 +64,7 @@ defineExpose({ open, edit, close: () => dialog.value.close() })
 </script>
 
 <template>
-  <dialog ref="dialog" aria-labelledby="movement-title">
+  <dialog ref="dialog" aria-labelledby="movement-title" @paste="pasteImage">
     <form @submit.prevent="submit">
       <h2 id="movement-title">{{ editing ? 'Editar componente' : 'Movimento de stock' }}</h2>
       <div v-if="!editing" class="seg" role="group" aria-label="Tipo de movimento">
@@ -70,7 +79,7 @@ defineExpose({ open, edit, close: () => dialog.value.close() })
       </div>
       <img v-if="editing?.image && !removeImage" :src="editing.image" class="item-image" alt="Imagem atual">
       <label v-if="editing?.image" class="check"><input v-model="removeImage" type="checkbox"> Remover imagem atual</label>
-      <label v-show="selected?.image">{{ editing ? 'Substituir imagem' : 'Imagem' }} <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp"></label>
+      <label v-show="selected?.image">{{ editing ? 'Substituir imagem' : 'Imagem' }} <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp"><span class="hint">Ou cola uma imagem com Ctrl+V.</span></label>
       <label>Quantidade <input v-model.number="qty" type="number" :min="editing ? 0 : 1" step="1" required></label>
       <p class="hint" :class="{ error }" role="status">{{ error || (editing ? 'A quantidade indicada substitui o stock atual. Sem nova imagem, a existente é mantida.' : hint) }}</p>
       <div class="actions"><button type="button" class="ghost" :disabled="busy" @click="dialog.close()">Cancelar</button><button class="primary" :disabled="busy || !selected">{{ editing ? 'Guardar alterações' : mode === 'in' ? 'Adicionar ao stock' : 'Retirar do stock' }}</button></div>
