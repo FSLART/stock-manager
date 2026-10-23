@@ -1174,7 +1174,9 @@ h2 {
 
 /* Adapt the reference shell to the existing API-backed inventory controls. */
 #app{display:block;min-height:100vh}
-.stock-shell{display:grid;grid-template-columns:320px minmax(0,1fr);max-width:1440px;margin:0 auto;min-height:calc(100vh - 108px)}
+/* O inventário usa a largura toda do ecrã; a barra de cima acompanha para ficar alinhada. */
+.stock-shell{display:grid;grid-template-columns:320px minmax(0,1fr);min-height:calc(100vh - 108px)}
+.stock-page .home-nav{max-width:none}
 .stock-shell .sidebar{position:sticky;top:0;height:calc(100vh - 108px);padding:28px 20px;border-right:1px solid var(--line);background:var(--side);color:var(--ink)}
 .stock-content{display:flex;flex-direction:column;gap:22px;min-width:0;padding:32px clamp(18px,3vw,40px)}
 .home-content,.workspace-content{display:block}
