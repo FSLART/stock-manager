@@ -8,13 +8,14 @@ const category = ref('')
 const values = ref({})
 const mode = ref('in')
 const qty = ref(1)
-const editing = ref(null), removeImage = ref(false)
+const editing = ref(null), removeImage = ref(false), imageUrl = ref('')
 const selected = computed(() => props.categories.find(c => c.name === category.value))
 const hint = computed(() => mode.value === 'in'
   ? 'Se já existir um item com as mesmas propriedades, a quantidade é somada.'
   : 'Preenche as propriedades do item de onde queres retirar.')
 function resetFields() {
   values.value = {}
+  imageUrl.value = ''
   if (fileInput.value) fileInput.value.value = ''
   emit('clear-error')
 }
@@ -39,11 +40,17 @@ function edit(item) {
 function suggestions(prop) {
   return [...new Set(props.items.filter(it => it.cat === category.value).map(it => it.props[prop]).filter(Boolean))]
 }
-// Ctrl+V de uma imagem preenche o campo de ficheiro, por isso o envio segue o caminho normal.
-function pasteImage(event) {
-  const file = [...(event.clipboardData?.files || [])].find(f => f.type.startsWith('image/'))
-  if (!file || !selected.value?.image) return
+// Ctrl+V ou arrastar uma imagem preenche o campo de ficheiro, por isso o envio segue o caminho normal.
+// Uma imagem arrastada de outra página chega só como link.
+function takeImage(event) {
+  const data = event.clipboardData || event.dataTransfer
+  const file = [...(data?.files || [])].find(f => f.type.startsWith('image/'))
+  const link = event.dataTransfer?.getData('text/uri-list').split('\n').find(line => /^https?:/.test(line))
+  // Largar um ficheiro nunca o deve abrir no browser, o que fecharia o formulário.
+  if (event.dataTransfer?.files.length) event.preventDefault()
+  if (!selected.value?.image || (!file && !link)) return
   event.preventDefault()
+  if (!file) { imageUrl.value = link.trim(); return }
   const transfer = new DataTransfer()
   transfer.items.add(file)
   fileInput.value.files = transfer.files
@@ -52,7 +59,7 @@ function submit() {
   const payload = {
     cat: category.value,
     props: Object.fromEntries((selected.value?.props || []).map(p => [p, (values.value[p] || '').trim()])),
-    qty: Number(qty.value), mode: mode.value, file: fileInput.value?.files[0],
+    qty: Number(qty.value), mode: mode.value, file: fileInput.value?.files[0], imageUrl: imageUrl.value.trim(),
   }
   if (editing.value) {
     payload.id = editing.value.id
@@ -64,7 +71,7 @@ defineExpose({ open, edit, close: () => dialog.value.close() })
 </script>
 
 <template>
-  <dialog ref="dialog" aria-labelledby="movement-title" @paste="pasteImage">
+  <dialog ref="dialog" aria-labelledby="movement-title" @paste="takeImage" @dragover.prevent @drop="takeImage">
     <form @submit.prevent="submit">
       <h2 id="movement-title">{{ editing ? 'Editar componente' : 'Movimento de stock' }}</h2>
       <div v-if="!editing" class="seg" role="group" aria-label="Tipo de movimento">
@@ -79,7 +86,8 @@ defineExpose({ open, edit, close: () => dialog.value.close() })
       </div>
       <img v-if="editing?.image && !removeImage" :src="editing.image" class="item-image" alt="Imagem atual">
       <label v-if="editing?.image" class="check"><input v-model="removeImage" type="checkbox"> Remover imagem atual</label>
-      <label v-show="selected?.image">{{ editing ? 'Substituir imagem' : 'Imagem' }} <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp"><span class="hint">Ou cola uma imagem com Ctrl+V.</span></label>
+      <label v-show="selected?.image">{{ editing ? 'Substituir imagem' : 'Imagem' }} <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp"><span class="hint">Ou cola (Ctrl+V) ou arrasta uma imagem para aqui.</span></label>
+      <label v-show="selected?.image">Link da imagem <input v-model="imageUrl" type="url" placeholder="https://…"></label>
       <label>Quantidade <input v-model.number="qty" type="number" :min="editing ? 0 : 1" step="1" required></label>
       <p class="hint" :class="{ error }" role="status">{{ error || (editing ? 'A quantidade indicada substitui o stock atual. Sem nova imagem, a existente é mantida.' : hint) }}</p>
       <div class="actions"><button type="button" class="ghost" :disabled="busy" @click="dialog.close()">Cancelar</button><button class="primary" :disabled="busy || !selected">{{ editing ? 'Guardar alterações' : mode === 'in' ? 'Adicionar ao stock' : 'Retirar do stock' }}</button></div>

@@ -2,6 +2,7 @@
 # json transforma, por exemplo, {"valor": "10"} em texto para guardar
 # e faz o caminho inverso quando os dados sao lidos.
 import base64
+import ipaddress
 import json
 import re
 from io import BytesIO
@@ -9,6 +10,7 @@ from io import BytesIO
 # e fornece funcoes para substituir ficheiros temporarios com seguranca.
 import os
 # SQLite e a base de dados local onde ficam categorias, componentes e quantidades.
+import socket
 import sqlite3
 # Permite executar o verificador do Excel sem bloquear os pedidos web.
 import threading
@@ -19,7 +21,8 @@ from contextlib import contextmanager
 # Representa caminhos de ficheiros de forma independente do sistema operativo.
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urljoin, urlparse
+import urllib.error
 import urllib.request
 
 # Flask recebe pedidos HTTP; jsonify responde em JSON, render_template entrega
@@ -188,6 +191,7 @@ NOTION_WORKSPACE_ID = os.getenv("NOTION_WORKSPACE_ID", "").strip().replace("-", 
 # PIN: LOGIN_ATTEMPTS = {}
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 NORMALIZED_IMAGE_SIZE = (800, 800)
+MAX_IMAGE_DOWNLOAD = 10 * 1024 * 1024
 # Ficheiro sincronizado com a base de dados. EXCEL_PATH no ambiente permite
 # escolher outro livro sem alterar o codigo.
 EXCEL_PATH = Path(os.getenv("EXCEL_PATH", BASE_DIR / "Stock_sala.xlsx"))
@@ -1031,16 +1035,61 @@ def data_from_items(items):
     }
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args):
+        return None
+
+
+IMAGE_OPENER = urllib.request.build_opener(NoRedirect)
+
+
+class ImageLinkError(ValueError):
+    pass
+
+
+def download_image(url):
+    # Cada salto de redirecionamento e validado: o servidor nao pode servir de ponte para a rede interna.
+    # shortcut: o DNS pode mudar entre a verificacao e o pedido (rebinding); fixar o IP se o servidor ficar exposto a utilizadores nao confiaveis.
+    for _ in range(5):
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ImageLinkError("Link de imagem inválido")
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        if not all(ipaddress.ip_address(info[4][0]).is_global for info in socket.getaddrinfo(parsed.hostname, port)):
+            raise ImageLinkError("Link de imagem inválido")
+        try:
+            with IMAGE_OPENER.open(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=10) as response:
+                data = response.read(MAX_IMAGE_DOWNLOAD + 1)
+        except urllib.error.HTTPError as exc:
+            if exc.code in {301, 302, 303, 307, 308} and exc.headers.get("Location"):
+                url = urljoin(url, exc.headers["Location"])
+                continue
+            raise
+        if len(data) > MAX_IMAGE_DOWNLOAD:
+            raise ImageLinkError("A imagem desse link é demasiado grande")
+        return data
+    raise ImageLinkError("Demasiados redirecionamentos no link da imagem")
+
+
 @app.post("/api/images")
 def upload_image():
     image = request.files.get("image")
-    if image is None or not image.filename:
+    url = request.form.get("url", "").strip()
+    if image is not None and image.filename:
+        if Path(image.filename).suffix.lower() not in ALLOWED_IMAGE_EXTENSIONS:
+            return erro("Formato de imagem não suportado")
+        stream = image.stream
+    elif url:
+        try:
+            stream = BytesIO(download_image(url))
+        except ImageLinkError as exc:
+            return erro(str(exc))
+        except (ValueError, OSError):
+            return erro("Não foi possível descarregar a imagem desse link")
+    else:
         return erro("Seleciona uma imagem")
-    extension = Path(image.filename).suffix.lower()
-    if extension not in ALLOWED_IMAGE_EXTENSIONS:
-        return erro("Formato de imagem não suportado")
     try:
-        source = Image.open(image.stream)
+        source = Image.open(stream)
         source.load()
         source = ImageOps.exif_transpose(source).convert("RGB")
     except (UnidentifiedImageError, OSError):

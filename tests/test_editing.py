@@ -82,5 +82,43 @@ class EditingTest(unittest.TestCase):
         self.assertEqual(self.module.db_items()[0]['image'], '')
 
 
+    def test_image_link_is_downloaded_and_private_or_bad_links_are_refused(self):
+        from io import BytesIO
+        from PIL import Image
+        png = BytesIO()
+        Image.new('RGB', (10, 10), 'red').save(png, format='PNG')
+        public = [(None, None, None, None, ('93.184.216.34', 443))]
+        private = [(None, None, None, None, ('127.0.0.1', 80))]
+
+        class Response(BytesIO):
+            def __enter__(self): return self
+            def __exit__(self, *args): self.close()
+
+        with patch.object(self.module.socket, 'getaddrinfo', return_value=public), \
+                patch.object(self.module.IMAGE_OPENER, 'open', return_value=Response(png.getvalue())):
+            response = self.client.post('/api/images', data={'url': 'https://example.com/led.png'})
+        self.assertEqual(response.status_code, 200, response.json)
+        self.assertTrue((Path(self.temp.name) / 'uploads' / Path(response.json['url']).name).exists())
+
+        with patch.object(self.module.socket, 'getaddrinfo', return_value=private), \
+                patch.object(self.module.IMAGE_OPENER, 'open') as opener:
+            for url in ['http://localhost/admin.png', 'file:///etc/passwd', 'ftp://example.com/a.png']:
+                response = self.client.post('/api/images', data={'url': url})
+                self.assertEqual((response.status_code, response.json['error']), (400, 'Link de imagem inválido'))
+            opener.assert_not_called()
+
+        # Um redirecionamento para a rede interna é verificado como qualquer outro link.
+        redirect = self.module.urllib.error.HTTPError('https://example.com/a', 302, 'Found', {'Location': 'http://10.0.0.5/x.png'}, None)
+        with patch.object(self.module.socket, 'getaddrinfo', side_effect=[public, private]), \
+                patch.object(self.module.IMAGE_OPENER, 'open', side_effect=redirect) as opener:
+            response = self.client.post('/api/images', data={'url': 'https://example.com/a'})
+        self.assertEqual((response.status_code, opener.call_count), (400, 1))
+
+        with patch.object(self.module.socket, 'getaddrinfo', return_value=public), \
+                patch.object(self.module.IMAGE_OPENER, 'open', return_value=Response(b'<html>not an image</html>')):
+            response = self.client.post('/api/images', data={'url': 'https://example.com/page'})
+        self.assertEqual(response.status_code, 400)
+
+
 if __name__ == '__main__':
     unittest.main()

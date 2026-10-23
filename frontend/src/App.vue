@@ -190,13 +190,13 @@ async function processQueue(id, queue) {
     }
   } finally { queues.delete(id) }
 }
-async function submitMovement({ file, ...payload }) {
+async function submitMovement({ file, imageUrl, ...payload }) {
   if (busy.value || queues.size) return
   busy.value = true
   formError.value = ''
   try {
     const editing = payload.id !== undefined
-    if (file) payload.image = await api.uploadImage(file)
+    if (file || imageUrl) payload.image = await api.uploadImage(file || imageUrl)
     else if (!editing) payload.image = ''
     if (editing) { delete payload.mode; delete payload.cat }
     const result = await api.request(editing ? 'editItem' : 'move', payload)
@@ -348,7 +348,7 @@ onUnmounted(() => {
   </div>
   </div>
   <StockMovement ref="movement" :categories="categories" :items="items" :busy="busy" :error="formError" @submit="submitMovement" @clear-error="formError = ''" />
-  <CategoryForm ref="categoryForm" :busy="busy" :error="categoryError" @submit="submitCategory" />
+  <CategoryForm ref="categoryForm" :categories="categories" :busy="busy" :error="categoryError" @submit="submitCategory" />
   <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
   <LoginDialog ref="loginDialog" @login="user => { auth.user = user; toast(`Sessão iniciada: ${user.name}`) }" />
   <div id="toast" role="status" :class="{ on: toastMessage }">{{ toastMessage }}<button v-if="toastUndo" class="toast-undo" @click="toastUndo()">Desfazer</button></div>

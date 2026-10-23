@@ -134,10 +134,12 @@ export function createApi({ onUnauthorized } = {}) {
     return count
   }
 
+  // Recebe um ficheiro ou um link; o link é descarregado pelo servidor.
   async function uploadImage(file) {
+    if (appsScript && typeof file === 'string') throw new Error('Links de imagem só funcionam no servidor local; descarrega a imagem e carrega o ficheiro')
     if (appsScript) return (await callGoogle('uploadImage', { data: await jpegBase64(file) })).url
     const body = new FormData()
-    body.append('image', file)
+    body.append(typeof file === 'string' ? 'url' : 'image', file)
     const response = await fetch('/api/images', { method: 'POST', body })
     const data = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(data.error || 'Não foi possível enviar a imagem')

@@ -1,6 +1,6 @@
 <script setup>
-import { ref } from 'vue'
-defineProps({ busy: Boolean, error: String })
+import { computed, ref } from 'vue'
+const props = defineProps({ categories: Array, busy: Boolean, error: String })
 const emit = defineEmits(['submit'])
 const dialog = ref(null)
 const name = ref(''), image = ref(false)
@@ -13,13 +13,17 @@ function open(category) {
   if (category) { name.value = category.name; image.value = category.image }
   dialog.value.showModal()
 }
+// Propriedades das outras categorias, por minúsculas: "brand" passa a "Brand" se já existir, para a exportação não as separar.
+const known = computed(() => new Map(props.categories.filter(c => c.name !== originalName.value).flatMap(c => c.props).map(p => [p.toLowerCase(), p])))
+const knownNames = computed(() => [...known.value.values()].sort((a, b) => a.localeCompare(b)))
 function submit() {
+  for (const field of fields.value) field.name = known.value.get(field.name.trim().toLowerCase()) || field.name.trim()
   if (originalName.value) {
     const removed = originalFields.value.filter(p => !fields.value.some(f => f.source === p))
     if (removed.length && !confirm(`Remover as propriedades ${removed.join(', ')} e os seus valores de todos os componentes desta categoria?`)) return
-    emit('submit', { originalName: originalName.value, name: name.value.trim(), fields: fields.value.map(f => ({ ...f, name: f.name.trim() })), image: image.value })
+    emit('submit', { originalName: originalName.value, name: name.value.trim(), fields: fields.value, image: image.value })
   } else {
-    emit('submit', { name: name.value.trim(), props: fields.value.map(f => f.name.trim()), image: image.value })
+    emit('submit', { name: name.value.trim(), props: fields.value.map(f => f.name), image: image.value })
   }
 }
 defineExpose({ open, close: () => dialog.value.close() })
@@ -31,11 +35,12 @@ defineExpose({ open, close: () => dialog.value.close() })
       <h2 id="category-title">{{ originalName ? 'Editar categoria' : 'Nova categoria' }}</h2>
       <label>Nome <input v-model="name" placeholder="Ex.: Díodos" required></label>
       <div v-for="(field, index) in fields" :key="index" class="property-editor">
-        <label>Propriedade <input v-model="field.name" required></label>
+        <label>Propriedade <input v-model="field.name" list="known-properties" autocomplete="off" required></label>
         <button type="button" class="move" :disabled="index === 0" aria-label="Subir propriedade" @click="fields.splice(index - 1, 0, ...fields.splice(index, 1))">↑</button>
         <button type="button" class="move" :disabled="index === fields.length - 1" aria-label="Descer propriedade" @click="fields.splice(index + 1, 0, ...fields.splice(index, 1))">↓</button>
         <button type="button" class="del" :disabled="fields.length === 1" aria-label="Remover propriedade" @click="fields.splice(index, 1)">✕</button>
       </div>
+      <datalist id="known-properties"><option v-for="known in knownNames" :key="known" :value="known"></option></datalist>
       <button type="button" class="ghost" @click="fields.push({ source: null, name: '' })">+ Adicionar propriedade</button>
       <label class="check"><input v-model="image" type="checkbox"> Permitir uma imagem por componente</label>
       <p class="hint">{{ originalName ? 'Renomear ou reordenar uma propriedade mantém os valores existentes. Novas propriedades ficam vazias até editares cada componente.' : 'Itens com todas as propriedades iguais ficam agrupados e a quantidade soma.' }}</p>
