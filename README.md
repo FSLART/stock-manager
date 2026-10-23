@@ -65,16 +65,21 @@ de cálculo. A implementação separada Apps Script continua a usar Google Sheet
 ### Login e pessoas
 
 Ver o stock é público. Qualquer alteração (entradas, saídas, edição, CSV, categorias,
-imagens) exige sessão: sem sessão aparece um popup para escolher a pessoa e escrever
-um PIN de 4 letras ou números. O login com Notion aparece quando `NOTION_CLIENT_ID` e
-`NOTION_CLIENT_SECRET` estão no `.env` (integração pública do Notion, redirect URI
-`https://stocklart.pt/api/auth/notion/callback`); quem entrou com PIN pode ligar a sua
-conta Notion em **Definições**. A sessão fica aberta até carregar em **Sair**.
+imagens) exige sessão: sem sessão aparece um popup com **Entrar com Notion**. O login
+usa a ligação OAuth "Stocklart" do Notion (`NOTION_CLIENT_ID` e `NOTION_CLIENT_SECRET`
+no `.env`, redirect URI `https://stocklart.pt/api/auth/notion/callback`). Quem entra
+pelo workspace `NOTION_WORKSPACE_ID` (LART) e ainda não está na lista é adicionado
+automaticamente; contas de outros workspaces só entram se já estiverem na lista.
+A sessão fica aberta até carregar em **Sair**.
 
-Os admins gerem pessoas em **Definições → Pessoas** (adicionar, repor PIN, admin,
-apagar). Apagar uma pessoa mantém o nome nos movimentos já registados. O `.env`
-precisa de `SECRET_KEY` (assina os cookies; mudá-lo termina todas as sessões) e de
-`PUBLIC_BASE_URL`. 5 PINs errados seguidos bloqueiam essa pessoa durante 5 minutos.
+Os admins gerem pessoas em **Definições → Pessoas** (dar ou tirar admin, apagar).
+Apagar uma pessoa mantém o nome nos movimentos já registados. O `.env` precisa de
+`SECRET_KEY` (assina os cookies; mudá-lo termina todas as sessões) e de
+`PUBLIC_BASE_URL`.
+
+O login com PIN de 4 caracteres está desativado mas continua no código, comentado
+com `PIN`, em `backend/app.py`, `LoginDialog.vue`, `PeopleAdmin.vue`, `SettingsPage.vue`
+e `api.js`; para o voltar a ativar, descomenta esses blocos.
 
 ### Editar componentes e categorias
 

@@ -1,46 +1,49 @@
 <script setup>
 import { inject, ref } from 'vue'
-import { readStored, writeStored } from '../api.js'
+// PIN (desativado: o login e so com Notion). Descomentar os blocos marcados PIN para voltar a ativar.
+// PIN: import { readStored, writeStored } from '../api.js'
 
-const api = inject('api')
+// PIN: const api = inject('api')
 const auth = inject('auth')
-const emit = defineEmits(['login'])
-const dialog = ref(null), people = ref([]), personId = ref(null), pin = ref(''), error = ref(''), busy = ref(false)
+// PIN: const emit = defineEmits(['login'])
+const dialog = ref(null)
+// PIN: const people = ref([]), personId = ref(null), pin = ref(''), error = ref(''), busy = ref(false)
 let resolve = () => {}
 
-// Abre o popup e responde true depois de um login com PIN, ou false se for cancelado.
+// Abre o popup e responde false se for cancelado; o login com Notion sai da página e volta já com sessão.
 function open() {
   resolve(false)
-  error.value = ''
-  pin.value = ''
+  // PIN: error.value = ''
+  // PIN: pin.value = ''
   dialog.value.showModal()
-  api.direct('authPeople').then(data => {
-    people.value = data.people
-    const last = readStored('stocklart-last-person', null)
-    personId.value = people.value.some(person => person.id === last) ? last : null
-  }).catch(cause => { error.value = cause.message })
+  // PIN: api.direct('authPeople').then(data => {
+  // PIN:   people.value = data.people
+  // PIN:   const last = readStored('stocklart-last-person', null)
+  // PIN:   personId.value = people.value.some(person => person.id === last) ? last : null
+  // PIN: }).catch(cause => { error.value = cause.message })
   return new Promise(done => { resolve = done })
 }
 function cancel() { resolve(false) }
-async function submit() {
-  busy.value = true
-  error.value = ''
-  try {
-    const data = await api.direct('login', { person_id: personId.value, pin: pin.value.trim() })
-    writeStored('stocklart-last-person', personId.value)
-    emit('login', data.user)
-    resolve(true)
-    dialog.value.close()
-  } catch (cause) { error.value = cause.message }
-  finally { busy.value = false }
-}
+// PIN: async function submit() {
+// PIN:   busy.value = true
+// PIN:   error.value = ''
+// PIN:   try {
+// PIN:     const data = await api.direct('login', { person_id: personId.value, pin: pin.value.trim() })
+// PIN:     writeStored('stocklart-last-person', personId.value)
+// PIN:     emit('login', data.user)
+// PIN:     resolve(true)
+// PIN:     dialog.value.close()
+// PIN:   } catch (cause) { error.value = cause.message }
+// PIN:   finally { busy.value = false }
+// PIN: }
 defineExpose({ open })
 </script>
 
 <template>
   <dialog ref="dialog" aria-labelledby="login-title" @close="cancel">
-    <form @submit.prevent="submit">
+    <form method="dialog">
       <h2 id="login-title">Entrar para alterar o stock</h2>
+      <!-- PIN:
       <label>Pessoa
         <select v-model="personId" required>
           <option :value="null" disabled>Escolhe o teu nome</option>
@@ -48,12 +51,13 @@ defineExpose({ open })
         </select>
       </label>
       <label>PIN <input v-model="pin" type="password" maxlength="4" pattern="[A-Za-z0-9]{4}" title="4 letras ou números" autocomplete="off" required></label>
-      <p class="hint">Ver o stock não precisa de login. Cada alteração fica registada com o teu nome.</p>
       <p v-if="error" class="hint error" role="alert">{{ error }}</p>
+      -->
+      <p class="hint">Ver o stock não precisa de login. Entra com a tua conta Notion da LART; cada alteração fica registada com o teu nome.</p>
+      <p v-if="!auth.notion" class="hint error" role="alert">O login com Notion não está configurado no servidor.</p>
       <div class="actions">
-        <a v-if="auth.notion" class="text-button" href="/api/auth/notion">Entrar com Notion</a>
-        <button type="button" class="ghost" :disabled="busy" @click="dialog.close()">Cancelar</button>
-        <button class="primary" :disabled="busy">Entrar</button>
+        <button type="button" class="ghost" @click="dialog.close()">Cancelar</button>
+        <a v-if="auth.notion" class="primary notion-login" href="/api/auth/notion">Entrar com Notion</a>
       </div>
     </form>
   </dialog>

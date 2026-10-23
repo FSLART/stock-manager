@@ -127,12 +127,10 @@ it('shows the movement history stored on the server with who made each change', 
   await wrapper.find('input[aria-label="Pesquisar movimentos"]').setValue('rui')
   expect(wrapper.find('.movement-row').exists()).toBe(false)
 })
-it('asks who is changing the stock before the first change and continues after login', async () => {
+it('asks for a Notion login before the first stock change', async () => {
   vi.useFakeTimers()
-  const signedOut = { ...structuredClone(data), auth: true, user: null }
-  fetch.mockImplementation(async (url, options) => ({ ok: true, json: async () => url === '/api/auth/people' ? { people: [{ id: 5, name: 'Ana' }] }
-    : url === '/api/auth/login' ? { user: { id: 5, name: 'Ana', admin: false, notion: false } }
-    : url === '/api/data' ? structuredClone(signedOut) : { msg: 'ok', options } }))
+  const signedOut = { ...structuredClone(data), auth: true, user: null, notion_login: true }
+  fetch.mockImplementation(async url => ({ ok: true, json: async () => url === '/api/data' ? structuredClone(signedOut) : { msg: 'ok' } }))
   wrapper = mount(App)
   await flushPromises()
   await open('Inventário')
@@ -141,16 +139,12 @@ it('asks who is changing the stock before the first change and continues after l
   await flushPromises()
   const login = wrapper.find('dialog[aria-labelledby="login-title"]')
   expect(login.element.open).toBe(true)
-  expect(fetch.mock.calls.some(([url]) => url === '/api/items/1/step')).toBe(false)
-  await login.find('select').setValue(5)
-  await login.find('input[type=password]').setValue('ab12')
-  await login.find('form').trigger('submit')
-  await flushPromises()
-  expect(fetch).toHaveBeenCalledWith('/api/auth/login', expect.objectContaining({ body: JSON.stringify({ person_id: 5, pin: 'ab12' }) }))
-  expect(login.element.open).toBe(false)
-  expect(wrapper.find('.session-box').text()).toContain('Ana')
+  expect(login.find('a.notion-login').attributes('href')).toBe('/api/auth/notion')
+  expect(login.find('input[type=password]').exists()).toBe(false)
   await vi.advanceTimersByTimeAsync(151)
-  expect(fetch).toHaveBeenCalledWith('/api/items/1/step', expect.objectContaining({ body: '{"id":1,"delta":1}' }))
+  expect(fetch.mock.calls.some(([url]) => url === '/api/items/1/step')).toBe(false)
+  await login.find('button.ghost').trigger('click')
+  expect(login.element.open).toBe(false)
 })
 it('previews a CSV before importing its components through the backend', async () => {
   wrapper = mount(App)

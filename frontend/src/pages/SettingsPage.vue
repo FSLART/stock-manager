@@ -28,8 +28,10 @@ function saveSettings(key, value) {
       <article v-if="auth.user" class="workspace-card">
         <div class="card-heading"><h2>A tua sessão</h2><span class="status-pill">{{ auth.user.name }}</span></div>
         <p class="card-muted">As alterações ao stock ficam registadas com o teu nome. A sessão fica aberta neste browser até carregares em Sair.</p>
+        <!-- PIN (desativado): ligar a conta Notion a uma sessão iniciada com PIN.
         <p v-if="auth.user.notion" class="card-muted">Conta Notion ligada: também podes entrar com o Notion.</p>
         <a v-else-if="auth.notion" class="text-button" href="/api/auth/notion?next=settings">Ligar conta Notion</a>
+        -->
       </article>
       <PeopleAdmin v-if="auth.user?.admin" />
     </section>

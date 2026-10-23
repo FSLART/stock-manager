@@ -1251,6 +1251,7 @@ a.text-button{display:inline-flex;align-items:center;text-decoration:none}
 
 /* Sessão na navegação e gestão de pessoas. */
 .session-box{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;font-weight:700}
+a.notion-login{display:inline-flex;align-items:center;text-decoration:none}
 .people-admin{grid-column:1/-1}
 .people-form{flex-direction:row;flex-wrap:wrap;align-items:flex-end;gap:12px;padding:0}
 .people-form .project-name-field{flex:1 1 160px}

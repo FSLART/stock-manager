@@ -35,7 +35,7 @@ from openpyxl.utils import get_column_letter
 import gspread
 from google.oauth2.service_account import Credentials
 from uuid import uuid4
-from werkzeug.security import check_password_hash, generate_password_hash
+# PIN: from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from PIL import Image, ImageOps, UnidentifiedImageError
 from dotenv import load_dotenv
@@ -175,9 +175,11 @@ app.config.update(
 # Login com Notion so fica disponivel quando a integracao esta configurada no .env.
 NOTION_CLIENT_ID = os.getenv("NOTION_CLIENT_ID", "").strip()
 NOTION_CLIENT_SECRET = os.getenv("NOTION_CLIENT_SECRET", "").strip()
-PIN_RE = re.compile(r"[A-Za-z0-9]{4}")
-# shortcut: tentativas falhadas em memoria, so valem com 1 worker; passar para a BD se houver mais.
-LOGIN_ATTEMPTS = {}
+# Quem entra com Notion por este workspace e ainda nao esta na lista e adicionado automaticamente.
+NOTION_WORKSPACE_ID = os.getenv("NOTION_WORKSPACE_ID", "").strip().replace("-", "").lower()
+# PIN: PIN_RE = re.compile(r"[A-Za-z0-9]{4}")
+# PIN: shortcut: tentativas falhadas em memoria, so valem com 1 worker; passar para a BD se houver mais.
+# PIN: LOGIN_ATTEMPTS = {}
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 NORMALIZED_IMAGE_SIZE = (800, 800)
 # Ficheiro sincronizado com a base de dados. EXCEL_PATH no ambiente permite
@@ -1392,40 +1394,41 @@ def movimentos():
         return erro(str(exc), 500)
 
 
-@app.get("/api/auth/people")
-def pessoas_login():
-    # Nomes para o popup de login; so aparecem pessoas com PIN definido.
-    try:
-        init_db()
-        with db_connection() as connection:
-            rows = connection.execute("SELECT id, name FROM people WHERE pin_hash <> '' ORDER BY name").fetchall()
-        return jsonify(people=[{"id": row["id"], "name": row["name"]} for row in rows])
-    except Exception as exc:
-        return erro(str(exc), 500)
-
-
-@app.post("/api/auth/login")
-def login():
-    data = request.get_json(silent=True) or {}
-    person_id, pin = data.get("person_id"), str(data.get("pin", "")).strip().upper()
-    if type(person_id) is not int:
-        return erro("Escolhe a tua pessoa")
-    fails, until = LOGIN_ATTEMPTS.get(person_id, (0, 0))
-    if until > time.time():
-        return erro("Demasiadas tentativas. Espera alguns minutos e tenta outra vez.", 429)
-    try:
-        init_db()
-        with db_connection() as connection:
-            row = connection.execute("SELECT id, pin_hash FROM people WHERE id = ?", (person_id,)).fetchone()
-    except Exception as exc:
-        return erro(str(exc), 500)
-    if not row or not row["pin_hash"] or not check_password_hash(row["pin_hash"], pin):
-        # 5 falhas seguidas bloqueiam essa pessoa durante 5 minutos.
-        LOGIN_ATTEMPTS[person_id] = (0, time.time() + 300) if fails + 1 >= 5 else (fails + 1, 0)
-        return erro("PIN errado", 401)
-    LOGIN_ATTEMPTS.pop(person_id, None)
-    start_session(row["id"])
-    return jsonify(msg="Sessão iniciada", user=current_person())
+# PIN (desativado: o login e so com Notion). Descomentar os blocos marcados PIN para voltar a ativar.
+# @app.get("/api/auth/people")
+# def pessoas_login():
+#     # Nomes para o popup de login; so aparecem pessoas com PIN definido.
+#     try:
+#         init_db()
+#         with db_connection() as connection:
+#             rows = connection.execute("SELECT id, name FROM people WHERE pin_hash <> '' ORDER BY name").fetchall()
+#         return jsonify(people=[{"id": row["id"], "name": row["name"]} for row in rows])
+#     except Exception as exc:
+#         return erro(str(exc), 500)
+#
+#
+# @app.post("/api/auth/login")
+# def login():
+#     data = request.get_json(silent=True) or {}
+#     person_id, pin = data.get("person_id"), str(data.get("pin", "")).strip().upper()
+#     if type(person_id) is not int:
+#         return erro("Escolhe a tua pessoa")
+#     fails, until = LOGIN_ATTEMPTS.get(person_id, (0, 0))
+#     if until > time.time():
+#         return erro("Demasiadas tentativas. Espera alguns minutos e tenta outra vez.", 429)
+#     try:
+#         init_db()
+#         with db_connection() as connection:
+#             row = connection.execute("SELECT id, pin_hash FROM people WHERE id = ?", (person_id,)).fetchone()
+#     except Exception as exc:
+#         return erro(str(exc), 500)
+#     if not row or not row["pin_hash"] or not check_password_hash(row["pin_hash"], pin):
+#         # 5 falhas seguidas bloqueiam essa pessoa durante 5 minutos.
+#         LOGIN_ATTEMPTS[person_id] = (0, time.time() + 300) if fails + 1 >= 5 else (fails + 1, 0)
+#         return erro("PIN errado", 401)
+#     LOGIN_ATTEMPTS.pop(person_id, None)
+#     start_session(row["id"])
+#     return jsonify(msg="Sessão iniciada", user=current_person())
 
 
 @app.post("/api/auth/logout")
@@ -1471,19 +1474,28 @@ def notion_callback():
     try:
         # So precisamos da identidade; o token de acesso do Notion e descartado.
         with urllib.request.urlopen(token_request, timeout=10) as response:
-            notion_id = str(json.load(response)["owner"]["user"]["id"])
+            token = json.load(response)
+        notion_user = token["owner"]["user"]
+        notion_id = str(notion_user["id"])
     except (OSError, ValueError, KeyError, TypeError):
         return notion_page("O Notion não confirmou o login. Tenta outra vez.")
+    from_workspace = bool(NOTION_WORKSPACE_ID) and str(token.get("workspace_id", "")).replace("-", "").lower() == NOTION_WORKSPACE_ID
     init_db()
     with db_connection() as connection:
         row = connection.execute("SELECT id FROM people WHERE notion_id = ?", (notion_id,)).fetchone()
-        linked = session.get("person_id")
-        # Quem ja entrou com PIN liga a sua conta Notion uma vez; depois entra so com o Notion.
-        if row is None and linked is not None and connection.execute("SELECT 1 FROM people WHERE id = ? AND notion_id IS NULL", (linked,)).fetchone():
-            connection.execute("UPDATE people SET notion_id = ? WHERE id = ?", (notion_id, linked))
-            row = {"id": linked}
+        # PIN: quem ja entrou com PIN liga a sua conta Notion uma vez; depois entra so com o Notion.
+        # PIN: linked = session.get("person_id")
+        # PIN: if row is None and linked is not None and connection.execute("SELECT 1 FROM people WHERE id = ? AND notion_id IS NULL", (linked,)).fetchone():
+        # PIN:     connection.execute("UPDATE people SET notion_id = ? WHERE id = ?", (notion_id, linked))
+        # PIN:     row = {"id": linked}
+        if row is None and from_workspace:
+            # Primeiro login de alguem do workspace LART: entra como pessoa normal (um admin pode apagar).
+            name = str(notion_user.get("name") or "").strip() or "Sem nome"
+            if connection.execute("SELECT 1 FROM people WHERE name = ? COLLATE NOCASE", (name,)).fetchone():
+                name = f"{name} ({notion_id[-4:]})"  # outra conta Notion com o mesmo nome
+            row = {"id": connection.execute("INSERT INTO people (name, notion_id) VALUES (?, ?)", (name, notion_id)).lastrowid}
     if row is None:
-        return notion_page("A tua conta Notion não está na lista de pessoas do Stocklart. Pede a um admin para te adicionar.")
+        return notion_page("Esta conta Notion não está na lista do Stocklart. Entra outra vez e escolhe o workspace LART no ecrã do Notion.")
     next_page = session.get("notion_next", "/#/stock")
     start_session(row["id"])
     return redirect(next_page)
@@ -1494,9 +1506,9 @@ def require_admin():
     return None if person and person["admin"] else erro("Só um admin pode gerir pessoas", 403)
 
 
-def valid_pin(data):
-    pin = str(data.get("pin", "")).strip()
-    return pin.upper() if PIN_RE.fullmatch(pin) else None
+# def valid_pin(data):
+#     pin = str(data.get("pin", "")).strip()
+#     return pin.upper() if PIN_RE.fullmatch(pin) else None
 
 
 @app.get("/api/people")
@@ -1509,23 +1521,24 @@ def listar_pessoas():
                             "pin": bool(row["pin_hash"]), "notion": bool(row["notion_id"])} for row in rows])
 
 
-@app.post("/api/people")
-def nova_pessoa():
-    if (denied := require_admin()):
-        return denied
-    data = request.get_json(silent=True) or {}
-    name, pin = str(data.get("name", "")).strip(), valid_pin(data)
-    if not name or not pin:
-        return erro("Indica o nome e um PIN de 4 letras ou números")
-    try:
-        with db_connection() as connection:
-            connection.execute("INSERT INTO people (name, pin_hash, is_admin) VALUES (?, ?, ?)",
-                               (name, generate_password_hash(pin), int(bool(data.get("admin")))))
-        return jsonify(msg="Pessoa adicionada")
-    except DB_INTEGRITY_ERRORS:
-        return erro("Já existe uma pessoa com esse nome", 409)
-    except Exception as exc:
-        return erro(str(exc), 500)
+# PIN: sem PIN, as pessoas novas entram sozinhas pelo Notion (ver notion_callback).
+# @app.post("/api/people")
+# def nova_pessoa():
+#     if (denied := require_admin()):
+#         return denied
+#     data = request.get_json(silent=True) or {}
+#     name, pin = str(data.get("name", "")).strip(), valid_pin(data)
+#     if not name or not pin:
+#         return erro("Indica o nome e um PIN de 4 letras ou números")
+#     try:
+#         with db_connection() as connection:
+#             connection.execute("INSERT INTO people (name, pin_hash, is_admin) VALUES (?, ?, ?)",
+#                                (name, generate_password_hash(pin), int(bool(data.get("admin")))))
+#         return jsonify(msg="Pessoa adicionada")
+#     except DB_INTEGRITY_ERRORS:
+#         return erro("Já existe uma pessoa com esse nome", 409)
+#     except Exception as exc:
+#         return erro(str(exc), 500)
 
 
 @app.patch("/api/people/<int:person_id>")
@@ -1538,11 +1551,11 @@ def editar_pessoa(person_id):
         updates["name"] = str(data["name"]).strip()
         if not updates["name"]:
             return erro("Indica o nome")
-    if "pin" in data:
-        pin = valid_pin(data)
-        if not pin:
-            return erro("O PIN tem de ter 4 letras ou números")
-        updates["pin_hash"] = generate_password_hash(pin)
+    # PIN: if "pin" in data:
+    # PIN:     pin = valid_pin(data)
+    # PIN:     if not pin:
+    # PIN:         return erro("O PIN tem de ter 4 letras ou números")
+    # PIN:     updates["pin_hash"] = generate_password_hash(pin)
     if "admin" in data:
         if person_id == g.person["id"] and not data["admin"]:
             return erro("Não podes retirar o teu próprio acesso de admin")
