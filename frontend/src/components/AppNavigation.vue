@@ -9,7 +9,7 @@ const api = inject('api', null)
 const movementFilter = inject('movementFilter', null)
 
 // Menu da sessão: quem és, o que fizeste ultimamente e os atalhos que interessam.
-const menuOpen = ref(false), box = ref(null), chip = ref(null), mine = ref(null)
+const menuOpen = ref(false), navOpen = ref(false), box = ref(null), chip = ref(null), mine = ref(null)
 const firstName = computed(() => auth?.user?.name.split(/\s+/)[0] || '')
 const sameDay = timestamp => new Date(timestamp).toDateString() === new Date().toDateString()
 const ago = timestamp => {
@@ -62,13 +62,17 @@ const external = [{ label: 'Cablagem', href: 'https://stocklart.pt/harness/', ke
       <span class="brand-mark"><img :src="brandLogo" alt="LART" /></span>
       <span><strong>Stocklart</strong><small>Gestão simples de componentes</small></span>
     </button>
-    <nav class="main-menu" aria-label="Menu principal">
+    <!-- Só em ecrãs estreitos: o menu recolhe-se num botão para o cabeçalho não ocupar um terço do ecrã. -->
+    <button class="nav-toggle" :aria-expanded="navOpen" aria-controls="main-menu" aria-label="Menu" @click="navOpen = !navOpen">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path v-if="!navOpen" d="M4 7h16M4 12h16M4 17h16"/><path v-else d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+    <nav id="main-menu" class="main-menu" :class="{ open: navOpen }" aria-label="Menu principal">
       <button
         v-for="link in links"
         :key="link.key"
         :class="['menu-link', { active: active === link.key }]"
         :aria-current="active === link.key ? 'page' : undefined"
-        @click="router.push(link.route)"
+        @click="navOpen = false; router.push(link.route)"
       >
         {{ link.label }}
       </button>

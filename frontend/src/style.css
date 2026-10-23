@@ -474,7 +474,7 @@ button:disabled {
   background: #ffffff66;
 }
 .carousel-dots button.selected {
-  background: var(--accent);
+  background-color: var(--accent);
 }
 .home-options {
   position: relative;
@@ -1497,7 +1497,7 @@ a.notion-login{display:inline-flex;align-items:center;text-decoration:none}
  .subtitle{font-size:14px;margin-top:6px}
  .home-button{min-height:40px;padding:0 14px;font-size:13px;border-radius:10px;align-self:flex-start}
  .workspace-card{padding:16px;border-radius:14px}
- .card-heading h2{font-size:18px}
+ .card-heading h2,.workspace-card h2{font-size:18px;line-height:1.2}
  .card-icon{width:32px;height:32px;font-size:16px}
  .movement-row{padding:10px 12px;gap:8px 10px}
  .movement-main strong{font-size:14px}
