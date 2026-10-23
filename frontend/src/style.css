@@ -1261,6 +1261,12 @@ a.text-button{display:inline-flex;align-items:center;text-decoration:none}
 .sidebar .cat-edit { flex: none; }
 .import-csv-button{min-height:52px;border-color:var(--accent);color:var(--accent)}
 .csv-import-dialog{width:min(820px,94vw);max-height:90vh;overflow:auto}
+.scanner-dialog{width:min(560px,94vw);max-height:94vh;overflow:auto}
+.scanner-video{width:100%;max-height:55vh;border-radius:12px;background:#000;object-fit:contain}
+.label-data{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px}
+.label-data dt{color:var(--muted);font-weight:600}
+.label-data dd{margin:0;overflow-wrap:anywhere}
+.pcb-detail-actions{display:flex;gap:8px;flex-wrap:wrap}
 .csv-template-link{color:var(--accent);font-size:13px;align-self:flex-start}
 .csv-preview-scroll{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:12px}
 .csv-preview th{position:sticky;top:0;background:#32342e}

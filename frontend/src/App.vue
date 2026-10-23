@@ -8,6 +8,7 @@ import StockItem from './components/StockItem.vue'
 import StockMovement from './components/StockMovement.vue'
 import CategoryForm from './components/CategoryForm.vue'
 import PartsCatalog from './components/PartsCatalog.vue'
+import LabelScanner from './components/LabelScanner.vue'
 import AppNavigation from './components/AppNavigation.vue'
 import LoginDialog from './components/LoginDialog.vue'
 import HomePage from './pages/HomePage.vue'
@@ -36,7 +37,7 @@ function guard(fn) {
 }
 const categories = ref([]), items = ref([]), parts = ref([]), current = ref(null), query = ref('')
 const busy = ref(false), loading = ref(true), toastMessage = ref(''), toastUndo = ref(null), formError = ref('')
-const movement = ref(null), categoryForm = ref(null), partsCatalog = ref(null)
+const movement = ref(null), categoryForm = ref(null), partsCatalog = ref(null), labelScanner = ref(null)
 const csvImport = ref(null), csvError = ref('')
 const canEdit = ref(false), categoryError = ref('')
 const queues = shallowReactive(new Map())
@@ -275,7 +276,7 @@ async function refresh() {
 }
 const guarded = {
   step: guard(stepItem), deleteItem: guard(deleteItem), deleteCategory: guard(deleteCategory), openCategory: guard(openCategory), savePart: guard(savePart),
-  openMovement: guard(() => movement.value.open(current.value)), editItem: guard(item => movement.value.edit(item)), importCsv: guard(() => csvImport.value.open()),
+  openMovement: guard(() => movement.value.open(current.value)), scanLabel: guard(() => labelScanner.value.open()), editItem: guard(item => movement.value.edit(item)), importCsv: guard(() => csvImport.value.open()),
 }
 onMounted(async () => {
   window.addEventListener('online', refresh)
@@ -325,6 +326,7 @@ onUnmounted(() => {
         <input v-model="query" type="search" aria-label="Pesquisar componentes" placeholder="Pesquisar componentes…" autocomplete="off">
       </div>
       <button v-if="canEdit" class="text-button import-csv-button" aria-label="Importar CSV" :disabled="locked || !categories.length" @click="guarded.importCsv()">Importar CSV</button>
+      <button class="text-button" :disabled="locked || !categories.length" @click="guarded.scanLabel()">Ler etiqueta</button>
       <button class="primary" :disabled="locked || !categories.length" @click="guarded.openMovement()">Adicionar / retirar</button>
     </div>
     <section class="filter-section" :class="{ open: filtersOpen || activeFilters }" aria-label="Filtros de componentes">
@@ -382,5 +384,6 @@ onUnmounted(() => {
   <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
   <LoginDialog ref="loginDialog" @login="user => { auth.user = user; toast(`Sessão iniciada: ${user.name}`) }" />
   <PartsCatalog v-if="parts.length" ref="partsCatalog" :parts="parts" :items="items" :categories="categories" :busy="busy" :error="partError" @save="guarded.savePart" @clear-error="partError = ''" />
+  <LabelScanner ref="labelScanner" action="Adicionar ao stock" @use="label => movement.open(current, label)" />
   <div id="toast" role="status" :class="{ on: toastMessage }">{{ toastMessage }}<button v-if="toastUndo" class="toast-undo" @click="toastUndo()">Desfazer</button></div>
 </template>

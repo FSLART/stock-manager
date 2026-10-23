@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { parseBom } from '../bom.js'
 import { readStored, writeStored } from '../api.js'
 import WorkspacePage from '../components/WorkspacePage.vue'
+import LabelScanner from '../components/LabelScanner.vue'
 
 const PROJECTS_STORAGE_KEY = 'stocklart-pcb-projects'
 const bomFile = ref(null)
@@ -11,6 +12,7 @@ const bomItems = ref([])
 const projectError = ref('')
 const projects = ref(loadProjects())
 const selectedProject = ref(null)
+const labelScanner = ref(null)
 
 const componentCount = computed(() => bomItems.value.reduce((total, item) => total + item.quantity, 0))
 
@@ -75,6 +77,17 @@ function saveAndOpenProject() {
   bomFile.value = null
   bomItems.value = []
   projectName.value = ''
+}
+
+// Uma etiqueta lida soma-se à linha com o mesmo MPN, ou entra como linha nova no BOM do projeto aberto.
+function addLabel({ mpn, manufacturer, qty }) {
+  const project = selectedProject.value
+  const same = item => item.partNumber.toUpperCase() === mpn.toUpperCase()
+  const items = project.items.some(same)
+    ? project.items.map(item => same(item) ? { ...item, quantity: item.quantity + qty } : item)
+    : [...project.items, { reference: '—', value: mpn, description: manufacturer || '—', footprint: '—', partNumber: mpn, quantity: qty }]
+  const updated = { ...project, items }
+  if (saveProjects(projects.value.map(entry => entry.id === project.id ? updated : entry))) selectedProject.value = updated
 }
 
 function openProject(project) {
@@ -171,7 +184,10 @@ function removeProject(projectId) {
           <span class="card-icon">PCB</span>
           <h2>{{ selectedProject.name }}</h2>
         </div>
-        <button class="text-button" type="button" @click="selectedProject = null">Fechar</button>
+        <span class="pcb-detail-actions">
+          <button class="text-button" type="button" @click="labelScanner.open()">Ler etiqueta</button>
+          <button class="text-button" type="button" @click="selectedProject = null">Fechar</button>
+        </span>
       </div>
       <div class="pcb-detail-grid">
         <div class="pcb-step-preview">
@@ -202,5 +218,6 @@ function removeProject(projectId) {
         </div>
       </div>
     </section>
+    <LabelScanner ref="labelScanner" action="Adicionar ao BOM" @use="addLabel" />
   </WorkspacePage>
 </template>

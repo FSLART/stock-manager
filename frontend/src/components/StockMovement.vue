@@ -21,14 +21,16 @@ function resetFields() {
   if (fileInput.value) fileInput.value.value = ''
   emit('clear-error')
 }
-function open(current) {
+// label vem de uma etiqueta lida (LabelScanner): preenche o P/N, o fabricante e a quantidade.
+function open(current, label = null) {
   editing.value = null
-  partQuery.value = ''
+  partQuery.value = label?.mpn || ''
   removeImage.value = false
   category.value = props.categories.some(c => c.name === current) ? current : props.categories[0]?.name || ''
   mode.value = 'in'
-  qty.value = 1
+  qty.value = label?.qty || 1
   resetFields()
+  if (label) pickPart(label)
   dialog.value.showModal()
 }
 // O preço pertence ao P/N no catálogo, por isso só se guarda quando o item tem um P/N a sério.
@@ -53,12 +55,19 @@ function edit(item) {
 function suggestions(prop) {
   return [...new Set(props.items.filter(it => it.cat === category.value).map(it => it.props[prop]).filter(Boolean))]
 }
+// Escrever ou escolher no campo P/N um P/N que existe no catálogo preenche o resto como o seletor de cima.
+function fillFromPartNumber(value) {
+  if (editing.value || !props.parts.some(p => p.mpn.toUpperCase() === String(value).trim().toUpperCase())) return
+  partQuery.value = String(value).trim()
+  pickPart()
+}
 // Escolher uma peça do catálogo preenche o formulário. Se esse P/N já está em stock, usa os valores do item
 // existente, para a entrada somar a quantidade em vez de criar um item quase igual.
-function pickPart() {
+// Uma etiqueta lida também procura o P/N no stock, e sem catálogo preenche só o P/N e o fabricante.
+function pickPart(label = null) {
   const mpn = partQuery.value.trim().toUpperCase()
   const part = props.parts.find(p => p.mpn.toUpperCase() === mpn)
-  if (!part) return
+  if (!part && !label) return
   emit('clear-error')
   const stocked = props.items.find(item => partNumberOf(item).toUpperCase() === mpn)
   if (stocked) {
@@ -66,9 +75,9 @@ function pickPart() {
     values.value = { ...stocked.props }
     return
   }
-  if (props.categories.some(c => c.name === part.category)) category.value = part.category
+  if (props.categories.some(c => c.name === part?.category)) category.value = part.category
   values.value = Object.fromEntries((selected.value?.props || []).map(field => [field,
-    isPartNumber(field) ? part.mpn : isBrand(field) ? part.manufacturer : part.props[field] ?? '']))
+    isPartNumber(field) ? part?.mpn ?? label.mpn : isBrand(field) ? part?.manufacturer || label?.manufacturer || '' : part?.props[field] ?? '']))
 }
 // Ctrl+V ou arrastar uma imagem preenche o campo de ficheiro, por isso o envio segue o caminho normal.
 // Uma imagem arrastada de outra página chega só como link.
@@ -117,13 +126,13 @@ defineExpose({ open, edit, close: () => dialog.value.close() })
         <button v-for="m in ['in', 'out']" :key="m" type="button" :aria-pressed="mode === m" @click="mode = m; emit('clear-error')">{{ m === 'in' ? 'Entrada' : 'Saída' }}</button>
       </div>
       <label v-if="!editing && parts.length">Peça do catálogo
-        <input v-model="partQuery" list="catalog-parts" placeholder="P/N ou descrição" autocomplete="off" @change="pickPart">
+        <input v-model="partQuery" list="catalog-parts" placeholder="P/N ou descrição" autocomplete="off" @input="pickPart()">
         <datalist id="catalog-parts"><option v-for="part in parts" :key="part.mpn" :value="part.mpn">{{ part.manufacturer }} · {{ part.description }}</option></datalist>
       </label>
       <label>Categoria <select v-model="category" :disabled="!!editing" required @change="resetFields"><option v-for="c in categories" :key="c.name">{{ c.name }}</option></select></label>
       <div class="fields">
         <label v-for="(p, i) in selected?.props || []" :key="category + p">{{ p }}
-          <input v-model="values[p]" :list="`suggestion-${i}`" required autocomplete="off">
+          <input v-model="values[p]" :list="isPartNumber(p) && !editing && parts.length ? 'catalog-parts' : `suggestion-${i}`" required autocomplete="off" @input="isPartNumber(p) && fillFromPartNumber(values[p])">
           <datalist :id="`suggestion-${i}`"><option v-for="value in suggestions(p)" :key="value" :value="value"></option></datalist>
         </label>
       </div>

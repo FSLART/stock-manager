@@ -270,11 +270,9 @@ it('fills the movement form from a catalog part and reuses the stocked item with
   const picker = form.find('input[list="catalog-parts"]')
   expect(form.findAll('#catalog-parts option').map(option => option.element.value)).toEqual(['SN74HC02PWRG4', 'LAN8720AI'])
   await picker.setValue('sn74hc02pwrg4')
-  await picker.trigger('change')
   expect(form.find('select').element.value).toBe('CIs')
   expect(form.findAll('.fields input').map(input => input.element.value)).toEqual(['TI', 'SN74HC02PWRG4', 'TSSOP-14'])
   await picker.setValue('LAN8720AI')
-  await picker.trigger('change')
   expect(form.findAll('.fields input').map(input => input.element.value)).toEqual(['Microchip', 'LAN8720AI', ''])
 })
 
@@ -384,6 +382,25 @@ it('adds a part to the catalog and corrects only the changed fields of an existi
   await form.trigger('submit')
   await flushPromises()
   expect(posts()[1]).toEqual({ mpn: 'TL082BCDT', category: 'CIs Amplificadores' })
+})
+
+it('fills the rest of the form when a catalog part number is typed or chosen in the P/N field', async () => {
+  fetch.mockResolvedValue({ ok: true, json: async () => ({
+    ...structuredClone(data),
+    categories: [{ name: 'CIs', props: ['Brand', 'P/N', 'Footprint'], image: false }],
+    items: [],
+    parts: [{ mpn: 'LAN8720AI', manufacturer: 'Microchip', description: 'Ethernet PHY', category: 'CIs', props: { Footprint: 'QFN-24' }, price: 1.1 }],
+  }) })
+  wrapper = mount(App)
+  await flushPromises()
+  await wrapper.findAll('button').find(button => button.text() === 'Adicionar / retirar').trigger('click')
+  const form = wrapper.find('dialog form')
+  const fields = () => form.findAll('.fields input')
+  expect(fields()[1].attributes('list')).toBe('catalog-parts')
+  await fields()[1].setValue('LAN87')
+  expect(fields().map(input => input.element.value)).toEqual(['', 'LAN87', ''])
+  await fields()[1].setValue('lan8720ai')
+  expect(fields().map(input => input.element.value)).toEqual(['Microchip', 'LAN8720AI', 'QFN-24'])
 })
 
 it('keeps rejected edits open with the server error and does not offer editing on unsupported backends', async () => {
