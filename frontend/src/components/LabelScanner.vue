@@ -28,7 +28,8 @@ function clearPhoto() {
   photo.value = ''
 }
 function togglePause() {
-  if (paused.value) { clearPhoto(); video.value.play() }
+  // Retomar recomeça: sem limpar, a etiqueta anterior ficava à vista enquanto se procura a próxima.
+  if (paused.value) { clearPhoto(); clearBoxes(); label.value = null; status.value = ''; video.value.play() }
   else video.value.pause()
   paused.value = !paused.value
 }
@@ -80,7 +81,16 @@ async function track() {
       const image = await pixels(video.value)
       const codes = await readBarcodesFromImageData(image, { formats: FORMATS, textMode: 'Plain' })
       // Entretanto pode ter sido pausado ou lido: não apaga a caixa da imagem congelada.
-      if (!paused.value && !reading.value) drawBoxes(codes, image)
+      if (!paused.value && !reading.value) {
+        drawBoxes(codes, image)
+        // Ao encontrar uma etiqueta congela a imagem e mostra os dados, sem ter de carregar em Ler.
+        const found = codes.map(code => parseLabel(code.text)).find(Boolean)
+        if (found) {
+          togglePause()
+          label.value = found
+          status.value = ''
+        }
+      }
     } catch { /* Sem descodificador (offline): a leitura com o botão mostra o erro. */ }
   }
   liveTimer = setTimeout(track, 300)
