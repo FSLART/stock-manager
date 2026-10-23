@@ -235,6 +235,19 @@ it('uploads an image from a link and fills the link from an image dragged from a
   expect(JSON.parse(request[1].body).image).toBe('/uploads/new.jpg')
 })
 
+it('previews a real image in the middle of the page while hovered, but not the default icons', async () => {
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), items: [{ ...data.items[0], image: '/uploads/led.jpg' }, data.items[1]] }) })
+  wrapper = mount(App, { attachTo: document.body })
+  await flushPromises()
+  const [photo, icon] = wrapper.findAll('tbody .image-cell img')
+  await icon.trigger('mouseenter')
+  expect(document.querySelector('.image-preview')).toBe(null)
+  await photo.trigger('mouseenter')
+  expect(document.querySelector('.image-preview').getAttribute('src')).toBe('/uploads/led.jpg')
+  await photo.trigger('mouseleave')
+  expect(document.querySelector('.image-preview')).toBe(null)
+})
+
 it('keeps rejected edits open with the server error and does not offer editing on unsupported backends', async () => {
   wrapper = mount(App)
   await flushPromises()

@@ -4,7 +4,7 @@ import { defaultImage } from '../defaultImages.js'
 import { componentValue, describe } from '../stockText.js'
 const props = defineProps({ item: { type: Object, required: true }, propertyKeys: { type: Array, default: () => [] }, showCategory: Boolean, busy: Boolean, canEdit: Boolean, locked: Boolean })
 defineEmits(['step', 'delete', 'edit'])
-const imageFailed = ref(false)
+const imageFailed = ref(false), previewing = ref(false)
 watch(() => props.item.image, () => { imageFailed.value = false })
 const usesDefaultImage = computed(() => !props.item.image || imageFailed.value)
 const imageSource = computed(() => usesDefaultImage.value ? defaultImage(props.item.cat) : props.item.image)
@@ -16,7 +16,8 @@ const color = computed(() => `hsl(${[...props.item.cat].reduce((a, c) => (a * 31
 <template>
   <tr class="row" :class="{ low: item.qty <= 5 }">
     <td class="image-cell">
-    <img class="item-image" :class="{ 'default-image': usesDefaultImage }" :src="imageSource" :alt="`${usesDefaultImage ? 'Ícone padrão' : 'Imagem'} de ${item.cat}`" :title="usesDefaultImage ? `Ícone padrão de ${item.cat}` : item.cat" @error="imageFailed = true">
+    <img class="item-image" :class="{ 'default-image': usesDefaultImage }" :src="imageSource" :alt="`${usesDefaultImage ? 'Ícone padrão' : 'Imagem'} de ${item.cat}`" :title="usesDefaultImage ? `Ícone padrão de ${item.cat}` : item.cat" @error="imageFailed = true" @mouseenter="previewing = !usesDefaultImage" @mouseleave="previewing = false">
+    <Teleport to="body"><img v-if="previewing" class="image-preview" :src="item.image" alt=""></Teleport>
     </td>
     <td v-if="showCategory" class="category-cell"><span class="pill"><i class="dot" :style="{ background: color }"></i>{{ item.cat }}</span></td>
     <!-- Numa categoria a coluna repetiria uma propriedade; fica só como título do cartão no telemóvel. -->
