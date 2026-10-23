@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, provide, reactive, ref, shallowReactive, watch } from 'vue'
 import { createApi, readStored } from './api.js'
 import { componentValue, describe } from './stockText.js'
-import { priceEstimator } from './prices.js'
+import { euros, priceEstimator } from './prices.js'
 import InventoryCsvImport from './components/InventoryCsvImport.vue'
 import StockItem from './components/StockItem.vue'
 import StockMovement from './components/StockMovement.vue'
@@ -56,7 +56,7 @@ const showCategory = computed(() => !current.value)
 const columns = computed(() => [
   ...(showCategory.value ? [{ key: 'cat', label: 'Categoria' }, { key: 'component', label: 'Componente' }] : []),
   ...(showCategory.value ? [{ key: 'desc', label: 'Descrição' }] : propertyKeys.value.map(key => ({ key: `prop:${key}`, label: key }))),
-  { key: 'qty', label: 'Quantidade' },
+  { key: 'price', label: 'Preço un.' }, { key: 'qty', label: 'Quantidade' }, { key: 'value', label: 'Valor' },
 ])
 const activeFilters = computed(() => Object.values(propertyFilters.value).reduce((sum, values) => sum + values.length, 0) + Number(Boolean(stockFilter.value)) + Number(Boolean(imageFilter.value)))
 watch(current, () => { propertyFilters.value = {}; filterSearch.value = {} })
@@ -78,7 +78,9 @@ function sortBy(key) {
   sortDirection.value = sortKey.value === key ? -sortDirection.value : 1
   sortKey.value = key
 }
-const sortValue = (item, key) => key === 'component' ? componentValue(item) : key === 'desc' ? describe(item) : key.startsWith('prop:') ? item.props[key.slice(5)] ?? '' : item[key]
+const NUMERIC = new Set(['qty', 'price', 'value'])
+const sortValue = (item, key) => key === 'component' ? componentValue(item) : key === 'desc' ? describe(item) : key.startsWith('prop:') ? item.props[key.slice(5)] ?? ''
+  : key === 'price' ? priceOf.value(item)?.price ?? -1 : key === 'value' ? item.qty * (priceOf.value(item)?.price ?? 0) : item[key]
 const shown = computed(() => items.value.filter(item =>
   (!current.value || item.cat === current.value) &&
   normalize(item.cat + Object.values(item.props).join('')).includes(normalize(query.value)) &&
@@ -88,15 +90,14 @@ const shown = computed(() => items.value.filter(item =>
 ).sort((a, b) => {
   if (!sortKey.value) return 0
   const av = sortValue(a, sortKey.value), bv = sortValue(b, sortKey.value)
-  return sortDirection.value * (sortKey.value === 'qty' ? av - bv : String(av).localeCompare(String(bv), 'pt', { numeric: true, sensitivity: 'base' }))
+  return sortDirection.value * (NUMERIC.has(sortKey.value) ? av - bv : String(av).localeCompare(String(bv), 'pt', { numeric: true, sensitivity: 'base' }))
 }))
 const units = computed(() => shown.value.reduce((sum, item) => sum + item.qty, 0))
 const priceOf = computed(() => priceEstimator(parts.value))
 const estimate = computed(() => {
-  const priced = shown.value.map(item => [item, priceOf.value(item)]).filter(([, price]) => price != null)
-  return { value: priced.reduce((sum, [item, price]) => sum + item.qty * price, 0), missing: shown.value.length - priced.length }
+  const priced = shown.value.map(item => [item, priceOf.value(item)]).filter(([, price]) => price)
+  return { value: priced.reduce((sum, [item, { price }]) => sum + item.qty * price, 0), missing: shown.value.length - priced.length }
 })
-const euros = value => value.toLocaleString('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: value < 100 ? 2 : 0 })
 const total = name => items.value.filter(item => !name || item.cat === name).reduce((sum, item) => sum + item.qty, 0)
 const color = name => `hsl(${[...name].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7)} 65% 48%)`
 const locked = computed(() => busy.value || queues.size > 0)
@@ -347,7 +348,7 @@ onUnmounted(() => {
             </th>
             <th scope="col">Ações</th>
           </tr></thead>
-          <tbody><StockItem v-for="item in shown" :key="item.id" :item="item" :property-keys="showCategory ? [] : propertyKeys" :show-category="showCategory" :busy="busy" :locked="locked" :can-edit="canEdit" @edit="guarded.editItem(item)" @step="delta => guarded.step(item, delta)" @delete="guarded.deleteItem(item)" /></tbody>
+          <tbody><StockItem v-for="item in shown" :key="item.id" :item="item" :price="priceOf(item)" :property-keys="showCategory ? [] : propertyKeys" :show-category="showCategory" :busy="busy" :locked="locked" :can-edit="canEdit" @edit="guarded.editItem(item)" @step="delta => guarded.step(item, delta)" @delete="guarded.deleteItem(item)" /></tbody>
         </table>
         <div v-if="!shown.length" class="empty"><b>Nada encontrado.</b><br>Tenta outra pesquisa ou adiciona um item novo.</div>
       </template>

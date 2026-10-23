@@ -2,7 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { defaultImage } from '../defaultImages.js'
 import { componentValue, describe } from '../stockText.js'
-const props = defineProps({ item: { type: Object, required: true }, propertyKeys: { type: Array, default: () => [] }, showCategory: Boolean, busy: Boolean, canEdit: Boolean, locked: Boolean })
+import { euros } from '../prices.js'
+const props = defineProps({ item: { type: Object, required: true }, price: { type: Object, default: null }, propertyKeys: { type: Array, default: () => [] }, showCategory: Boolean, busy: Boolean, canEdit: Boolean, locked: Boolean })
 defineEmits(['step', 'delete', 'edit'])
 const imageFailed = ref(false), previewing = ref(false)
 watch(() => props.item.image, () => { imageFailed.value = false })
@@ -28,6 +29,7 @@ const color = computed(() => `hsl(${[...props.item.cat].reduce((a, c) => (a * 31
     </td>
     <td v-if="showCategory" class="desc-cell">{{ description || '—' }}</td>
     <td v-for="key in propertyKeys" :key="key" class="chips property-cell">{{ item.props[key] || '—' }}</td>
+    <td class="price-cell" :class="{ estimated: price?.estimated }" :title="price?.estimated ? 'Estimativa: mediana das peças do catálogo da mesma categoria e tamanho' : price ? 'Preço do catálogo pelo P/N' : 'Sem preço no catálogo'">{{ price ? `${price.estimated ? '≈ ' : ''}${euros(price.price)}` : '—' }}</td>
     <td class="qty-cell">
     <div class="qty">
       <button v-for="delta in [-10, -1]" :key="delta" :class="{ 'step-one': delta === -1 }" :aria-label="`Retirar ${-delta}`" :disabled="busy" @click="$emit('step', delta)">{{ delta === -1 ? '−' : '−10' }}</button>
@@ -35,6 +37,7 @@ const color = computed(() => `hsl(${[...props.item.cat].reduce((a, c) => (a * 31
       <button v-for="delta in [1, 10]" :key="delta" :class="{ 'step-one': delta === 1 }" :aria-label="`Adicionar ${delta}`" :disabled="busy" @click="$emit('step', delta)">{{ delta === 1 ? '+' : '+10' }}</button>
     </div>
     </td>
+    <td class="price-cell value-cell" :class="{ estimated: price?.estimated }">{{ price ? `${price.estimated ? '≈ ' : ''}${euros(item.qty * price.price)}` : '—' }}</td>
     <td class="actions-cell">
     <div class="item-actions">
       <button v-if="canEdit" class="edit" aria-label="Editar componente" :disabled="busy || locked" @click="$emit('edit')">Editar</button>

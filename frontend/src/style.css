@@ -1275,6 +1275,8 @@ a.notion-login{display:inline-flex;align-items:center;text-decoration:none}
 .stock-content{color-scheme:dark}
 .stock-table .property-cell,.stock-table .desc-cell{white-space:normal;min-width:70px;max-width:none}
 .stock-table .desc-cell{color:var(--muted);width:100%}
+.stock-table .price-cell{text-align:right;font-variant-numeric:tabular-nums}
+.stock-table .price-cell.estimated{color:var(--muted)}
 .stock-table .card-sub{display:none}
 .stock-table .qty button{min-width:32px;height:32px;font-size:12px}
 .stock-table .qty button.step-one{font-size:18px}
@@ -1312,7 +1314,7 @@ a.notion-login{display:inline-flex;align-items:center;text-decoration:none}
  .stock-table .row{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px 12px;align-items:center;padding:12px 14px;border-top:1px solid var(--line)}
  .stock-table .row:first-child{border-top:0}
  .stock-table td{display:block;padding:0;border:0}
- .stock-table .category-cell,.stock-table .desc-cell,.stock-table .property-cell{display:none}
+ .stock-table .category-cell,.stock-table .desc-cell,.stock-table .property-cell,.stock-table .price-cell{display:none}
  .stock-table .image-cell{grid-column:1;grid-row:1;width:auto}
  .stock-table .item-image{width:44px;height:44px}
  .stock-table .component-cell{grid-column:2;grid-row:1;white-space:normal;overflow-wrap:anywhere}
