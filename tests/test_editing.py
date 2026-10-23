@@ -41,6 +41,20 @@ class EditingTest(unittest.TestCase):
             self.assertEqual(self.client.patch('/api/items/1', json=body).status_code, status)
             self.assertEqual(self.module.db_items(), original)
 
+    def test_bulk_location_survives_stock_changes_and_rejects_bad_input(self):
+        response = self.client.post('/api/items/location', json={'ids': [1, 2], 'location': ' Caixa 1 '})
+        self.assertEqual(response.status_code, 200, response.json)
+        self.client.post('/api/items/1/step', json={'delta': 1})
+        self.assertEqual([item['location'] for item in self.module.db_items()], ['Caixa 1', 'Caixa 1'])
+        # Repetir a mesma localização não é "não encontrado".
+        self.assertEqual(self.client.post('/api/items/location', json={'ids': [1], 'location': 'Caixa 1'}).status_code, 200)
+        self.client.post('/api/items/location', json={'ids': [2], 'location': ''})
+        self.assertEqual(self.module.db_items()[1]['location'], '')
+        for body, status in [({'ids': [], 'location': 'x'}, 400), ({'ids': ['1'], 'location': 'x'}, 400),
+                             ({'ids': [1], 'location': 'x' * 256}, 400), ({'ids': [99], 'location': 'x'}, 404)]:
+            self.assertEqual(self.client.post('/api/items/location', json=body).status_code, status)
+        self.assertEqual(self.module.db_items()[0]['location'], 'Caixa 1')
+
     def test_category_rename_and_field_rename_preserve_values_and_ids(self):
         response = self.client.patch('/api/categories/Test', json={
             'name': 'Renamed', 'image': True,
@@ -48,7 +62,7 @@ class EditingTest(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 200, response.json)
         items = self.module.db_items()
-        self.assertEqual(items[0], {'id': 1, 'cat': 'Renamed', 'props': {'dimension': 'small', 'reference': 'A', 'note': ''}, 'qty': 4, 'image': ''})
+        self.assertEqual(items[0], {'id': 1, 'cat': 'Renamed', 'props': {'dimension': 'small', 'reference': 'A', 'note': ''}, 'qty': 4, 'image': '', 'location': ''})
         self.assertEqual(items[1]['id'], 2)
 
     def test_category_edit_collision_rolls_back_everything(self):

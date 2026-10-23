@@ -1,7 +1,7 @@
 import { partNumberOf } from './stockText.js'
 
 // Tamanho/encapsulamento, para comparar só peças parecidas ("603" e "0603" contam como iguais).
-const sizeOf = props => String(Object.entries(props).find(([key]) => /^(tamanho|tipo|footprint)$/i.test(key.trim()))?.[1] ?? '').replace(/^0+/, '')
+const sizeOf = props => String(Object.entries(props).find(([key]) => /^(encapsulamento|tamanho|footprint)$/i.test(key.trim()))?.[1] ?? '').replace(/^0+/, '')
 const median = values => {
   const sorted = [...values].sort((a, b) => a - b)
   return (sorted[(sorted.length - 1) >> 1] + sorted[sorted.length >> 1]) / 2

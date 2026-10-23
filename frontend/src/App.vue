@@ -43,7 +43,7 @@ const canEdit = ref(false), categoryError = ref('')
 const queues = shallowReactive(new Map())
 let timer, toastTimer, refreshing = false, disposed = false
 const normalize = value => String(value).toLowerCase().replace(/\s+/g, '')
-const propertyFilters = ref({}), filterSearch = ref({}), stockFilter = ref(''), imageFilter = ref('')
+const propertyFilters = ref({}), filterSearch = ref({}), stockFilter = ref(''), imageFilter = ref(''), locationFilter = ref('')
 const filtersOpen = ref(false), sortKey = ref(''), sortDirection = ref(1)
 const scopedItems = computed(() => items.value.filter(item => !current.value || item.cat === current.value))
 const propertyKeys = computed(() => [...new Set([
@@ -58,9 +58,9 @@ const showCategory = computed(() => !current.value)
 const columns = computed(() => [
   ...(showCategory.value ? [{ key: 'cat', label: 'Categoria' }, { key: 'component', label: 'Componente' }] : []),
   ...(showCategory.value ? [{ key: 'desc', label: 'Descrição' }] : propertyKeys.value.map(key => ({ key: `prop:${key}`, label: key }))),
-  { key: 'price', label: 'Preço un.' }, { key: 'qty', label: 'Quantidade' }, { key: 'value', label: 'Valor' },
+  { key: 'location', label: 'Localização' }, { key: 'price', label: 'Preço un.' }, { key: 'qty', label: 'Quantidade' }, { key: 'value', label: 'Valor' },
 ])
-const activeFilters = computed(() => Object.values(propertyFilters.value).reduce((sum, values) => sum + values.length, 0) + Number(Boolean(stockFilter.value)) + Number(Boolean(imageFilter.value)))
+const activeFilters = computed(() => Object.values(propertyFilters.value).reduce((sum, values) => sum + values.length, 0) + Number(Boolean(stockFilter.value)) + Number(Boolean(imageFilter.value)) + Number(locationFilter.value !== ''))
 watch(current, () => { propertyFilters.value = {}; filterSearch.value = {} })
 function clearFilters() {
   current.value = null
@@ -69,6 +69,7 @@ function clearFilters() {
   filterSearch.value = {}
   stockFilter.value = ''
   imageFilter.value = ''
+  locationFilter.value = ''
 }
 function toggleProperty(key, value) {
   const selected = propertyFilters.value[key] || []
@@ -82,10 +83,12 @@ function sortBy(key) {
 }
 const NUMERIC = new Set(['qty', 'price', 'value'])
 const sortValue = (item, key) => key === 'component' ? componentValue(item) : key === 'desc' ? describe(item) : key.startsWith('prop:') ? item.props[key.slice(5)] ?? ''
-  : key === 'price' ? priceOf.value(item)?.price ?? -1 : key === 'value' ? item.qty * (priceOf.value(item)?.price ?? 0) : item[key]
+  : key === 'price' ? priceOf.value(item)?.price ?? -1 : key === 'value' ? item.qty * (priceOf.value(item)?.price ?? 0) : item[key] ?? ''
 const shown = computed(() => items.value.filter(item =>
   (!current.value || item.cat === current.value) &&
-  normalize(item.cat + Object.values(item.props).join('')).includes(normalize(query.value)) &&
+  normalize(item.cat + Object.values(item.props).join('') + (item.location || '')).includes(normalize(query.value)) &&
+  // null é "Sem localização"; '' é todas.
+  (locationFilter.value === '' || (item.location || '') === (locationFilter.value ?? '')) &&
   Object.entries(propertyFilters.value).every(([key, values]) => !values.length || values.includes(String(item.props[key] ?? ''))) &&
   (!stockFilter.value || (stockFilter.value === 'empty' ? item.qty === 0 : stockFilter.value === 'low' ? item.qty > 0 && item.qty <= 5 : item.qty > 0)) &&
   (!imageFilter.value || Boolean(item.image) === (imageFilter.value === 'yes'))
@@ -103,6 +106,26 @@ const estimate = computed(() => {
 const total = name => items.value.filter(item => !name || item.cat === name).reduce((sum, item) => sum + item.qty, 0)
 const color = name => `hsl(${[...name].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7)} 65% 48%)`
 const locked = computed(() => busy.value || queues.size > 0)
+const locations = computed(() => [...new Set(items.value.map(item => item.location).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true })))
+const selected = ref(new Set()), locationName = ref('')
+let lastPicked = null
+const allShownSelected = computed(() => shown.value.length > 0 && shown.value.every(item => selected.value.has(item.id)))
+function pick(item, shift) {
+  const on = !selected.value.has(item.id), list = shown.value
+  const from = list.findIndex(entry => entry.id === lastPicked), to = list.indexOf(item)
+  // Shift+clique marca (ou desmarca) tudo entre o último clicado e este.
+  for (const entry of shift && from >= 0 ? list.slice(Math.min(from, to), Math.max(from, to) + 1) : [item]) {
+    if (on) selected.value.add(entry.id); else selected.value.delete(entry.id)
+  }
+  lastPicked = item.id
+}
+function toggleShown() {
+  const on = !allShownSelected.value
+  for (const item of shown.value) { if (on) selected.value.add(item.id); else selected.value.delete(item.id) }
+}
+function setLocation(location) {
+  act('setLocation', { ids: [...selected.value], location }, () => { selected.value = new Set(); locationName.value = '' })
+}
 
 const pages = { home: HomePage, 'analog-simulation': AnalogSimulationPage, movements: MovementsPage, pcbs: PcbBomPage, settings: SettingsPage }
 const routeKeys = { '/': 'home', '/stock': 'stock', '/analog-simulation': 'analog-simulation', '/movements': 'movements', '/pcbs': 'pcbs', '/settings': 'settings' }
@@ -134,6 +157,8 @@ async function load() {
   items.value = data.items
   parts.value = data.parts || []
   canEdit.value = Boolean(data.can_edit)
+  const ids = new Set(data.items.map(item => item.id))
+  for (const id of selected.value) if (!ids.has(id)) selected.value.delete(id)
   Object.assign(auth, { enabled: Boolean(data.auth), user: data.user || null, notion: Boolean(data.notion_login) })
   if (current.value && !categories.value.some(c => c.name === current.value)) current.value = null
 }
@@ -218,6 +243,17 @@ async function submitMovement({ file, imageUrl, partPrice, priceOnly, ...payload
   } catch (error) { formError.value = error.message }
   finally { busy.value = false }
 }
+// A etiqueta abre logo o formulário; a Mouser/DigiKey completam depois o catálogo (descrição, categoria, datasheet,
+// preço atual) e a imagem. Sem chaves das APIs ou sem resultado, fica o que a etiqueta trouxe.
+async function useLabel(label) {
+  movement.value.open(current.value, label)
+  let found
+  try { found = await api.direct('lookupPart', { mpn: label.mpn }) } catch { return }
+  if (!found?.part) return
+  parts.value = [...parts.value.filter(part => part.mpn.toUpperCase() !== found.part.mpn.toUpperCase()), found.part]
+  await nextTick()
+  movement.value.fill(label, found.image)
+}
 async function submitCsv(rows) {
   if (locked.value || !rows.length) return
   busy.value = true
@@ -276,7 +312,7 @@ async function refresh() {
 }
 const guarded = {
   step: guard(stepItem), deleteItem: guard(deleteItem), deleteCategory: guard(deleteCategory), openCategory: guard(openCategory), savePart: guard(savePart),
-  openMovement: guard(() => movement.value.open(current.value)), scanLabel: guard(() => labelScanner.value.open()), editItem: guard(item => movement.value.edit(item)), importCsv: guard(() => csvImport.value.open()),
+  openMovement: guard(() => movement.value.open(current.value)), scanLabel: guard(() => labelScanner.value.open()), editItem: guard(item => movement.value.edit(item)), setLocation: guard(setLocation), importCsv: guard(() => csvImport.value.open()),
 }
 onMounted(async () => {
   window.addEventListener('online', refresh)
@@ -334,6 +370,7 @@ onUnmounted(() => {
         <button class="filter-toggle" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen">Filtros <span v-if="activeFilters" class="filter-count">{{ activeFilters }}</span><span aria-hidden="true">{{ filtersOpen ? '⌃' : '⌄' }}</span></button>
         <div class="quick-filters">
           <select v-model="stockFilter" aria-label="Filtrar stock"><option value="">Todo o stock</option><option value="available">Em stock</option><option value="low">Pouco stock (1–5)</option><option value="empty">Sem stock</option></select>
+          <select v-if="locations.length" v-model="locationFilter" aria-label="Filtrar localização"><option value="">Todas as localizações</option><option v-for="location in locations" :key="location" :value="location">{{ location }}</option><option :value="null">Sem localização</option></select>
           <select v-model="imageFilter" aria-label="Filtrar imagens"><option value="">Todas as imagens</option><option value="yes">Com imagem</option><option value="no">Sem imagem</option></select>
           <button class="clear-filters" aria-label="Limpar filtros" :disabled="!activeFilters && !query && !current" @click="clearFilters">✕ Limpar filtros</button>
         </div>
@@ -353,10 +390,19 @@ onUnmounted(() => {
       </div>
     </section>
     <div class="heading"><h1>{{ current || 'Tudo em stock' }}</h1><span class="sub">{{ shown.length }} {{ shown.length === 1 ? 'referência' : 'referências' }} · {{ units }} {{ units === 1 ? 'unidade' : 'unidades' }}<template v-if="estimate.value"> · <span class="estimate" :title="`Estimativa: preço do catálogo pelo P/N; sem P/N, mediana de peças da mesma categoria e tamanho.${estimate.missing ? ` ${estimate.missing} sem preço.` : ''}`">≈ {{ euros(estimate.value) }}</span></template></span></div>
+    <form v-if="canEdit && selected.size" class="selection-bar" aria-label="Componentes selecionados" @submit.prevent="guarded.setLocation(locationName)">
+      <strong>{{ selected.size }} {{ selected.size === 1 ? 'selecionado' : 'selecionados' }}</strong>
+      <input v-model="locationName" list="stock-locations" aria-label="Nova localização" placeholder="Caixa 1, Gaveta A…" maxlength="255" autocomplete="off">
+      <datalist id="stock-locations"><option v-for="location in locations" :key="location" :value="location" /></datalist>
+      <button class="primary" :disabled="locked || !locationName.trim()">Mover para aqui</button>
+      <button type="button" class="text-button" :disabled="locked" @click="guarded.setLocation('')">Tirar localização</button>
+      <button type="button" class="text-button" @click="selected = new Set()">Limpar seleção</button>
+    </form>
     <div class="mobile-sort">
       <label>Ordenar por
         <select v-model="sortChoice"><option value="">Ordem original</option><option v-for="column in columns" :key="column.key" :value="column.key">{{ column.label }}</option></select>
       </label>
+      <label v-if="canEdit && shown.length" class="select-shown"><input type="checkbox" :checked="allShownSelected" @change="toggleShown"> Todos</label>
       <button class="text-button" :disabled="!sortKey" :aria-label="sortDirection === 1 ? 'Ordem crescente, inverter' : 'Ordem decrescente, inverter'" @click="sortDirection = -sortDirection">{{ sortDirection === 1 ? '↑' : '↓' }}</button>
     </div>
     <div class="list" :aria-busy="loading">
@@ -365,13 +411,14 @@ onUnmounted(() => {
         <table class="stock-table">
           <caption class="sr-only">Stock de componentes</caption>
           <thead><tr>
+            <th v-if="canEdit" scope="col" class="select-cell"><input type="checkbox" :aria-label="allShownSelected ? 'Desmarcar todos os mostrados' : 'Selecionar todos os mostrados'" :checked="allShownSelected" :disabled="!shown.length" @change="toggleShown"></th>
             <th scope="col" class="image-column">Imagem</th>
             <th v-for="column in columns" :key="column.key" scope="col" :aria-sort="sortKey === column.key ? (sortDirection === 1 ? 'ascending' : 'descending') : 'none'">
               <button :aria-label="`Ordenar por ${column.label}`" @click="sortBy(column.key)">{{ column.label }} <span aria-hidden="true">{{ sortKey === column.key ? (sortDirection === 1 ? '↑' : '↓') : '↕' }}</span></button>
             </th>
             <th scope="col">Ações</th>
           </tr></thead>
-          <tbody><StockItem v-for="item in shown" :key="item.id" :item="item" :price="priceOf(item)" :property-keys="showCategory ? [] : propertyKeys" :show-category="showCategory" :busy="busy" :locked="locked" :can-edit="canEdit" @edit="guarded.editItem(item)" @step="delta => guarded.step(item, delta)" @delete="guarded.deleteItem(item)" /></tbody>
+          <tbody><StockItem v-for="item in shown" :key="item.id" :item="item" :price="priceOf(item)" :property-keys="showCategory ? [] : propertyKeys" :show-category="showCategory" :busy="busy" :locked="locked" :can-edit="canEdit" :selected="selected.has(item.id)" @select="shift => pick(item, shift)" @edit="guarded.editItem(item)" @step="delta => guarded.step(item, delta)" @delete="guarded.deleteItem(item)" /></tbody>
         </table>
         <div v-if="!shown.length" class="empty"><b>Nada encontrado.</b><br>Tenta outra pesquisa ou adiciona um item novo.</div>
       </template>
@@ -384,6 +431,6 @@ onUnmounted(() => {
   <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
   <LoginDialog ref="loginDialog" @login="user => { auth.user = user; toast(`Sessão iniciada: ${user.name}`) }" />
   <PartsCatalog v-if="parts.length" ref="partsCatalog" :parts="parts" :items="items" :categories="categories" :busy="busy" :error="partError" @save="guarded.savePart" @clear-error="partError = ''" />
-  <LabelScanner ref="labelScanner" action="Adicionar ao stock" @use="label => movement.open(current, label)" />
+  <LabelScanner ref="labelScanner" action="Adicionar ao stock" @use="useLabel" />
   <div id="toast" role="status" :class="{ on: toastMessage }">{{ toastMessage }}<button v-if="toastUndo" class="toast-undo" @click="toastUndo()">Desfazer</button></div>
 </template>

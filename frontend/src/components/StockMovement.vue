@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { isBrand, isPartNumber, partNumberOf } from '../stockText.js'
 import { euros, priceEstimator } from '../prices.js'
 const props = defineProps({ categories: Array, items: Array, parts: { type: Array, default: () => [] }, busy: Boolean, error: String })
@@ -12,13 +12,32 @@ const mode = ref('in')
 const qty = ref(1)
 const editing = ref(null), removeImage = ref(false), imageUrl = ref(''), partQuery = ref(''), unitPrice = ref(''), savedPrice = ref(null)
 const selected = computed(() => props.categories.find(c => c.name === category.value))
+// Categoria pesquisável: o texto escrito só muda a categoria quando corresponde a uma; ao sair do campo volta à atual.
+const categoryQuery = ref('')
+watch(category, name => { categoryQuery.value = name })
+function pickCategory() {
+  const match = props.categories.find(c => c.name.toLowerCase() === categoryQuery.value.trim().toLowerCase())
+  if (!match || match.name === category.value) return
+  category.value = match.name
+  resetFields()
+}
+// O campo de ficheiro não é reativo nem tem botão para limpar: chosenFile acompanha-o para a pré-visualização.
+const chosenFile = ref(null), filePreview = ref('')
+watch(chosenFile, file => { if (filePreview.value) URL.revokeObjectURL(filePreview.value); filePreview.value = file ? URL.createObjectURL(file) : '' })
+onUnmounted(() => { if (filePreview.value) URL.revokeObjectURL(filePreview.value) })
+const newImage = computed(() => filePreview.value || imageUrl.value.trim())
+function clearImage() {
+  chosenFile.value = null
+  imageUrl.value = ''
+  if (fileInput.value) fileInput.value.value = ''
+}
 const hint = computed(() => mode.value === 'in'
   ? 'Se já existir um item com as mesmas propriedades, a quantidade é somada.'
   : 'Preenche as propriedades do item de onde queres retirar.')
 function resetFields() {
   values.value = {}
-  imageUrl.value = ''
-  if (fileInput.value) fileInput.value.value = ''
+  categoryQuery.value = category.value
+  clearImage()
   emit('clear-error')
 }
 // label vem de uma etiqueta lida (LabelScanner): preenche o P/N, o fabricante e a quantidade.
@@ -52,6 +71,16 @@ function edit(item) {
   values.value = { ...item.props }
   dialog.value.showModal()
 }
+// Resultado da Mouser/DigiKey para a etiqueta lida, já no catálogo: preenche de novo se o formulário continua nessa
+// peça e propõe a imagem, exceto se o item em stock já tiver uma.
+function fill(label, image) {
+  const mpn = label.mpn.toUpperCase()
+  if (!dialog.value.open || editing.value || partQuery.value.trim().toUpperCase() !== mpn) return
+  pickPart(label)
+  const stocked = props.items.find(item => partNumberOf(item).toUpperCase() === mpn)
+  if (image && selected.value?.image && !stocked?.image && !newImage.value) imageUrl.value = image
+}
+const catalogPart = computed(() => partNumber.value && props.parts.find(p => p.mpn.toUpperCase() === partNumber.value.toUpperCase()))
 function suggestions(prop) {
   return [...new Set(props.items.filter(it => it.cat === category.value).map(it => it.props[prop]).filter(Boolean))]
 }
@@ -99,6 +128,7 @@ function takeImage(event) {
   const transfer = new DataTransfer()
   transfer.items.add(file)
   fileInput.value.files = transfer.files
+  chosenFile.value = file
 }
 function submit() {
   const payload = {
@@ -121,7 +151,7 @@ function submit() {
   }
   emit('submit', payload)
 }
-defineExpose({ open, edit, close: () => dialog.value.close() })
+defineExpose({ open, edit, fill, close: () => dialog.value.close() })
 </script>
 
 <template>
@@ -135,17 +165,28 @@ defineExpose({ open, edit, close: () => dialog.value.close() })
         <input v-model="partQuery" list="catalog-parts" placeholder="P/N ou descrição" autocomplete="off" @input="pickPart()">
         <datalist id="catalog-parts"><option v-for="part in parts" :key="part.mpn" :value="part.mpn">{{ part.manufacturer }} · {{ part.description }}</option></datalist>
       </label>
-      <label>Categoria <select v-model="category" :disabled="!!editing" required @change="resetFields"><option v-for="c in categories" :key="c.name">{{ c.name }}</option></select></label>
+      <label>Categoria
+        <input v-model="categoryQuery" list="movement-categories" placeholder="Pesquisar categoria" :disabled="!!editing" required autocomplete="off" @focus="$event.target.select()" @input="pickCategory" @change="categoryQuery = category">
+        <datalist id="movement-categories"><option v-for="c in categories" :key="c.name" :value="c.name"></option></datalist>
+      </label>
       <div class="fields">
         <label v-for="(p, i) in selected?.props || []" :key="category + p">{{ p }}
           <input v-model="values[p]" :list="isPartNumber(p) && !editing && parts.length ? 'catalog-parts' : `suggestion-${i}`" required autocomplete="off" @input="isPartNumber(p) && fillFromPartNumber(values[p])">
           <datalist :id="`suggestion-${i}`"><option v-for="value in suggestions(p)" :key="value" :value="value"></option></datalist>
         </label>
       </div>
+      <p v-if="catalogPart?.description || catalogPart?.datasheet" class="hint">
+        {{ catalogPart.description }}<template v-if="catalogPart.price != null"> · {{ euros(catalogPart.price) }}</template>
+        <a v-if="catalogPart.datasheet" :href="catalogPart.datasheet" target="_blank" rel="noopener">Datasheet</a>
+      </p>
       <img v-if="editing?.image && !removeImage" :src="editing.image" class="item-image" alt="Imagem atual">
       <label v-if="editing?.image" class="check"><input v-model="removeImage" type="checkbox"> Remover imagem atual</label>
-      <label v-show="selected?.image">{{ editing ? 'Substituir imagem' : 'Imagem' }} <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp"><span class="hint">Ou cola (Ctrl+V) ou arrasta uma imagem para aqui.</span></label>
+      <label v-show="selected?.image">{{ editing ? 'Substituir imagem' : 'Imagem' }} <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" @change="chosenFile = fileInput.files[0] || null"><span class="hint">Ou cola (Ctrl+V) ou arrasta uma imagem para aqui.</span></label>
       <label v-show="selected?.image">Link da imagem <input v-model="imageUrl" type="url" placeholder="https://…"></label>
+      <div v-if="selected?.image && newImage" class="new-image">
+        <img :src="newImage" class="item-image" alt="Imagem escolhida">
+        <button type="button" class="ghost" @click="clearImage">Remover imagem</button>
+      </div>
       <label v-if="editing">Preço unitário (€)
         <input v-model="unitPrice" type="number" min="0" step="any" :disabled="!canPrice" :placeholder="estimatedPrice?.estimated ? `≈ ${euros(estimatedPrice.price)} (estimativa)` : ''">
         <span class="hint">{{ priceHint }}</span>

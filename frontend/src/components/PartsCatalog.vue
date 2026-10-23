@@ -56,7 +56,7 @@ defineExpose({ open: () => { query.value = ''; draft.value = null; dialog.value.
           <tr v-for="part in shown" :key="part.mpn" :title="part.source" class="catalog-row" tabindex="0" @click="openForm(part)" @keydown.enter="openForm(part)">
             <td>{{ part.mpn }}</td>
             <td>{{ part.manufacturer || '—' }}</td>
-            <td class="catalog-desc">{{ part.description || '—' }}</td>
+            <td class="catalog-desc">{{ part.description || '—' }} <a v-if="part.datasheet" :href="part.datasheet" target="_blank" rel="noopener" @click.stop>Datasheet</a></td>
             <td>{{ part.category || '—' }}</td>
             <td class="price-cell">{{ part.price == null ? '—' : euros(part.price) }}</td>
             <td>{{ stocked.has(part.mpn.toUpperCase()) ? 'Sim' : '' }}</td>

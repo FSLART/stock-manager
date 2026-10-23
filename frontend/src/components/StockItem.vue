@@ -3,8 +3,8 @@ import { computed, ref, watch } from 'vue'
 import { defaultImage } from '../defaultImages.js'
 import { componentValue, describe } from '../stockText.js'
 import { euros } from '../prices.js'
-const props = defineProps({ item: { type: Object, required: true }, price: { type: Object, default: null }, propertyKeys: { type: Array, default: () => [] }, showCategory: Boolean, busy: Boolean, canEdit: Boolean, locked: Boolean })
-defineEmits(['step', 'delete', 'edit'])
+const props = defineProps({ item: { type: Object, required: true }, price: { type: Object, default: null }, propertyKeys: { type: Array, default: () => [] }, showCategory: Boolean, busy: Boolean, canEdit: Boolean, locked: Boolean, selected: Boolean })
+defineEmits(['step', 'delete', 'edit', 'select'])
 const imageFailed = ref(false), previewing = ref(false)
 watch(() => props.item.image, () => { imageFailed.value = false })
 const usesDefaultImage = computed(() => !props.item.image || imageFailed.value)
@@ -15,7 +15,8 @@ const color = computed(() => `hsl(${[...props.item.cat].reduce((a, c) => (a * 31
 </script>
 
 <template>
-  <tr class="row" :class="{ low: item.qty <= 5 }">
+  <tr class="row" :class="{ low: item.qty <= 5, selected }">
+    <td v-if="canEdit" class="select-cell"><input type="checkbox" :aria-label="`Selecionar ${mainValue}`" :checked="selected" @click="$emit('select', $event.shiftKey)"></td>
     <td class="image-cell">
     <img class="item-image" :class="{ 'default-image': usesDefaultImage }" :src="imageSource" :alt="`${usesDefaultImage ? 'Ícone padrão' : 'Imagem'} de ${item.cat}`" :title="usesDefaultImage ? `Ícone padrão de ${item.cat}` : item.cat" @error="imageFailed = true" @mouseenter="previewing = !usesDefaultImage" @mouseleave="previewing = false">
     <Teleport to="body"><img v-if="previewing" class="image-preview" :src="item.image" alt=""></Teleport>
@@ -25,10 +26,11 @@ const color = computed(() => `hsl(${[...props.item.cat].reduce((a, c) => (a * 31
     <td class="component-cell" :class="{ 'card-only': !showCategory }">
       <span class="val">{{ mainValue }}</span><span v-if="item.qty <= 5" class="tag">{{ item.qty === 0 ? 'sem stock' : 'pouco stock' }}</span>
       <!-- Só no telemóvel, onde a linha vira cartão e as colunas desaparecem. -->
-      <span class="card-sub">{{ item.cat }}<template v-if="description"> · {{ description }}</template></span>
+      <span class="card-sub">{{ item.cat }}<template v-if="description"> · {{ description }}</template><template v-if="item.location"> · {{ item.location }}</template></span>
     </td>
     <td v-if="showCategory" class="desc-cell">{{ description || '—' }}</td>
     <td v-for="key in propertyKeys" :key="key" class="chips property-cell">{{ item.props[key] || '—' }}</td>
+    <td class="location-cell">{{ item.location || '—' }}</td>
     <td class="price-cell" :class="{ estimated: price?.estimated }" :title="price?.estimated ? 'Estimativa: mediana das peças do catálogo da mesma categoria e tamanho' : price ? 'Preço do catálogo pelo P/N' : 'Sem preço no catálogo'">{{ price ? `${price.estimated ? '≈ ' : ''}${euros(price.price)}` : '—' }}</td>
     <td class="qty-cell">
     <div class="qty">

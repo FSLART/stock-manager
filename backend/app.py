@@ -2,9 +2,12 @@
 # json transforma, por exemplo, {"valor": "10"} em texto para guardar
 # e faz o caminho inverso quando os dados sao lidos.
 import base64
+import csv
 import ipaddress
 import json
 import re
+import subprocess
+import tempfile
 from io import BytesIO
 # Le configuracoes do sistema, como o caminho personalizado do Excel,
 # e fornece funcoes para substituir ficheiros temporarios com seguranca.
@@ -12,11 +15,13 @@ import os
 # SQLite e a base de dados local onde ficam categorias, componentes e quantidades.
 import socket
 import sqlite3
+import sys
 # Permite executar o verificador do Excel sem bloquear os pedidos web.
 import threading
 # Faz a thread esperar alguns segundos entre duas verificacoes do Excel.
 import time
 # Permite criar funcoes que funcionam com o bloco "with".
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 # Representa caminhos de ficheiros de forma independente do sistema operativo.
 from datetime import datetime, timedelta, timezone
@@ -54,6 +59,9 @@ app.json.sort_keys = False
 # a partir da qual o comando para iniciar o servidor foi executado.
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR.parent / ".env", override=False, interpolate=False)
+# carts.py esta ao lado: o import funciona com "flask --app backend/app.py" e com "gunicorn backend.app:app".
+sys.path.insert(0, str(BASE_DIR))
+from carts import USD_TO_EUR, catalog_category, digikey_props, stock_fields  # noqa: E402
 # SQLite local por defeito; sincronizacao externa apenas por opcao explicita.
 STORAGE_MODE = os.getenv("STORAGE_MODE", "local").strip().lower()
 if STORAGE_MODE not in {"local", "excel", "google"}:
@@ -136,6 +144,7 @@ def init_mysql_schema(connection):
             key_hash BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(`key`, 256))) STORED,
             qty BIGINT NOT NULL DEFAULT 0,
             image LONGTEXT NOT NULL,
+            location VARCHAR(255) NOT NULL DEFAULT '',
             UNIQUE (cat_id, key_hash),
             FOREIGN KEY (cat_id) REFERENCES categories(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
@@ -172,7 +181,8 @@ def init_mysql_schema(connection):
             category VARCHAR(255) NOT NULL DEFAULT '',
             props LONGTEXT NOT NULL,
             price DOUBLE NULL,
-            source VARCHAR(255) NOT NULL DEFAULT ''
+            source VARCHAR(255) NOT NULL DEFAULT '',
+            datasheet VARCHAR(1000) NOT NULL DEFAULT ''
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
     ):
         if mariadb:
@@ -181,6 +191,10 @@ def init_mysql_schema(connection):
     # Bases criadas antes da foto do Notion: acrescenta a coluna uma vez.
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'people' AND COLUMN_NAME = 'avatar'").fetchone():
         connection.execute("ALTER TABLE people ADD COLUMN avatar VARCHAR(1000) NOT NULL DEFAULT ''")
+    if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'items' AND COLUMN_NAME = 'location'").fetchone():
+        connection.execute("ALTER TABLE items ADD COLUMN location VARCHAR(255) NOT NULL DEFAULT ''")
+    if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'parts' AND COLUMN_NAME = 'datasheet'").fetchone():
+        connection.execute("ALTER TABLE parts ADD COLUMN datasheet VARCHAR(1000) NOT NULL DEFAULT ''")
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", BASE_DIR / "uploads"))
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
@@ -384,6 +398,7 @@ def init_sqlite_schema(connection):
             key TEXT NOT NULL,
             qty INTEGER NOT NULL DEFAULT 0,
             image TEXT NOT NULL DEFAULT '',
+            location TEXT NOT NULL DEFAULT '',
             UNIQUE (cat_id, key)
         );
         CREATE TABLE IF NOT EXISTS meta (
@@ -419,7 +434,8 @@ def init_sqlite_schema(connection):
             category TEXT NOT NULL DEFAULT '',
             props TEXT NOT NULL DEFAULT '{}',
             price REAL,
-            source TEXT NOT NULL DEFAULT ''
+            source TEXT NOT NULL DEFAULT '',
+            datasheet TEXT NOT NULL DEFAULT ''
         );
         """
     )
@@ -435,8 +451,12 @@ def init_sqlite_schema(connection):
     }
     if "image" not in item_columns:
         connection.execute("ALTER TABLE items ADD COLUMN image TEXT NOT NULL DEFAULT ''")
+    if "location" not in item_columns:
+        connection.execute("ALTER TABLE items ADD COLUMN location TEXT NOT NULL DEFAULT ''")
     if "avatar" not in {row["name"] for row in connection.execute("PRAGMA table_info(people)")}:
         connection.execute("ALTER TABLE people ADD COLUMN avatar TEXT NOT NULL DEFAULT ''")
+    if "datasheet" not in {row["name"] for row in connection.execute("PRAGMA table_info(parts)")}:
+        connection.execute("ALTER TABLE parts ADD COLUMN datasheet TEXT NOT NULL DEFAULT ''")
 
 
 def seed_categories(connection):
@@ -476,7 +496,7 @@ def db_items():
     with db_connection() as connection:
         rows = connection.execute(
             """
-            SELECT items.id, categories.name AS category, items.props, items.qty, items.image
+            SELECT items.id, categories.name AS category, items.props, items.qty, items.image, items.location
             FROM items
             JOIN categories ON categories.id = items.cat_id
             ORDER BY items.id
@@ -491,6 +511,7 @@ def db_items():
             "props": json.loads(row["props"]),
             "qty": row["qty"],
             "image": image_path(row["image"]),
+            "location": row["location"],
         }
         for row in rows
     ]
@@ -528,9 +549,9 @@ def save_parts(parts):
         for part in parts:
             connection.execute("DELETE FROM parts WHERE mpn = ?", (part["mpn"],))
             connection.execute(
-                "INSERT INTO parts (mpn, manufacturer, description, category, props, price, source) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO parts (mpn, manufacturer, description, category, props, price, source, datasheet) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (part["mpn"], part.get("manufacturer", ""), part.get("description", ""), part.get("category", ""),
-                 json.dumps(part.get("props", {}), ensure_ascii=False), part.get("price"), part.get("source", "")),
+                 json.dumps(part.get("props", {}), ensure_ascii=False), part.get("price"), part.get("source", ""), part.get("datasheet", "")),
             )
 
 
@@ -591,6 +612,8 @@ def google_items():
                 "props": props,
                 "qty": int(row[positions["quantidade"]] or 0),
                 "image": image,
+                # shortcut: Sheets has no location column, locations are only kept in local mode.
+                "location": "",
             })
     if not found_sheet:
         return None
@@ -620,13 +643,13 @@ def sync_google_to_db():
                 categories[key] = cursor.lastrowid
         connection.execute("DELETE FROM items")
         connection.executemany(
-            "INSERT INTO items (id, cat_id, props, `key`, qty, image) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO items (id, cat_id, props, `key`, qty, image, location) VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     item["id"], categories[item["cat"].casefold()],
                     json.dumps(item["props"], ensure_ascii=False),
                     "|".join(norm(value) for value in item["props"].values()),
-                    item["qty"], item.get("image", ""),
+                    item["qty"], item.get("image", ""), item.get("location", ""),
                 )
                 for item in sheet_items
             ],
@@ -896,14 +919,14 @@ def sync_excel_to_db():
             # A lista Excel e considerada completa: primeiro removemos a versao
             # anterior e depois inserimos todos os itens novamente.
             connection.executemany(
-                "INSERT INTO items (id, cat_id, props, `key`, qty, image) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO items (id, cat_id, props, `key`, qty, image, location) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 [
                     (
                         item["id"],
                         categories[item["cat"].casefold()],
                         json.dumps(item["props"], ensure_ascii=False),
                         "|".join(norm(value) for value in item["props"].values()),
-                        item["qty"], item.get("image", ""),
+                        item["qty"], item.get("image", ""), item.get("location", ""),
                     )
                     for item in excel_items
                 ],
@@ -985,14 +1008,14 @@ def save_items(items, movements=()):
             # Reescreve os itens para que apagamentos e alteracoes tambem sejam
             # refletidos na base, em vez de apenas adicionar novos registos.
             connection.executemany(
-                "INSERT INTO items (id, cat_id, props, `key`, qty, image) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO items (id, cat_id, props, `key`, qty, image, location) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 [
                     (
                         item["id"],
                         categories[item["cat"]],
                         json.dumps(item["props"], ensure_ascii=False),
                         "|".join(norm(value) for value in item["props"].values()),
-                        item["qty"], item.get("image", ""),
+                        item["qty"], item.get("image", ""), item.get("location", ""),
                     )
                     for item in items
                 ],
@@ -1375,6 +1398,31 @@ def editar_item(item_id):
         return erro(str(exc), 500)
 
 
+@app.post("/api/items/location")
+def mudar_localizacao():
+    # Guarda a mesma localizacao (caixa, gaveta...) em varios componentes de uma vez; vazia limpa.
+    if STORAGE_MODE != "local":
+        return erro("A edição está disponível no modo local")
+    data = request.get_json(silent=True) or {}
+    ids, location = data.get("ids"), data.get("location", "")
+    if not isinstance(ids, list) or not ids or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids) or not isinstance(location, str):
+        return erro("Escolhe os componentes e uma localização")
+    location = location.strip()
+    if len(location) > 255:
+        return erro("Localização demasiado longa")
+    try:
+        init_db()
+        with EXCEL_LOCK, db_connection() as connection:
+            placeholders = ",".join("?" for _ in ids)
+            changed = connection.execute(f"SELECT COUNT(*) AS n FROM items WHERE id IN ({placeholders})", ids).fetchone()["n"]
+            connection.execute(f"UPDATE items SET location = ? WHERE id IN ({placeholders})", (location, *ids))
+        if not changed:
+            return erro("Item não encontrado", 404)
+        return jsonify(msg=f"{changed} componente(s) {'em ' + location if location else 'sem localização'}")
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
 @app.post("/api/parts")
 def guardar_peca():
     # Acrescenta ou corrige uma peca do catalogo. So os campos enviados mudam; o preco pode ficar vazio.
@@ -1404,6 +1452,140 @@ def guardar_peca():
         return jsonify(msg="Peça guardada" if existing else "Peça adicionada ao catálogo")
     except Exception as exc:
         return erro(str(exc), 500)
+
+
+# --- Dados da peca pelo P/N (APIs de pesquisa gratuitas da Mouser e da DigiKey) ------------------------------
+MOUSER_API_KEY = os.getenv("MOUSER_API_KEY", "").strip()
+DIGIKEY_CLIENT_ID = os.getenv("DIGIKEY_CLIENT_ID", "").strip()
+DIGIKEY_CLIENT_SECRET = os.getenv("DIGIKEY_CLIENT_SECRET", "").strip()
+DIGIKEY_TOKEN = {"value": "", "expires": 0.0}
+
+
+def supplier_json(url, body=None, headers=None, form=None):
+    data = urlencode(form).encode() if form else json.dumps(body).encode() if body is not None else None
+    content_type = "application/x-www-form-urlencoded" if form else "application/json"
+    supplier_request = urllib.request.Request(url, data=data, headers={"Content-Type": content_type, "Accept": "application/json", **(headers or {})})
+    with urllib.request.urlopen(supplier_request, timeout=10) as response:
+        return json.load(response)
+
+
+def web_link(url):
+    # So links http(s): o datasheet vira um href e a imagem e descarregada pelo servidor.
+    url = str(url or "").strip()
+    url = "https:" + url if url.startswith("//") else url
+    return url if urlparse(url).scheme in {"http", "https"} else ""
+
+
+def price_number(text):
+    # "0,094 €", "1.234,56 €" ou "$0.10": o ultimo separador e o das casas decimais.
+    digits = re.sub(r"[^\d.,]", "", str(text))
+    if not re.search(r"\d", digits):
+        return None
+    cut = max(digits.rfind(","), digits.rfind("."))
+    return float(re.sub(r"\D", "", digits[:cut]) + "." + digits[cut + 1:]) if cut >= 0 else float(digits)
+
+
+def mouser_lookup(mpn):
+    if not MOUSER_API_KEY:
+        return None
+    data = supplier_json(f"https://api.mouser.com/api/v1/search/partnumber?{urlencode({'apiKey': MOUSER_API_KEY})}",
+                         {"SearchByPartRequest": {"mouserPartNumber": mpn, "partSearchOptions": "Exact"}})
+    if data.get("Errors"):
+        raise ValueError(data["Errors"][0].get("Message") or "erro da API")
+    found = next((part for part in (data.get("SearchResults") or {}).get("Parts") or []
+                  if str(part.get("ManufacturerPartNumber", "")).casefold() == mpn.casefold()), None)
+    if not found:
+        return None
+    first_break = (found.get("PriceBreaks") or [{}])[0]
+    price = price_number(first_break.get("Price", ""))
+    if price is not None and first_break.get("Currency") != "EUR":
+        price = round(price * USD_TO_EUR, 4) if first_break.get("Currency") == "USD" else None
+    # A Mouser devolve HTML (anti-bot) a quem descarrega as imagens fora do browser, por isso a imagem vem da DigiKey.
+    return {"supplier": "Mouser", "mpn": found["ManufacturerPartNumber"], "manufacturer": found.get("Manufacturer") or "",
+            "description": found.get("Description") or "", "category": found.get("Category") or "", "price": price,
+            "datasheet": web_link(found.get("DataSheetUrl")), "image": "", "parameters": {}}
+
+
+def digikey_token():
+    if time.time() >= DIGIKEY_TOKEN["expires"]:
+        data = supplier_json("https://api.digikey.com/v1/oauth2/token", form={
+            "client_id": DIGIKEY_CLIENT_ID, "client_secret": DIGIKEY_CLIENT_SECRET, "grant_type": "client_credentials"})
+        DIGIKEY_TOKEN.update(value=data["access_token"], expires=time.time() + int(data.get("expires_in", 600)) - 60)
+    return DIGIKEY_TOKEN["value"]
+
+
+def digikey_lookup(mpn):
+    if not (DIGIKEY_CLIENT_ID and DIGIKEY_CLIENT_SECRET):
+        return None
+    data = supplier_json("https://api.digikey.com/products/v4/search/keyword", {"Keywords": mpn, "Limit": 10}, {
+        "Authorization": f"Bearer {digikey_token()}", "X-DIGIKEY-Client-Id": DIGIKEY_CLIENT_ID,
+        "X-DIGIKEY-Locale-Site": "PT", "X-DIGIKEY-Locale-Language": "en", "X-DIGIKEY-Locale-Currency": "EUR"})
+    found = next((part for part in [*(data.get("ExactMatches") or []), *(data.get("Products") or [])]
+                  if str(part.get("ManufacturerProductNumber", "")).casefold() == mpn.casefold()), None)
+    if not found:
+        return None
+    # A categoria vem em arvore ("Capacitors" > "Ceramic Capacitors"): guarda o caminho ate a folha.
+    path, category = [], found.get("Category") or {}
+    while category:
+        path.append(category.get("Name") or "")
+        category = (category.get("ChildCategories") or [None])[0]
+    return {"supplier": "DigiKey", "mpn": found["ManufacturerProductNumber"], "manufacturer": (found.get("Manufacturer") or {}).get("Name") or "",
+            "description": (found.get("Description") or {}).get("ProductDescription") or "",
+            "category": " > ".join(path), "price": found.get("UnitPrice") or None,
+            "datasheet": web_link(found.get("DatasheetUrl")), "image": web_link(found.get("PhotoUrl")),
+            "parameters": {parameter.get("ParameterText"): str(parameter.get("ValueText") or "") for parameter in found.get("Parameters") or []}}
+
+
+@app.get("/api/parts/lookup")
+def procurar_peca():
+    # Depois de ler uma etiqueta: descricao, categoria, datasheet, imagem e preco atual pelo P/N, guardados no catalogo.
+    # E GET para o bloqueio de escrita nao ficar preso durante os pedidos as APIs; por isso o login e verificado aqui.
+    if current_person() is None:
+        return jsonify(error="Inicia sessão para procurar a peça", login=True), 401
+    mpn = request.args.get("mpn", "").strip()
+    if not mpn or mpn == "-" or len(mpn) > 100:
+        return erro("Indica o P/N da peça")
+    if not (MOUSER_API_KEY or DIGIKEY_CLIENT_ID):
+        return erro("Configura MOUSER_API_KEY ou DIGIKEY_CLIENT_ID no servidor", 501)
+    found, failures = [], []
+    for lookup in (mouser_lookup, digikey_lookup):
+        try:
+            result = lookup(mpn)
+        except (OSError, ValueError, KeyError) as exc:
+            failures.append(f"{lookup.__name__.split('_')[0].title()}: {exc}")
+            continue
+        if result:
+            found.append(result)
+    if not found:
+        return erro("; ".join(failures), 502) if failures else erro("P/N não encontrado na Mouser nem na DigiKey", 404)
+    # Cada campo vem do primeiro fornecedor que o tem (a Mouser primeiro).
+    first = lambda field: next((result[field] for result in found if result[field]), "")
+    priced = next((result for result in found if result["price"]), None)
+    text = f"{first('description')} {' '.join(result['category'] for result in found)}"
+    category, props = stock_fields(found[0]["mpn"], text)
+    category = category or catalog_category(text)
+    # Os parametros da DigiKey preenchem as propriedades da categoria; o que falta fica do texto da descricao.
+    digikey = next((result for result in found if result["parameters"]), None)
+    if digikey:
+        props.update(digikey_props(category, digikey["parameters"], digikey["category"]))
+    part = {"mpn": found[0]["mpn"], "manufacturer": first("manufacturer"), "description": first("description"),
+            "category": category, "props": props, "datasheet": first("datasheet"),
+            "price": round(float(priced["price"]), 4) if priced else None,
+            "source": f"{priced['supplier']} API {datetime.now().date().isoformat()}" if priced else ""}
+    try:
+        with EXCEL_LOCK:
+            existing = next((current for current in db_parts() if current["mpn"].casefold() == mpn.casefold()), None)
+            if existing:
+                # O que ja esta no catalogo (carrinhos, edicoes a mao) fica; da API vem o preco atual e o que faltava.
+                part.update({field: existing[field] for field in ("mpn", "manufacturer", "description", "category") if existing[field]})
+                part["props"] = {**part["props"], **{key: value for key, value in existing["props"].items() if value and value != "-"}}
+                part["datasheet"] = part["datasheet"] or existing["datasheet"]
+                if part["price"] is None:
+                    part["price"], part["source"] = existing["price"], existing["source"]
+            save_parts([part])
+    except Exception as exc:
+        return erro(str(exc), 500)
+    return jsonify(part=part, image=first("image"))
 
 
 @app.patch("/api/categories/<path:original_name>")
@@ -1507,6 +1689,123 @@ def apagar_categoria(name):
         return jsonify(msg=msg)
     except Exception as exc:
         return erro(str(exc), 500)
+
+
+# --- Leitura do texto de etiquetas (OCR) -------------------------------------------------------------
+# Etiquetas sem codigo 2D com o P/N (Comkey, fabricantes chineses...) so se leem pelo texto. O Tesseract corre
+# no servidor (apt install tesseract-ocr) e o P/N lido, quase sempre com erros, e comparado com o catalogo.
+OCR_CONFUSABLES = str.maketrans("OIL", "011")
+
+
+def ocr_key(text):
+    # Chave tolerante a confusoes tipicas do OCR (O/0, I/L/1) e a pontuacao.
+    return re.sub(r"[^A-Z0-9]", "", str(text).upper()).translate(OCR_CONFUSABLES)
+
+
+def edit_distance_at_most_one(a, b):
+    if abs(len(a) - len(b)) > 1:
+        return False
+    i = j = edits = 0
+    while i < len(a) and j < len(b):
+        if a[i] == b[j]:
+            i += 1
+            j += 1
+            continue
+        edits += 1
+        if edits > 1:
+            return False
+        if len(a) == len(b):
+            i += 1
+            j += 1
+        elif len(a) > len(b):
+            i += 1
+        else:
+            j += 1
+    return edits + (len(a) - i) + (len(b) - j) <= 1
+
+
+def match_label_text(text, parts):
+    # Procura no texto lido um P/N do catalogo (com tolerancia a erros e a leituras parciais) e a quantidade.
+    tokens = [token for token in re.split(r"[\s:;,|]+", text) if token]
+    joined = (tokens[i] + tokens[i + 1] if i + 1 < len(tokens) else "" for i in range(len(tokens)))
+    candidates = {ocr_key(candidate) for candidate in [*tokens, *joined]}
+    candidates = [c for c in candidates if len(c) >= 8 and re.search(r"\d", c) and re.search(r"[A-Z]", c)]
+    best = None
+    for part in parts:
+        key = ocr_key(re.sub(r"\s*\(.*\)\s*$", "", part["mpn"]))
+        if len(key) < 6:
+            continue
+        for candidate in candidates:
+            exact = candidate == key
+            if exact or candidate in key or key in candidate or edit_distance_at_most_one(candidate, key):
+                rank = (0 if exact else 1, -len(candidate))
+                if best is None or rank < best[0]:
+                    best = (rank, part)
+    qty_match = re.search(r"(\d{1,6})\s*P[a-z]s\b", text, re.I) or re.search(r"qty\W{0,4}(\d{1,6})", text, re.I)
+    if best:
+        label = {"mpn": best[1]["mpn"], "manufacturer": best[1]["manufacturer"] or ""}
+    else:
+        # Sem catalogo: "FABRICANTE:P/N" como nas etiquetas Comkey.
+        found = re.search(r"\b([A-Za-z][A-Za-z.&]{2,14}):\s*([A-Za-z0-9][A-Za-z0-9\-/.+]{5,})", text)
+        if not found or not re.search(r"\d", found.group(2)) or not re.search(r"[A-Za-z]", found.group(2)):
+            return None
+        label = {"mpn": found.group(2).upper(), "manufacturer": found.group(1).title()}
+    if qty_match:
+        label["qty"] = int(qty_match.group(1))
+    return {**label, "ocr": True}
+
+
+def ocr_image_text(image_bytes):
+    # 1) Le a imagem nas 4 orientacoes e escolhe as 2 que o Tesseract le com mais confianca;
+    # 2) nessas, repete com outros modos de segmentacao (6, 4, 12), que apanham o P/N quando o modo
+    #    de texto solto falha (codigos de barras ao lado, imagens desfocadas). Tudo em paralelo.
+    image = ImageOps.autocontrast(ImageOps.exif_transpose(Image.open(BytesIO(image_bytes))).convert("L"))
+    scale = 1800 / max(image.size)
+    if scale > 1:
+        image = image.resize((round(image.width * scale), round(image.height * scale)), Image.Resampling.LANCZOS)
+    # Uma thread por processo: correm varios em paralelo e o Tesseract ja usa OpenMP por si.
+    env = {**os.environ, "OMP_THREAD_LIMIT": "1"}
+
+    def tesseract(rotation, psm, output):
+        with tempfile.NamedTemporaryFile(suffix=".png") as handle:
+            image.rotate(rotation, expand=True).save(handle.name)
+            return subprocess.run(["tesseract", handle.name, "-", "--psm", str(psm), "-l", "eng", *output],
+                                  capture_output=True, text=True, timeout=25, env=env).stdout
+
+    def sparse(rotation):
+        words = []
+        for row in csv.DictReader(tesseract(rotation, 11, ["tsv"]).splitlines(), delimiter="\t", quoting=csv.QUOTE_NONE):
+            word = (row.get("text") or "").strip()
+            try:
+                confidence = float(row.get("conf", -1))
+            except ValueError:
+                confidence = -1
+            if word and confidence >= 0:
+                words.append((word, confidence))
+        score = sum(c * len(w) for w, c in words if c > 60 and len(w) >= 3 and re.search(r"[A-Za-z0-9]", w))
+        return score, rotation, " ".join(w for w, c in words if c > 30)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        first = sorted(pool.map(sparse, (0, 90, 180, 270)), key=lambda result: -result[0])[:2]
+        more = pool.map(lambda job: tesseract(job[0], job[1], []), [(rotation, psm) for _, rotation, _ in first for psm in (6, 4, 12)])
+        return "\n".join([text for _, _, text in first] + list(more))
+
+
+@app.post("/api/ocr")
+def ler_etiqueta_texto():
+    # Recebe uma fotografia da etiqueta e devolve o P/N reconhecido (ou null) e o texto lido.
+    image = request.files.get("image")
+    if image is None:
+        return erro("Envia uma imagem")
+    try:
+        text = ocr_image_text(image.read())
+    except (UnidentifiedImageError, OSError):
+        return erro("O ficheiro enviado não é uma imagem válida")
+    except FileNotFoundError:
+        return erro("O reconhecimento de texto não está instalado no servidor", 501)
+    except subprocess.TimeoutExpired:
+        return erro("A leitura do texto demorou demasiado. Tenta com uma imagem mais pequena.", 504)
+    return jsonify(label=match_label_text(text, db_parts()), text=text)
 
 
 @app.get("/api/movements")

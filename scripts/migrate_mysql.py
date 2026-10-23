@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT))
 
 TABLE_COLUMNS = {
     'categories': ('id', 'name', 'props', 'image_enabled'),
-    'items': ('id', 'cat_id', 'props', 'key', 'qty', 'image'),
+    'items': ('id', 'cat_id', 'props', 'key', 'qty', 'image', 'location'),
     'meta': ('key', 'value'),
 }
 
@@ -33,7 +33,7 @@ def migrate(source):
                     expressions.append(f'`{column}`')
                 elif column == 'image_enabled':
                     expressions.append('0')
-                elif column == 'image':
+                elif column in ('image', 'location'):
                     expressions.append("''")
                 else:
                     raise ValueError(f'Source is missing {table}.{column}')

@@ -5,7 +5,7 @@ import { parseLabel, sharpen } from '../label.js'
 defineProps({ action: String })
 const emit = defineEmits(['use'])
 const dialog = ref(null), video = ref(null), overlay = ref(null)
-const label = ref(null), status = ref(''), camera = ref(false), paused = ref(false), reading = ref(false), photo = ref('')
+const label = ref(null), status = ref(''), camera = ref(false), paused = ref(false), reading = ref(false), photo = ref(''), focus = ref(null)
 const FORMATS = ['DataMatrix', 'PDF417']
 let stream = null, liveTimer = null, liveTick = 0
 
@@ -14,14 +14,29 @@ async function startCamera() {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } })
     video.value.srcObject = stream
     camera.value = true
+    setUpFocus()
     track()
   } catch { status.value = 'Sem acesso à câmara (é preciso HTTPS e autorização). Podes escolher uma fotografia.' }
+}
+// As webcams focam a 40–60 cm: perto da etiqueta ficam desfocadas e nenhum descodificador lê o código.
+// Se a câmara deixar, liga o foco automático contínuo e mostra um controlo para focar à mão.
+function setUpFocus() {
+  const [videoTrack] = stream.getVideoTracks()
+  const capabilities = videoTrack.getCapabilities?.() ?? {}
+  if (capabilities.focusMode?.includes('continuous')) videoTrack.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {})
+  const range = capabilities.focusDistance
+  focus.value = range?.max > range?.min && capabilities.focusMode?.includes('manual')
+    ? { ...range, value: videoTrack.getSettings().focusDistance ?? range.min } : null
+}
+function setFocus() {
+  stream?.getVideoTracks()[0].applyConstraints({ advanced: [{ focusMode: 'manual', focusDistance: focus.value.value }] }).catch(() => {})
 }
 function stopCamera() {
   clearTimeout(liveTimer)
   stream?.getTracks().forEach(track => track.stop())
   stream = null
   camera.value = false
+  focus.value = null
 }
 function clearPhoto() {
   if (photo.value) URL.revokeObjectURL(photo.value)
@@ -100,6 +115,25 @@ async function track() {
   }
   liveTimer = setTimeout(track, 300)
 }
+// Sem código 2D com o P/N (etiquetas Comkey, chinesas...), o servidor lê o texto da fotografia (OCR) e compara-o
+// com o catálogo. Demora uns 3 s, por isso só corre depois de as passagens de códigos falharem.
+async function readText(source) {
+  status.value = 'Sem código 2D. A ler o texto da etiqueta…'
+  const blob = source instanceof Blob ? source : await new Promise(done => {
+    const canvas = document.createElement('canvas')
+    canvas.width = source.videoWidth || source.width
+    canvas.height = source.videoHeight || source.height
+    canvas.getContext('2d').drawImage(source, 0, 0)
+    canvas.toBlob(done, 'image/jpeg', 0.92)
+  })
+  const body = new FormData()
+  body.append('image', blob, 'etiqueta.jpg')
+  const response = await fetch('/api/ocr', { method: 'POST', body })
+  if (response.status === 401) throw new Error('Inicia sessão para ler o texto da etiqueta.')
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(data.error || 'Não foi possível ler o texto da etiqueta.')
+  return data.label
+}
 // O descodificador (zxing-wasm) só é descarregado na primeira leitura.
 async function read(source) {
   reading.value = true
@@ -120,8 +154,11 @@ async function read(source) {
       if (label.value) break
     }
     drawBoxes(seen.codes, seen.image || images[1])
-    status.value = label.value ? '' : seen.codes.length ? 'O código encontrado (a laranja) não é de uma etiqueta de componente.'
-      : 'Não encontrei o código 2D da etiqueta. Aproxima, foca e tenta de novo.'
+    if (!label.value) {
+      try { label.value = await readText(source) } catch (error) { status.value = error.message; return }
+    }
+    status.value = label.value ? '' : seen.codes.length ? 'O código encontrado (a laranja) não é de uma etiqueta de componente, nem reconheci o texto.'
+      : 'Não encontrei o código 2D nem reconheci o texto da etiqueta. Aproxima, foca e tenta de novo.'
   } catch { status.value = 'Não foi possível ler a imagem. Verifica a ligação à Internet e tenta de novo.' }
   finally { reading.value = false }
 }
@@ -173,6 +210,9 @@ defineExpose({ open })
         <button type="button" class="ghost" @click="togglePause">{{ paused ? 'Retomar' : 'Pausar' }}</button>
         <button type="button" class="primary" :disabled="reading" @click="readFrame">Ler etiqueta</button>
       </div>
+      <label v-if="camera && focus">Foco (perto ↔ longe)
+        <input v-model.number="focus.value" type="range" :min="focus.min" :max="focus.max" :step="focus.step || 'any'" @input="setFocus">
+      </label>
       <label>{{ camera ? 'Ou escolhe uma fotografia' : 'Fotografia da etiqueta' }} <input type="file" accept="image/*" @change="readPhoto"></label>
       <p v-if="status" class="hint" :class="{ error: !reading }" role="status">{{ status }}</p>
       <template v-if="label">
@@ -183,6 +223,7 @@ defineExpose({ open })
           <template v-if="label.invoice"><dt>Fatura</dt><dd>{{ label.invoice }}</dd></template>
           <template v-if="label.country"><dt>Origem</dt><dd>{{ label.country }}</dd></template>
         </dl>
+        <p v-if="label.ocr" class="hint">Lido pelo texto da etiqueta (sem código 2D). Confirma o P/N e a quantidade.</p>
         <label>Quantidade <input v-model.number="label.qty" type="number" min="1" step="1" required></label>
       </template>
       <div class="actions"><button type="button" class="ghost" @click="dialog.close()">Cancelar</button><button class="primary" :disabled="!label">{{ action }}</button></div>

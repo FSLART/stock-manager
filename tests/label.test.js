@@ -21,6 +21,16 @@ it('reads the comma-separated PDF417 of a Microchip label', () => {
   expect(parseLabel('1PMCP6C02T-100E/CHY,1T240400319000MTAI,P,Q3,MTAI240400319.000.038')).toEqual({ mpn: 'MCP6C02T-100E/CHY', qty: 3 })
   expect(parseLabel('[)>\x1e06\x1d1PX1\x1d1VAnalog Devices, Inc.\x1e\x04')).toMatchObject({ manufacturer: 'Analog Devices, Inc.' })
 })
+it('recognises a TE Connectivity label, which carries no manufacturer field', () => {
+  expect(parseLabel('[)>␞06␝P1-1614883-3␝1PCPF0805B470RE1␝30PCPF0805B470RE1␝KTES000641397␝1K92806909␝10K113013004␝9D22051␝1TAMC-2201280052␝11K1␝4LTW␝Q10␝11ZPICK␝12Z2728833␞␄'))
+    .toMatchObject({ mpn: 'CPF0805B470RE1', manufacturer: 'TE Connectivity', qty: 10, order: 'TES000641397', invoice: '113013004', country: 'TW' })
+  // Uma etiqueta DigiKey normal (P = código DigiKey) não passa por TE.
+  expect(parseLabel('[)>\x1e06\x1dPMCP6542-I/MS-ND\x1d1PMCP6542-I/MS\x1dQ5\x1e\x04').manufacturer).toBeUndefined()
+})
+it('reads the Data Matrix of a TE factory label, with its own two-letter fields', () => {
+  expect(parseLabel('[)>\x1e06\x1dLT3S049401118178\x1dPN3-1462039-7\x1dRVD\x1dQT20\x1dPO200233795374\x1dBT0\x1dBX\x1dDC26282\x1e\x04'))
+    .toEqual({ mpn: '3-1462039-7', qty: 20, order: '200233795374', manufacturer: 'TE Connectivity' })
+})
 it('sharpens edges and leaves flat areas alone', () => {
   const data = new Uint8ClampedArray([100, 100, 100, 255, 100, 100, 100, 255, 200, 200, 200, 255, 200, 200, 200, 255])
   expect([...sharpen({ data, width: 4, height: 1 }, 1, 2).data.filter((_, i) => i % 4 === 0)]).toEqual([100, 33, 255, 200])

@@ -14,7 +14,8 @@ class EnvConfigTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
             (project / 'backend').mkdir()
-            shutil.copyfile(ROOT / 'backend/app.py', project / 'backend/app.py')
+            for name in ('app.py', 'carts.py'):
+                shutil.copyfile(ROOT / 'backend' / name, project / 'backend' / name)
             (project / '.env').write_text(
                 'DB_BACKEND=mysql\nSTORAGE_MODE=local\nMYSQL_DATABASE=stocklart\n'
                 'MYSQL_USER=stocklart\nMYSQL_PASSWORD="literal${value}#password"\n'

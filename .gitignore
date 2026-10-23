@@ -10,3 +10,4 @@ backend/Stock_sala.xlsx
 .env
 .env.*
 !.env.example
+data/backup-*.json

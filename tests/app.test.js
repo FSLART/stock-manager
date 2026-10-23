@@ -57,6 +57,21 @@ it('submits a movement using the selected dynamic properties', async () => {
   expect(fetch).toHaveBeenCalledWith('/api/move', expect.objectContaining({ body: JSON.stringify({ cat: 'LEDs', props: { cor: 'vermelho' }, qty: 4, mode: 'in', image: '' }) }))
 })
 
+it('searches the category by typing its name', async () => {
+  wrapper = mount(App)
+  await flushPromises()
+  await wrapper.find('.top .primary').trigger('click')
+  const form = wrapper.find('dialog form')
+  const input = form.find('input[list=movement-categories]')
+  await input.setValue('r&')
+  expect(form.find('.fields label').text()).toBe('cor')
+  await input.setValue('r&d')
+  expect(form.find('.fields label').text()).toBe('valor')
+  await input.setValue('xyz')
+  await input.trigger('change')
+  expect(input.element.value).toBe('R&D')
+})
+
 it('handles an empty stock without opening an invalid movement', async () => {
   fetch.mockResolvedValue({ ok: true, json: async () => ({ categories: [], items: [] }) })
   wrapper = mount(App)
@@ -80,6 +95,29 @@ it('combines property and stock filters and clears them together with search', a
   await wrapper.find('button[aria-label="Limpar filtros"]').trigger('click')
   expect(wrapper.findAll('tbody .row')).toHaveLength(2)
   expect(wrapper.find('.sub').text()).toBe('2 referências · 23 unidades')
+})
+
+it('selects a range with shift-click and moves the selection to one location', async () => {
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), items: [
+    ...data.items, { id: 3, cat: 'R&D', props: { valor: '1k' }, qty: 5, image: '', location: 'Gaveta A' },
+  ] }) })
+  wrapper = mount(App)
+  await flushPromises()
+  const boxes = () => wrapper.findAll('tbody .select-cell input')
+  await boxes()[0].trigger('click')
+  await boxes()[2].trigger('click', { shiftKey: true })
+  expect(wrapper.find('.selection-bar strong').text()).toBe('3 selecionados')
+  await wrapper.find('.selection-bar input').setValue('Caixa 1')
+  await wrapper.find('.selection-bar').trigger('submit')
+  await flushPromises()
+  const request = fetch.mock.calls.find(([url]) => url === '/api/items/location')
+  expect(JSON.parse(request[1].body)).toEqual({ ids: [1, 2, 3], location: 'Caixa 1' })
+  expect(wrapper.find('.selection-bar').exists()).toBe(false)
+  // Filtrar por localização e selecionar todos os mostrados.
+  await wrapper.find('select[aria-label="Filtrar localização"]').setValue('Gaveta A')
+  expect(wrapper.findAll('tbody .row')).toHaveLength(1)
+  await wrapper.find('thead .select-cell input').trigger('change')
+  expect(wrapper.find('.selection-bar strong').text()).toBe('1 selecionado')
 })
 
 it('sorts quantities numerically in both directions', async () => {
@@ -271,7 +309,7 @@ it('fills the movement form from a catalog part and reuses the stocked item with
   const picker = form.find('input[list="catalog-parts"]')
   expect(form.findAll('#catalog-parts option').map(option => option.element.value)).toEqual(['SN74HC02PWRG4', 'LAN8720AI'])
   await picker.setValue('sn74hc02pwrg4')
-  expect(form.find('select').element.value).toBe('CIs')
+  expect(form.find('input[list=movement-categories]').element.value).toBe('CIs')
   expect(form.findAll('.fields input').map(input => input.element.value)).toEqual(['TI', 'SN74HC02PWRG4', 'TSSOP-14'])
   await picker.setValue('LAN8720AI')
   expect(form.findAll('.fields input').map(input => input.element.value)).toEqual(['Microchip', 'LAN8720AI', ''])
@@ -404,6 +442,36 @@ it('fills the rest of the form when a catalog part number is typed or chosen in 
   expect(fields().map(input => input.element.value)).toEqual(['Microchip', 'LAN8720AI', 'QFN-24'])
 })
 
+it('previews the chosen image and removes it again before saving', async () => {
+  const added = []
+  vi.stubGlobal('DataTransfer', class { items = { add: file => added.push(file) }; files = added })
+  URL.createObjectURL = vi.fn(() => 'blob:preview')
+  URL.revokeObjectURL = vi.fn()
+  wrapper = mount(App)
+  await flushPromises()
+  await wrapper.findAll('button').find(button => button.text() === 'Adicionar / retirar').trigger('click')
+  const dialog = wrapper.find('dialog')
+  const input = dialog.find('input[type=file]').element
+  let assigned = []
+  Object.defineProperty(input, 'files', { set: files => { assigned = files }, get: () => assigned })
+  Object.defineProperty(input, 'value', { set: () => { assigned = [] }, get: () => '' })
+  const paste = Object.assign(new Event('paste', { bubbles: true, cancelable: true }), { clipboardData: { files: [new File(['x'], 'led.png', { type: 'image/png' })] } })
+  dialog.element.dispatchEvent(paste)
+  await flushPromises()
+  expect(dialog.find('.new-image img').attributes('src')).toBe('blob:preview')
+  await dialog.find('.new-image button').trigger('click')
+  expect(dialog.find('.new-image').exists()).toBe(false)
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview')
+  await dialog.find('input[type=url]').setValue('https://example.com/led.png')
+  expect(dialog.find('.new-image img').attributes('src')).toBe('https://example.com/led.png')
+  await dialog.find('.new-image button').trigger('click')
+  expect(dialog.find('input[type=url]').element.value).toBe('')
+  await dialog.find('.fields input').setValue('azul')
+  await dialog.find('form').trigger('submit')
+  await flushPromises()
+  expect(fetch.mock.calls.some(([url]) => url === '/api/images')).toBe(false)
+})
+
 it('keeps rejected edits open with the server error and does not offer editing on unsupported backends', async () => {
   wrapper = mount(App)
   await flushPromises()
@@ -425,10 +493,10 @@ it('joins the other properties in one Descrição column in Tudo and gives each 
     items: [{ id: 1, cat: 'Res', props: { 'valor (Ω)': '10k', tamanho: '0603', tol: '1%' }, qty: 5, image: '' }, { id: 2, cat: 'LEDs', props: { cor: 'azul' }, qty: 2, image: '' }] }) })
   wrapper = mount(App)
   await flushPromises()
-  expect(wrapper.findAll('th').map(th => th.text().replace(/\s*[↕↑↓]$/, ''))).toEqual(['Imagem', 'Categoria', 'Componente', 'Descrição', 'Preço un.', 'Quantidade', 'Valor', 'Ações'])
+  expect(wrapper.findAll('th').map(th => th.text().replace(/\s*[↕↑↓]$/, ''))).toEqual(['', 'Imagem', 'Categoria', 'Componente', 'Descrição', 'Localização', 'Preço un.', 'Quantidade', 'Valor', 'Ações'])
   expect(wrapper.find('tbody .row .desc-cell').text()).toBe('0603 · 1%')
   await wrapper.findAll('nav .cat-row > button:first-child')[1].trigger('click')
-  expect(wrapper.findAll('th').map(th => th.text().replace(/\s*[↕↑↓]$/, ''))).toEqual(['Imagem', 'valor (Ω)', 'tamanho', 'tol', 'Preço un.', 'Quantidade', 'Valor', 'Ações'])
+  expect(wrapper.findAll('th').map(th => th.text().replace(/\s*[↕↑↓]$/, ''))).toEqual(['', 'Imagem', 'valor (Ω)', 'tamanho', 'tol', 'Localização', 'Preço un.', 'Quantidade', 'Valor', 'Ações'])
   expect(wrapper.find('tbody .component-cell').classes()).toContain('card-only')
 })
 
@@ -451,7 +519,7 @@ it('offers a sort selector that mirrors the table headers for the phone cards', 
   wrapper = mount(App)
   await flushPromises()
   const select = wrapper.find('.mobile-sort select')
-  expect(select.findAll('option').map(option => option.text())).toEqual(['Ordem original', 'Categoria', 'Componente', 'Descrição', 'Preço un.', 'Quantidade', 'Valor'])
+  expect(select.findAll('option').map(option => option.text())).toEqual(['Ordem original', 'Categoria', 'Componente', 'Descrição', 'Localização', 'Preço un.', 'Quantidade', 'Valor'])
   await select.setValue('qty')
   expect(wrapper.findAll('tbody output').map(row => row.text())).toEqual(['3', '20'])
   await wrapper.find('.mobile-sort button').trigger('click')
@@ -465,7 +533,25 @@ it('opens a scanned label in a category that has a P/N field when the current on
   wrapper.findComponent(LabelScanner).vm.$emit('use', { mpn: 'MCP6C02T-100E/CHY', manufacturer: 'Microchip', qty: 3 })
   await flushPromises()
   const form = wrapper.find('dialog form')
-  expect(form.find('select').element.value).toBe('CIs')
+  expect(form.find('input[list=movement-categories]').element.value).toBe('CIs')
   expect(form.findAll('.fields input').map(input => input.element.value)).toEqual(['MCP6C02T-100E/CHY', 'Microchip'])
+  expect(form.find('input[type=number]').element.value).toBe('3')
+})
+
+it('completes a scanned label with the Mouser/DigiKey lookup: category, description, datasheet, price and image', async () => {
+  const stock = { ...structuredClone(data), categories: [...data.categories, { name: 'CIs', props: ['P/N', 'Fabricante'], image: true }] }
+  const part = { mpn: 'MCP6C02T-100E/CHY', manufacturer: 'Microchip Technology', description: 'Current Sense Amplifiers', category: 'CIs', props: {}, price: 1.2, datasheet: 'https://example.com/mcp6c02.pdf', source: 'Mouser API 2026-10-23' }
+  fetch.mockImplementation(async url => ({ ok: true, json: async () => url.startsWith('/api/parts/lookup') ? { part, image: 'https://mm.digikey.com/mcp6c02.jpg' } : structuredClone(stock) }))
+  wrapper = mount(App)
+  await flushPromises()
+  wrapper.findComponent(LabelScanner).vm.$emit('use', { mpn: 'MCP6C02T-100E/CHY', manufacturer: 'Microchip', qty: 3 })
+  await flushPromises()
+  expect(fetch).toHaveBeenCalledWith('/api/parts/lookup?mpn=MCP6C02T-100E%2FCHY', expect.objectContaining({ method: 'GET' }))
+  const form = wrapper.find('dialog form')
+  expect(form.find('input[list=movement-categories]').element.value).toBe('CIs')
+  expect(form.findAll('.fields input').map(input => input.element.value)).toEqual(['MCP6C02T-100E/CHY', 'Microchip Technology'])
+  expect(form.find('input[type=url]').element.value).toBe('https://mm.digikey.com/mcp6c02.jpg')
+  expect(form.text()).toContain('Current Sense Amplifiers')
+  expect(form.find('a[href="https://example.com/mcp6c02.pdf"]').exists()).toBe(true)
   expect(form.find('input[type=number]').element.value).toBe('3')
 })
