@@ -20,13 +20,13 @@ no servidor. O inventário mantém filtros, ordenação, edição e sincronizaç
   portugueses); sem cabeçalhos, espera referência, valor e quantidade. Guarda
   projetos e permite consultar os componentes e apagar projetos.
 - **Simulação analógica**: lista as placas analógicas com o modelo 3D e abre o emulador de cada uma (`board_emulation/`).
-- **Movimentos**: histórico de entradas, saídas, ajustes e remoções feitos neste
-  navegador desde esta atualização. Operações registadas offline têm essa indicação;
-  este histórico não constitui um registo central do servidor.
+- **Movimentos**: histórico central, guardado no servidor (tabela `movements`), de
+  entradas, saídas, ajustes e remoções, com a pessoa que fez cada alteração e
+  pesquisa por pessoa, componente ou categoria.
 - **Definições**: modo compacto do inventário e confirmações de alterações.
   Desativar confirmações mantém as mensagens de erro visíveis.
 
-Projetos PCB, histórico e preferências usam armazenamento do navegador.
+Projetos PCB e preferências usam armazenamento do navegador.
 Não são partilhados entre dispositivos e não migram para a base de dados Flask.
 O stock continua a usar a API e as chaves offline existentes. Erros ao guardar
 os novos dados locais são apresentados, sem confirmar falsamente a gravação.
@@ -61,6 +61,20 @@ define `DB_BACKEND=sqlite` nesse ficheiro ou no ambiente do processo.
 com `Stock_sala.xlsx`) ou `google` (sincronizar com Google Sheets, requer
 credenciais válidas). Em modo local não há sincronização automática com folhas
 de cálculo. A implementação separada Apps Script continua a usar Google Sheets.
+
+### Login e pessoas
+
+Ver o stock é público. Qualquer alteração (entradas, saídas, edição, CSV, categorias,
+imagens) exige sessão: sem sessão aparece um popup para escolher a pessoa e escrever
+um PIN de 4 letras ou números. O login com Notion aparece quando `NOTION_CLIENT_ID` e
+`NOTION_CLIENT_SECRET` estão no `.env` (integração pública do Notion, redirect URI
+`https://stocklart.pt/api/auth/notion/callback`); quem entrou com PIN pode ligar a sua
+conta Notion em **Definições**. A sessão fica aberta até carregar em **Sair**.
+
+Os admins gerem pessoas em **Definições → Pessoas** (adicionar, repor PIN, admin,
+apagar). Apagar uma pessoa mantém o nome nos movimentos já registados. O `.env`
+precisa de `SECRET_KEY` (assina os cookies; mudá-lo termina todas as sessões) e de
+`PUBLIC_BASE_URL`. 5 PINs errados seguidos bloqueiam essa pessoa durante 5 minutos.
 
 ### Editar componentes e categorias
 

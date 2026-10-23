@@ -21,9 +21,17 @@ const routes = {
   step: p => [`/api/items/${p.id}/step`, 'POST'],
   editItem: p => [`/api/items/${p.id}`, 'PATCH'],
   editCategory: p => [`/api/categories/${encodeURIComponent(p.originalName)}`, 'PATCH'],
+  movements: () => ['/api/movements', 'GET'],
+  authPeople: () => ['/api/auth/people', 'GET'],
+  login: () => ['/api/auth/login', 'POST'],
+  logout: () => ['/api/auth/logout', 'POST'],
+  people: () => ['/api/people', 'GET'],
+  newPerson: () => ['/api/people', 'POST'],
+  editPerson: p => [`/api/people/${p.id}`, 'PATCH'],
+  deletePerson: p => [`/api/people/${p.id}`, 'DELETE'],
 }
 
-export function createApi() {
+export function createApi({ onUnauthorized } = {}) {
   const appsScript = Boolean(globalThis.google?.script?.run)
   let syncing = false
 
@@ -52,7 +60,13 @@ export function createApi() {
       throw error
     }
     const data = await response.json().catch(() => ({}))
-    if (!response.ok) throw new Error(data.error || 'Erro no servidor')
+    if (!response.ok) {
+      const error = new Error(data.error || 'Erro no servidor')
+      // O servidor pede login para alterar o stock; a App mostra o popup.
+      error.login = Boolean(data.login)
+      if (error.login) onUnauthorized?.()
+      throw error
+    }
     return data
   }
 
@@ -108,7 +122,8 @@ export function createApi() {
           else await http(pending)
           count++
         } catch (error) {
-          if (error.offline || !navigator.onLine) break
+          // Sem ligação ou sem sessão: a operação fica na fila para depois do login.
+          if (error.offline || error.login || !navigator.onLine) break
           notify(error.message || 'Uma operação offline não foi aceite pelo servidor')
         }
         const requests = readStored(PENDING_KEY, [])
@@ -129,7 +144,8 @@ export function createApi() {
     return data.url
   }
 
-  return { request, load, syncPending, uploadImage, importInventory: items => direct('importItems', { items }) }
+  // direct não usa a fila offline: login, histórico e pessoas precisam do servidor.
+  return { request, direct, load, syncPending, uploadImage, importInventory: items => direct('importItems', { items }) }
 }
 
 async function jpegBase64(file) {

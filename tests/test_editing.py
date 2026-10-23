@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from auth_helper import as_person
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -17,6 +19,7 @@ class EditingTest(unittest.TestCase):
             self.module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(self.module)
         self.client = self.module.app.test_client()
+        as_person(self, self.module)
         self.client.post('/api/categories', json={'name': 'Test', 'props': ['code', 'size'], 'image': True})
         for code, size in [('A', 'small'), ('A', 'large')]:
             self.client.post('/api/move', json={'cat': 'Test', 'props': {'code': code, 'size': size}, 'qty': 4, 'mode': 'in'})

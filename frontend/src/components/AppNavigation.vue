@@ -1,7 +1,9 @@
 <script setup>
 import brandLogo from '../assets/lartt-transparent.svg?inline'
+import { inject } from 'vue'
 import { useNavigation } from '../composables/useNavigation.js'
 const router = useNavigation()
+const auth = inject('auth', null)
 
 defineProps({
   active: {
@@ -40,5 +42,9 @@ const external = [{ label: 'Cablagem', href: 'https://stocklart.pt/harness/', ke
       </button>
       <a v-for="link in external" :key="link.key" class="menu-link" :href="link.href">{{ link.label }}</a>
     </nav>
+    <div v-if="auth?.enabled" class="session-box">
+      <template v-if="auth.user"><span>{{ auth.user.name }}</span><button class="text-button" @click="auth.logout()">Sair</button></template>
+      <button v-else class="text-button" @click="auth.login()">Entrar</button>
+    </div>
   </header>
 </template>

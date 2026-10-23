@@ -6,6 +6,8 @@ import threading
 import unittest
 from unittest.mock import patch
 
+from auth_helper import as_person
+
 ROOT = Path(__file__).resolve().parents[1]
 
 class CsvImportTest(unittest.TestCase):
@@ -17,6 +19,7 @@ class CsvImportTest(unittest.TestCase):
             self.module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(self.module)
         self.client = self.module.app.test_client()
+        as_person(self, self.module)
         self.client.post('/api/categories', json={'name': 'CSV test', 'props': ['code', 'size'], 'image': True})
 
     def test_import_sums_duplicates_and_preserves_existing_id_and_image(self):

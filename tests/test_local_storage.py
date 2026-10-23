@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from auth_helper import as_person
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -24,6 +26,7 @@ class LocalStorageTest(unittest.TestCase):
                     spec = importlib.util.spec_from_file_location(f'local_stock_{index}', ROOT / relative)
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
+                as_person(self, module)
                 with patch.object(module, 'sync_google_to_db', side_effect=AssertionError('Google called')), \
                      patch.object(module, 'sync_excel_to_db', side_effect=AssertionError('Excel called')), \
                      patch.object(module, 'save_google_items', side_effect=AssertionError('Google called')):

@@ -1,18 +1,35 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, provide, reactive, ref, shallowReactive, watch } from 'vue'
-import { createApi, readStored, writeStored } from './api.js'
+import { createApi, readStored } from './api.js'
 import InventoryCsvImport from './components/InventoryCsvImport.vue'
 import StockItem from './components/StockItem.vue'
 import StockMovement from './components/StockMovement.vue'
 import CategoryForm from './components/CategoryForm.vue'
 import AppNavigation from './components/AppNavigation.vue'
+import LoginDialog from './components/LoginDialog.vue'
 import HomePage from './pages/HomePage.vue'
 import AnalogSimulationPage from './pages/AnalogSimulationPage.vue'
 import MovementsPage from './pages/MovementsPage.vue'
 import PcbBomPage from './pages/PcbBomPage.vue'
 import SettingsPage from './pages/SettingsPage.vue'
 
-const api = createApi()
+const loginDialog = ref(null)
+const api = createApi({ onUnauthorized() { auth.user = null; loginDialog.value?.open() } })
+// enabled só vem do Flask; no Apps Script as alterações continuam sem login.
+const auth = reactive({
+  enabled: false, user: null, notion: false,
+  login: () => loginDialog.value.open(),
+  async logout() {
+    try { toast((await api.direct('logout')).msg); auth.user = null }
+    catch (error) { toast(error.message, true) }
+  },
+})
+provide('api', api)
+provide('auth', auth)
+// Com sessão a ação corre logo; sem sessão abre o popup e continua depois do login.
+function guard(fn) {
+  return (...args) => !auth.enabled || auth.user ? fn(...args) : loginDialog.value.open().then(ok => ok && fn(...args))
+}
 const categories = ref([]), items = ref([]), current = ref(null), query = ref('')
 const busy = ref(false), loading = ref(true), toastMessage = ref(''), formError = ref('')
 const movement = ref(null), categoryForm = ref(null)
@@ -77,22 +94,13 @@ const page = ref(routeKeys[window.location.hash.slice(1)] || 'home')
 function readRoute() { page.value = routeKeys[window.location.hash.slice(1)] || 'home' }
 const navigation = { push(path) { window.location.hash = path; readRoute() } }
 provide('navigation', navigation)
-const storedMovements = readStored('stocklart-movements', [])
-const movements = ref(Array.isArray(storedMovements) ? storedMovements : [])
 const preferences = reactive({ compact: readStored('stocklart-compact-mode', false) === true, notifications: readStored('stocklart-notifications', true) !== false })
 provide('preferences', preferences)
-function recordMovement(item, delta, before, result, type) {
-  movements.value.unshift({ id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`, type: type || (delta >= 0 ? 'in' : 'out'), item: componentValue(item), category: item.cat, delta, before, after: before + delta, timestamp: new Date().toISOString(), queued: Boolean(result.queued) })
-  const saved = writeStored('stocklart-movements', movements.value)
-  if (!saved) toast('Movimento aplicado, mas não foi possível guardar o histórico neste navegador.', true)
-  return saved
-}
 provide('inventory', reactive({
-  movements,
   totalUnits: computed(() => total()),
   categoryCount: computed(() => categories.value.length),
   async manageCategories() { navigation.push('/stock'); await nextTick(); document.querySelector('nav[aria-label="Categorias"]')?.focus() },
-  async addMaterial() { navigation.push('/stock'); await nextTick(); if (categories.value.length) movement.value.open(current.value) },
+  addMaterial: guard(async () => { navigation.push('/stock'); await nextTick(); if (categories.value.length) movement.value.open(current.value) }),
 }))
 
 function toast(message, important = false) {
@@ -107,6 +115,7 @@ async function load() {
   categories.value = data.categories
   items.value = data.items
   canEdit.value = Boolean(data.can_edit)
+  Object.assign(auth, { enabled: Boolean(data.auth), user: data.user || null, notion: Boolean(data.notion_login) })
   if (current.value && !categories.value.some(c => c.name === current.value)) current.value = null
 }
 async function act(action, payload, success) {
@@ -122,7 +131,7 @@ async function act(action, payload, success) {
   finally { busy.value = false }
 }
 function deleteItem(item) {
-  if (confirm('Apagar este item do stock?')) act('deleteItem', { id: item.id }, result => recordMovement(item, -item.qty, item.qty, result, 'delete'))
+  if (confirm('Apagar este item do stock?')) act('deleteItem', { id: item.id })
 }
 function deleteCategory(category) {
   const refs = items.value.filter(item => item.cat === category.name)
@@ -130,11 +139,8 @@ function deleteCategory(category) {
     ? `Isto vai apagar também ${refs.length} referência(s) (${total(category.name)} unidades) que estão lá dentro. Esta ação não pode ser desfeita.`
     : 'Esta ação não pode ser desfeita.'
   if (confirm(`Apagar a categoria "${category.name}"?\n\n${warning}`)) {
-    act('deleteCategory', { name: category.name }, result => {
-      let saved = true
-      for (const item of refs) if (!recordMovement(item, -item.qty, item.qty, result, 'delete')) saved = false
+    act('deleteCategory', { name: category.name }, () => {
       if (current.value === category.name) current.value = null
-      return saved
     })
   }
 }
@@ -158,10 +164,7 @@ async function processQueue(id, queue) {
       const delta = queue.pending
       queue.pending = 0
       try {
-        const item = items.value.find(item => item.id === id)
-        const before = item ? item.qty - delta : 0
         const result = await api.request('step', { id, delta })
-        if (item) recordMovement(item, delta, before, result)
         if (result.queued) toast(result.msg)
       } catch (error) {
         const item = items.value.find(item => item.id === id)
@@ -177,17 +180,12 @@ async function submitMovement({ file, ...payload }) {
   formError.value = ''
   try {
     const editing = payload.id !== undefined
-    const category = payload.cat
-    const existing = items.value.find(item => editing ? item.id === payload.id : item.cat === category && Object.entries(payload.props).every(([key, value]) => normalize(item.props[key] ?? '') === normalize(value)))
-    const before = existing?.qty || 0
-    const delta = editing ? payload.qty - before : (payload.mode === 'out' ? -payload.qty : payload.qty)
     if (file) payload.image = await api.uploadImage(file)
     else if (!editing) payload.image = ''
     if (editing) { delete payload.mode; delete payload.cat }
     const result = await api.request(editing ? 'editItem' : 'move', payload)
-    const saved = recordMovement({ cat: existing?.cat || category, props: payload.props }, delta, before, result, editing ? 'edit' : undefined)
     movement.value.close()
-    if (saved) toast(result.msg)
+    toast(result.msg)
     if (!result.queued) await load()
   } catch (error) { formError.value = error.message }
   finally { busy.value = false }
@@ -198,10 +196,8 @@ async function submitCsv(rows) {
   csvError.value = ''
   try {
     const result = await api.importInventory(rows)
-    let saved = true
-    for (const item of result.movements || []) if (!recordMovement(item, item.qty, item.before, result, 'in')) saved = false
     csvImport.value.close()
-    if (saved) toast(result.msg)
+    toast(result.msg)
     await load()
   } catch (error) { csvError.value = error.message }
   finally { busy.value = false }
@@ -232,6 +228,10 @@ async function refresh() {
     if (count) toast(`${count} operação(ões) sincronizada(s)`)
   } catch { /* Preserve the last visible snapshot when the network is down. */ }
   finally { refreshing = false }
+}
+const guarded = {
+  step: guard(stepItem), deleteItem: guard(deleteItem), deleteCategory: guard(deleteCategory), openCategory: guard(openCategory),
+  openMovement: guard(() => movement.value.open(current.value)), editItem: guard(item => movement.value.edit(item)), importCsv: guard(() => csvImport.value.open()),
 }
 onMounted(async () => {
   window.addEventListener('online', refresh)
@@ -264,11 +264,11 @@ onUnmounted(() => {
       <div class="cat-row"><button :aria-current="!current" @click="current = null">Tudo <span class="n">{{ total() }}</span></button></div>
       <div v-for="category in categories" :key="category.name" class="cat-row">
         <button :aria-current="current === category.name" @click="current = category.name"><span><i class="dot" :style="{ background: color(category.name) }"></i>{{ category.name }}</span><span class="n">{{ total(category.name) }}</span></button>
-        <button v-if="canEdit" class="cat-edit" :aria-label="`Editar categoria ${category.name}`" :disabled="locked" @click="openCategory(category)">Editar</button>
-        <button class="cat-del" :aria-label="`Apagar categoria ${category.name}`" title="Apagar categoria" :disabled="locked" @click="deleteCategory(category)">✕</button>
+        <button v-if="canEdit" class="cat-edit" :aria-label="`Editar categoria ${category.name}`" :disabled="locked" @click="guarded.openCategory(category)">Editar</button>
+        <button class="cat-del" :aria-label="`Apagar categoria ${category.name}`" title="Apagar categoria" :disabled="locked" @click="guarded.deleteCategory(category)">✕</button>
       </div>
     </nav>
-    <button class="side-btn" :disabled="locked" @click="openCategory()">+ Nova categoria</button>
+    <button class="side-btn" :disabled="locked" @click="guarded.openCategory()">+ Nova categoria</button>
   </aside>
   <main class="stock-content">
     <div class="top">
@@ -276,8 +276,8 @@ onUnmounted(() => {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input v-model="query" type="search" aria-label="Pesquisar componentes" placeholder="Pesquisar por valor, tamanho, categoria…" autocomplete="off">
       </div>
-      <button v-if="canEdit" class="text-button import-csv-button" aria-label="Importar CSV" :disabled="locked || !categories.length" @click="csvImport.open()">Importar CSV</button>
-      <button class="primary" :disabled="locked || !categories.length" @click="movement.open(current)">Adicionar / retirar</button>
+      <button v-if="canEdit" class="text-button import-csv-button" aria-label="Importar CSV" :disabled="locked || !categories.length" @click="guarded.importCsv()">Importar CSV</button>
+      <button class="primary" :disabled="locked || !categories.length" @click="guarded.openMovement()">Adicionar / retirar</button>
     </div>
     <section class="filter-section" aria-label="Filtros de componentes">
       <div class="filter-toolbar">
@@ -315,7 +315,7 @@ onUnmounted(() => {
             </th>
             <th scope="col">Ações</th>
           </tr></thead>
-          <tbody><StockItem v-for="item in shown" :key="item.id" :item="item" :property-keys="propertyKeys" :busy="busy" :locked="locked" :can-edit="canEdit" @edit="movement.edit(item)" @step="delta => stepItem(item, delta)" @delete="deleteItem(item)" /></tbody>
+          <tbody><StockItem v-for="item in shown" :key="item.id" :item="item" :property-keys="propertyKeys" :busy="busy" :locked="locked" :can-edit="canEdit" @edit="guarded.editItem(item)" @step="delta => guarded.step(item, delta)" @delete="guarded.deleteItem(item)" /></tbody>
         </table>
         <div v-if="!shown.length" class="empty"><b>Nada encontrado.</b><br>Tenta outra pesquisa ou adiciona um item novo.</div>
       </template>
@@ -326,5 +326,6 @@ onUnmounted(() => {
   <StockMovement ref="movement" :categories="categories" :items="items" :busy="busy" :error="formError" @submit="submitMovement" @clear-error="formError = ''" />
   <CategoryForm ref="categoryForm" :busy="busy" :error="categoryError" @submit="submitCategory" />
   <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
+  <LoginDialog ref="loginDialog" @login="user => { auth.user = user; toast(`Sessão iniciada: ${user.name}`) }" />
   <div id="toast" role="status" :class="{ on: toastMessage }">{{ toastMessage }}</div>
 </template>

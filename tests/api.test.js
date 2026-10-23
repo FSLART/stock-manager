@@ -46,6 +46,17 @@ describe('Flask adapter and offline compatibility', () => {
     expect(JSON.parse(localStorage.getItem('stock.pending.v1'))).toHaveLength(1)
   })
 
+  it('keeps queued writes and asks for login when the session is missing', async () => {
+    localStorage.setItem('stock.pending.v1', JSON.stringify([{ url: '/api/move', method: 'POST', body: {} }]))
+    fetch.mockResolvedValue(response({ error: 'Inicia sessão para alterar o stock', login: true }, false))
+    const onUnauthorized = vi.fn()
+    const api = createApi({ onUnauthorized })
+    expect(await api.syncPending()).toBe(0)
+    expect(JSON.parse(localStorage.getItem('stock.pending.v1'))).toHaveLength(1)
+    await expect(api.request('move', {})).rejects.toMatchObject({ login: true })
+    expect(onUnauthorized).toHaveBeenCalledTimes(2)
+  })
+
   it('does not claim a write is saved when storage is blocked', async () => {
     fetch.mockRejectedValue(new TypeError('offline'))
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked') })

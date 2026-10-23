@@ -7,7 +7,7 @@ const data = { can_edit: true, categories: [{ name: 'LEDs', props: ['cor'], imag
 beforeEach(() => {
   localStorage.clear()
   window.history.replaceState(null, '', '/')
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => structuredClone(data) })))
+  vi.stubGlobal('fetch', vi.fn(async url => ({ ok: true, json: async () => url === '/api/movements' ? { movements: [] } : structuredClone(data) })))
   HTMLDialogElement.prototype.showModal = function () { this.open = true }
   HTMLDialogElement.prototype.close = function () { this.open = false }
 })
@@ -59,7 +59,7 @@ it('lists analog boards with a 3D preview and opens the board simulation', async
   await wrapper.findAll('.text-button').find(button => button.text() === '← Placas').trigger('click')
   expect(wrapper.find('.board-card').exists()).toBe(true)
 })
-it('applies compact preferences and records completed stock changes in the local history', async () => {
+it('applies compact preferences and sends completed stock changes to the server', async () => {
   vi.useFakeTimers()
   wrapper = mount(App)
   await flushPromises()
@@ -70,9 +70,7 @@ it('applies compact preferences and records completed stock changes in the local
   await wrapper.find('button[aria-label="Adicionar 1"]').trigger('click')
   await vi.advanceTimersByTimeAsync(151)
   await flushPromises()
-  await open('Movimentos')
-  expect(wrapper.find('.movement-row').text()).toContain('+1')
-  expect(wrapper.find('.movement-row').text()).toContain('3 → 4')
+  expect(fetch).toHaveBeenCalledWith('/api/items/1/step', expect.objectContaining({ body: '{"id":1,"delta":1}' }))
   vi.useRealTimers()
 })
 
@@ -105,7 +103,7 @@ it('supports bookmarked pages and hash back navigation', async () => {
   await flushPromises()
   expect(wrapper.find('output').text()).toBe('3')
 })
-it('keeps failed stock requests out of movement history even with notifications disabled', async () => {
+it('shows failed stock requests even with notifications disabled', async () => {
   localStorage.setItem('stocklart-notifications', 'false')
   vi.useFakeTimers()
   wrapper = mount(App)
@@ -117,37 +115,42 @@ it('keeps failed stock requests out of movement history even with notifications 
   await flushPromises()
   expect(wrapper.find('output').text()).toBe('3')
   expect(wrapper.find('#toast').text()).toBe('Stock indisponível')
+})
+it('shows the movement history stored on the server with who made each change', async () => {
+  const movement = { id: 9, ts: '2026-10-23T10:00:00+00:00', person: 'Ana', type: 'in', cat: 'LEDs', props: { cor: 'azul' }, delta: 1, before: 3, after: 4 }
+  fetch.mockImplementation(async url => ({ ok: true, json: async () => url === '/api/movements' ? { movements: [movement] } : structuredClone(data) }))
+  wrapper = mount(App)
+  await flushPromises()
   await open('Movimentos')
+  expect(wrapper.find('.movement-row').text()).toContain('Ana')
+  expect(wrapper.find('.movement-row').text()).toContain('3 → 4')
+  await wrapper.find('input[aria-label="Pesquisar movimentos"]').setValue('rui')
   expect(wrapper.find('.movement-row').exists()).toBe(false)
 })
-it('records successful stock changes on HTTP hosts without crypto.randomUUID', async () => {
+it('asks who is changing the stock before the first change and continues after login', async () => {
   vi.useFakeTimers()
-  vi.stubGlobal('crypto', {})
+  const signedOut = { ...structuredClone(data), auth: true, user: null }
+  fetch.mockImplementation(async (url, options) => ({ ok: true, json: async () => url === '/api/auth/people' ? { people: [{ id: 5, name: 'Ana' }] }
+    : url === '/api/auth/login' ? { user: { id: 5, name: 'Ana', admin: false, notion: false } }
+    : url === '/api/data' ? structuredClone(signedOut) : { msg: 'ok', options } }))
   wrapper = mount(App)
   await flushPromises()
   await open('Inventário')
+  expect(wrapper.find('.session-box').text()).toBe('Entrar')
   await wrapper.find('button[aria-label="Adicionar 1"]').trigger('click')
+  await flushPromises()
+  const login = wrapper.find('dialog[aria-labelledby="login-title"]')
+  expect(login.element.open).toBe(true)
+  expect(fetch.mock.calls.some(([url]) => url === '/api/items/1/step')).toBe(false)
+  await login.find('select').setValue(5)
+  await login.find('input[type=password]').setValue('ab12')
+  await login.find('form').trigger('submit')
+  await flushPromises()
+  expect(fetch).toHaveBeenCalledWith('/api/auth/login', expect.objectContaining({ body: JSON.stringify({ person_id: 5, pin: 'ab12' }) }))
+  expect(login.element.open).toBe(false)
+  expect(wrapper.find('.session-box').text()).toContain('Ana')
   await vi.advanceTimersByTimeAsync(151)
-  await flushPromises()
-  expect(wrapper.find('output').text()).toBe('4')
-  await open('Movimentos')
-  expect(wrapper.find('.movement-row').text()).toContain('3 → 4')
-})
-it('preserves history storage warnings after a successful inventory movement', async () => {
-  wrapper = mount(App)
-  await flushPromises()
-  await open('Inventário')
-  await wrapper.find('.top .primary').trigger('click')
-  const form = wrapper.find('dialog form')
-  await form.find('.fields input').setValue('azul')
-  await form.find('input[type=number]').setValue(4)
-  fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ msg: 'Adicionado ao stock' }) })
-  const storage = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Quota exceeded') })
-  await form.trigger('submit')
-  await flushPromises()
-  expect(wrapper.find('#toast').text()).toContain('não foi possível guardar o histórico')
-  expect(wrapper.find('dialog').element.open).toBe(false)
-  storage.mockRestore()
+  expect(fetch).toHaveBeenCalledWith('/api/items/1/step', expect.objectContaining({ body: '{"id":1,"delta":1}' }))
 })
 it('previews a CSV before importing its components through the backend', async () => {
   wrapper = mount(App)
@@ -165,8 +168,6 @@ it('previews a CSV before importing its components through the backend', async (
   await wrapper.find('.csv-import-dialog form').trigger('submit')
   await flushPromises()
   expect(fetch).toHaveBeenCalledWith('/api/items/import', expect.objectContaining({ body: JSON.stringify({ items: [{ cat: 'LEDs', qty: 4, props: { cor: 'verde' } }] }) }))
-  await open('Movimentos')
-  expect(wrapper.find('.movement-row').text()).toContain('verde')
 })
 it('links the menu and the home page to the harness site', async () => {
   wrapper = mount(App)

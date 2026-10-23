@@ -9,6 +9,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from auth_helper import as_person
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -31,20 +33,21 @@ class MySQLStorageTest(unittest.TestCase):
                                    database='stock_qa', autocommit=True)
         self.addCleanup(self.raw.close)
         with self.raw.cursor() as cursor:
-            for table in ('items', 'categories', 'meta'):
+            for table in ('items', 'categories', 'meta', 'people', 'movements'):
                 cursor.execute(f'DROP TABLE IF EXISTS {table}')
         with patch.dict(os.environ, self.env):
             spec = importlib.util.spec_from_file_location('mysql_stock', ROOT / 'backend/app.py')
             self.module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(self.module)
         self.client = self.module.app.test_client()
+        as_person(self, self.module)
 
     def test_mysql_crud_constraints_and_rollback(self):
         response = self.client.get('/api/data')
         self.assertEqual(response.status_code, 200, response.json)
         with self.raw.cursor() as cursor:
             cursor.execute('SHOW TABLES')
-            self.assertEqual({row[0] for row in cursor}, {'categories', 'items', 'meta'})
+            self.assertEqual({row[0] for row in cursor}, {'categories', 'items', 'meta', 'people', 'movements'})
         self.assertFalse(Path(self.env['DB_PATH']).exists())
         self.assertEqual(self.client.post('/api/categories', json={
             'name': 'Teste µΩ', 'props': ['reference'], 'image': True,

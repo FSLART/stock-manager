@@ -1248,3 +1248,12 @@ a.text-button{display:inline-flex;align-items:center;text-decoration:none}
 .csv-preview th{position:sticky;top:0;background:#32342e}
 .csv-preview td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
 .csv-preview .chip{display:inline-block;margin:2px}
+
+/* Sessão na navegação e gestão de pessoas. */
+.session-box{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;font-weight:700}
+.people-admin{grid-column:1/-1}
+.people-form{flex-direction:row;flex-wrap:wrap;align-items:flex-end;gap:12px;padding:0}
+.people-form .project-name-field{flex:1 1 160px}
+.people-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+@media(max-width:1000px){.home-nav .main-menu{order:2}}
+@media(max-width:560px){.people-admin .setting-row{flex-wrap:wrap}}

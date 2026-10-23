@@ -1,6 +1,7 @@
 # O Excel e a base de dados nao guardam dicionarios Python diretamente.
 # json transforma, por exemplo, {"valor": "10"} em texto para guardar
 # e faz o caminho inverso quando os dados sao lidos.
+import base64
 import json
 import re
 from io import BytesIO
@@ -16,12 +17,14 @@ import time
 # Permite criar funcoes que funcionam com o bloco "with".
 from contextlib import contextmanager
 # Representa caminhos de ficheiros de forma independente do sistema operativo.
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
+import urllib.request
 
 # Flask recebe pedidos HTTP; jsonify responde em JSON, render_template entrega
 # a pagina HTML e request permite ler os dados enviados pelo frontend.
-from flask import Flask, g, jsonify, render_template, request, send_from_directory
+from flask import Flask, g, jsonify, redirect, render_template, request, send_from_directory, session
 # Workbook cria um livro vazio; load_workbook abre o ficheiro ja existente.
 from openpyxl import Workbook, load_workbook
 # Estas classes pertencem ao formato antigo que criava uma tabela Excel.
@@ -32,6 +35,7 @@ from openpyxl.utils import get_column_letter
 import gspread
 from google.oauth2.service_account import Credentials
 from uuid import uuid4
+from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from PIL import Image, ImageOps, UnidentifiedImageError
 from dotenv import load_dotenv
@@ -134,6 +138,26 @@ def init_mysql_schema(connection):
             `key` VARCHAR(255) PRIMARY KEY,
             value LONGTEXT NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
+        """CREATE TABLE IF NOT EXISTS people (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            name VARCHAR(255) COLLATE utf8mb4_0900_as_ci UNIQUE NOT NULL,
+            pin_hash VARCHAR(255) NOT NULL DEFAULT '',
+            notion_id VARCHAR(64) UNIQUE NULL,
+            is_admin INTEGER NOT NULL DEFAULT 0
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
+        """CREATE TABLE IF NOT EXISTS movements (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            ts VARCHAR(32) NOT NULL,
+            person_id BIGINT NULL,
+            person VARCHAR(255) NOT NULL,
+            type VARCHAR(16) NOT NULL,
+            item_id BIGINT NULL,
+            cat VARCHAR(255) NOT NULL,
+            props LONGTEXT NOT NULL,
+            delta BIGINT NOT NULL,
+            before_qty BIGINT NOT NULL,
+            after_qty BIGINT NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
     ):
         if mariadb:
             sql = sql.replace("utf8mb4_0900_as_ci", "utf8mb4_uca1400_as_ci").replace("utf8mb4_0900_bin", "utf8mb4_bin")
@@ -141,6 +165,19 @@ def init_mysql_schema(connection):
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", BASE_DIR / "uploads"))
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+# Sessao por cookie assinado. Sem SECRET_KEY no .env as sessoes perdem-se a cada reinicio.
+app.secret_key = os.getenv("SECRET_KEY") or os.urandom(32)
+app.config.update(
+    PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=PUBLIC_BASE_URL.startswith("https://"),
+)
+# Login com Notion so fica disponivel quando a integracao esta configurada no .env.
+NOTION_CLIENT_ID = os.getenv("NOTION_CLIENT_ID", "").strip()
+NOTION_CLIENT_SECRET = os.getenv("NOTION_CLIENT_SECRET", "").strip()
+PIN_RE = re.compile(r"[A-Za-z0-9]{4}")
+# shortcut: tentativas falhadas em memoria, so valem com 1 worker; passar para a BD se houver mais.
+LOGIN_ATTEMPTS = {}
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 NORMALIZED_IMAGE_SIZE = (800, 800)
 # Ficheiro sincronizado com a base de dados. EXCEL_PATH no ambiente permite
@@ -197,6 +234,48 @@ CATEGORIAS_INICIAIS = {
     "Indutores": ["valor (µH)", "corrente (A)"],
     "Cristais": ["frequência (MHz)"],
 }
+
+
+def current_person():
+    # Pessoa da sessao atual, ou None; tambem invalida sessoes de pessoas apagadas.
+    person_id = session.get("person_id")
+    if person_id is None:
+        return None
+    init_db()
+    with db_connection() as connection:
+        row = connection.execute("SELECT id, name, is_admin, notion_id FROM people WHERE id = ?", (person_id,)).fetchone()
+    return {"id": row["id"], "name": row["name"], "admin": bool(row["is_admin"]), "notion": bool(row["notion_id"])} if row else None
+
+
+def start_session(person_id):
+    session.clear()
+    session.permanent = True
+    session["person_id"] = person_id
+
+
+@app.before_request
+def require_login():
+    # Ver stock e publico; qualquer escrita na API exige uma pessoa com sessao.
+    # Registado antes do lock para um 401 nunca ficar a espera de outra escrita.
+    if request.method not in {"POST", "PATCH", "DELETE"} or not request.path.startswith("/api/") or request.path.startswith("/api/auth/"):
+        return None
+    g.person = current_person()
+    if g.person is None:
+        return jsonify(error="Inicia sessão para alterar o stock", login=True), 401
+    return None
+
+
+def record_movements(connection, movements):
+    # Historico central (quem, quando, quanto), gravado na mesma transacao da alteracao.
+    if not movements:
+        return
+    ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    connection.executemany(
+        "INSERT INTO movements (ts, person_id, person, type, item_id, cat, props, delta, before_qty, after_qty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [(ts, g.person["id"], g.person["name"], m["type"], m.get("item_id"), m["cat"],
+          json.dumps(m["props"], ensure_ascii=False), m["delta"], m["before"], m["before"] + m["delta"])
+         for m in movements],
+    )
 
 
 @app.before_request
@@ -288,6 +367,27 @@ def init_sqlite_schema(connection):
         CREATE TABLE IF NOT EXISTS meta (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS people (
+            id INTEGER PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL COLLATE NOCASE,
+            pin_hash TEXT NOT NULL DEFAULT '',
+            notion_id TEXT UNIQUE,
+            is_admin INTEGER NOT NULL DEFAULT 0
+        );
+        -- Sem FK para items: save_items reescreve a tabela items a cada escrita.
+        CREATE TABLE IF NOT EXISTS movements (
+            id INTEGER PRIMARY KEY,
+            ts TEXT NOT NULL,
+            person_id INTEGER,
+            person TEXT NOT NULL,
+            type TEXT NOT NULL,
+            item_id INTEGER,
+            cat TEXT NOT NULL,
+            props TEXT NOT NULL,
+            delta INTEGER NOT NULL,
+            before_qty INTEGER NOT NULL,
+            after_qty INTEGER NOT NULL
         );
         """
     )
@@ -809,7 +909,7 @@ def read_items():
     return None, None, None, db_items()
 
 
-def save_items(items):
+def save_items(items, movements=()):
     # Recebe a lista completa atual e grava a mesma informacao em dois locais:
     # SQLite para a aplicacao e Excel para consulta/edicao manual.
     with EXCEL_LOCK:
@@ -843,6 +943,7 @@ def save_items(items):
                     for item in items
                 ],
             )
+            record_movements(connection, movements)
 
         if STORAGE_MODE == "google":
             save_google_items(items)
@@ -908,10 +1009,14 @@ def save_items(items):
 
 def data_from_items(items):
     # Junta configuracao das categorias e lista de itens numa unica resposta JSON.
+    # auth/user dizem ao frontend que as alteracoes pedem login e quem esta com sessao.
     return {
         "categories": db_categories(),
         "items": items,
         "can_edit": STORAGE_MODE == "local",
+        "auth": True,
+        "user": current_person(),
+        "notion_login": bool(NOTION_CLIENT_ID),
     }
 
 
@@ -1016,9 +1121,11 @@ def import_items():
                         raise ValueError("A quantidade total excede o limite permitido")
                     if existing:
                         connection.execute("UPDATE items SET qty = qty + ? WHERE id = ?", (quantity, existing["id"]))
+                        item_id = existing["id"]
                     else:
-                        connection.execute("INSERT INTO items (cat_id, props, `key`, qty, image) VALUES (?, ?, ?, ?, '')", (category["id"], json.dumps(properties, ensure_ascii=False), key, quantity))
+                        item_id = connection.execute("INSERT INTO items (cat_id, props, `key`, qty, image) VALUES (?, ?, ?, ?, '')", (category["id"], json.dumps(properties, ensure_ascii=False), key, quantity)).lastrowid
                     movements.append({"cat": category["name"], "props": properties, "qty": quantity, "before": before})
+                    record_movements(connection, [{"type": "in", "item_id": item_id, "cat": category["name"], "props": properties, "delta": quantity, "before": before}])
         units = sum(item["qty"] for item in movements)
         return jsonify(msg=f"{len(rows)} linha(s) importada(s) · {units} unidades adicionadas", rows=len(rows), units=units, movements=movements)
     except ValueError as exc:
@@ -1057,6 +1164,7 @@ def mover():
         # Dois itens sao considerados iguais quando pertencem a mesma categoria
         # e todos os valores das propriedades, depois de normalizados, coincidem.
         item = next((current for current in items if current["cat"] == category and "|".join(norm(current["props"].get(name, "")) for name in props) == key), None)
+        before = item["qty"] if item else 0
 
         if data.get("mode") == "out":
             # Na saida, nunca se cria um item novo e nunca se permite stock negativo.
@@ -1075,9 +1183,11 @@ def mover():
         else:
             # Se nao houve correspondencia, cria uma referencia com id novo.
             new_id = max((item["id"] for item in items), default=0) + 1
-            items.append({"id": new_id, "cat": category, "props": props, "qty": qty, "image": image})
+            item = {"id": new_id, "cat": category, "props": props, "qty": qty, "image": image}
+            items.append(item)
             message = "Item novo adicionado"
-        save_items(items)
+        save_items(items, [{"type": "out" if data.get("mode") == "out" else "in", "item_id": item["id"], "cat": category,
+                            "props": item["props"], "delta": item["qty"] - before, "before": before}])
         return jsonify(msg=message)
     except Exception as exc:
         return erro(str(exc), 500)
@@ -1092,9 +1202,12 @@ def ajustar(item_id):
         item = next((current for current in items if current["id"] == item_id), None)
         if not item:
             return erro("Item não encontrado", 404)
+        before = item["qty"]
         item["qty"] = max(0, item["qty"] + delta)
         # max protege a regra de negocio: a quantidade minima possivel e zero.
-        save_items(items)
+        change = item["qty"] - before
+        save_items(items, [{"type": "in" if change > 0 else "out", "item_id": item_id, "cat": item["cat"],
+                            "props": item["props"], "delta": change, "before": before}] if change else [])
         return jsonify(ok=True)
     except (TypeError, ValueError):
         return erro("Valor inválido")
@@ -1107,10 +1220,11 @@ def apagar(item_id):
     # DELETE /api/items/<id> remove uma referencia inteira, nao apenas unidades.
     try:
         _, _, _, items = read_items()
-        restantes = [item for item in items if item["id"] != item_id]
-        if len(restantes) == len(items):
+        item = next((current for current in items if current["id"] == item_id), None)
+        if not item:
             return erro("Item não encontrado", 404)
-        save_items(restantes)
+        save_items([current for current in items if current["id"] != item_id],
+                   [{"type": "delete", "item_id": item_id, "cat": item["cat"], "props": item["props"], "delta": -item["qty"], "before": item["qty"]}])
         return jsonify(ok=True)
     except Exception as exc:
         return erro(str(exc), 500)
@@ -1149,6 +1263,8 @@ def editar_item(item_id):
                 "UPDATE items SET props = ?, `key` = ?, qty = ?, image = ? WHERE id = ?",
                 (json.dumps(props, ensure_ascii=False), "|".join(norm(value) for value in props.values()), int(raw_qty), image, item_id),
             )
+            record_movements(connection, [{"type": "edit", "item_id": item_id, "cat": category["name"], "props": props,
+                                           "delta": int(raw_qty) - row["qty"], "before": row["qty"]}])
         return jsonify(msg="Componente atualizado")
     except DB_INTEGRITY_ERRORS:
         return erro("Já existe um componente com essas propriedades. A edição não foi guardada.", 409)
@@ -1235,13 +1351,16 @@ def apagar_categoria(name):
         init_db()
         with db_connection() as connection:
             row = connection.execute(
-                "SELECT id FROM categories WHERE name = ? COLLATE NOCASE", (name,)
+                "SELECT id, name FROM categories WHERE name = ? COLLATE NOCASE", (name,)
             ).fetchone()
             if not row:
                 return erro("Categoria não encontrada", 404)
-            n_itens = connection.execute(
-                "SELECT COUNT(*) AS n FROM items WHERE cat_id = ?", (row["id"],)
-            ).fetchone()["n"]
+            removed = connection.execute(
+                "SELECT id, props, qty FROM items WHERE cat_id = ?", (row["id"],)
+            ).fetchall()
+            n_itens = len(removed)
+            record_movements(connection, [{"type": "delete", "item_id": item["id"], "cat": row["name"], "props": json.loads(item["props"]),
+                                           "delta": -item["qty"], "before": item["qty"]} for item in removed])
             connection.execute("DELETE FROM categories WHERE id = ?", (row["id"],))
         # read_items obtem os restantes itens e save_items reconstrui as folhas,
         # deixando de criar a folha da categoria apagada.
@@ -1254,6 +1373,208 @@ def apagar_categoria(name):
         return jsonify(msg=msg)
     except Exception as exc:
         return erro(str(exc), 500)
+
+
+@app.get("/api/movements")
+def movimentos():
+    # Historico publico, do mais recente para o mais antigo.
+    try:
+        init_db()
+        with db_connection() as connection:
+            # shortcut: so os ultimos 1000 movimentos; paginar quando o historico crescer.
+            rows = connection.execute("SELECT * FROM movements ORDER BY id DESC LIMIT 1000").fetchall()
+        return jsonify(movements=[{
+            "id": row["id"], "ts": row["ts"], "person": row["person"], "type": row["type"], "item_id": row["item_id"],
+            "cat": row["cat"], "props": json.loads(row["props"]), "delta": row["delta"],
+            "before": row["before_qty"], "after": row["after_qty"],
+        } for row in rows])
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.get("/api/auth/people")
+def pessoas_login():
+    # Nomes para o popup de login; so aparecem pessoas com PIN definido.
+    try:
+        init_db()
+        with db_connection() as connection:
+            rows = connection.execute("SELECT id, name FROM people WHERE pin_hash <> '' ORDER BY name").fetchall()
+        return jsonify(people=[{"id": row["id"], "name": row["name"]} for row in rows])
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.post("/api/auth/login")
+def login():
+    data = request.get_json(silent=True) or {}
+    person_id, pin = data.get("person_id"), str(data.get("pin", "")).strip().upper()
+    if type(person_id) is not int:
+        return erro("Escolhe a tua pessoa")
+    fails, until = LOGIN_ATTEMPTS.get(person_id, (0, 0))
+    if until > time.time():
+        return erro("Demasiadas tentativas. Espera alguns minutos e tenta outra vez.", 429)
+    try:
+        init_db()
+        with db_connection() as connection:
+            row = connection.execute("SELECT id, pin_hash FROM people WHERE id = ?", (person_id,)).fetchone()
+    except Exception as exc:
+        return erro(str(exc), 500)
+    if not row or not row["pin_hash"] or not check_password_hash(row["pin_hash"], pin):
+        # 5 falhas seguidas bloqueiam essa pessoa durante 5 minutos.
+        LOGIN_ATTEMPTS[person_id] = (0, time.time() + 300) if fails + 1 >= 5 else (fails + 1, 0)
+        return erro("PIN errado", 401)
+    LOGIN_ATTEMPTS.pop(person_id, None)
+    start_session(row["id"])
+    return jsonify(msg="Sessão iniciada", user=current_person())
+
+
+@app.post("/api/auth/logout")
+def logout():
+    session.clear()
+    return jsonify(msg="Sessão terminada")
+
+
+def notion_redirect_uri():
+    return f"{PUBLIC_BASE_URL or request.host_url.rstrip('/')}/api/auth/notion/callback"
+
+
+def notion_page(message):
+    # Pagina minima para erros do Notion, que chegam por redirecionamento e nao por fetch.
+    return app.response_class(
+        f'<!doctype html><meta charset="utf-8"><title>Stocklart</title><p>{message}</p><p><a href="/#/stock">Voltar ao Stocklart</a></p>',
+        status=400, mimetype="text/html")
+
+
+@app.get("/api/auth/notion")
+def notion_login():
+    if not NOTION_CLIENT_ID:
+        return notion_page("O login com Notion não está configurado.")
+    session["notion_state"] = uuid4().hex
+    session["notion_next"] = "/#/settings" if request.args.get("next") == "settings" else "/#/stock"
+    return redirect("https://api.notion.com/v1/oauth/authorize?" + urlencode({
+        "client_id": NOTION_CLIENT_ID, "response_type": "code", "owner": "user",
+        "redirect_uri": notion_redirect_uri(), "state": session["notion_state"],
+    }))
+
+
+@app.get("/api/auth/notion/callback")
+def notion_callback():
+    state = session.pop("notion_state", None)
+    if not NOTION_CLIENT_ID or not state or request.args.get("state") != state or not request.args.get("code"):
+        return notion_page("O login com Notion foi cancelado ou expirou. Tenta outra vez.")
+    credentials = base64.b64encode(f"{NOTION_CLIENT_ID}:{NOTION_CLIENT_SECRET}".encode()).decode()
+    token_request = urllib.request.Request(
+        "https://api.notion.com/v1/oauth/token",
+        data=json.dumps({"grant_type": "authorization_code", "code": request.args["code"], "redirect_uri": notion_redirect_uri()}).encode(),
+        headers={"Authorization": f"Basic {credentials}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"},
+    )
+    try:
+        # So precisamos da identidade; o token de acesso do Notion e descartado.
+        with urllib.request.urlopen(token_request, timeout=10) as response:
+            notion_id = str(json.load(response)["owner"]["user"]["id"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return notion_page("O Notion não confirmou o login. Tenta outra vez.")
+    init_db()
+    with db_connection() as connection:
+        row = connection.execute("SELECT id FROM people WHERE notion_id = ?", (notion_id,)).fetchone()
+        linked = session.get("person_id")
+        # Quem ja entrou com PIN liga a sua conta Notion uma vez; depois entra so com o Notion.
+        if row is None and linked is not None and connection.execute("SELECT 1 FROM people WHERE id = ? AND notion_id IS NULL", (linked,)).fetchone():
+            connection.execute("UPDATE people SET notion_id = ? WHERE id = ?", (notion_id, linked))
+            row = {"id": linked}
+    if row is None:
+        return notion_page("A tua conta Notion não está na lista de pessoas do Stocklart. Pede a um admin para te adicionar.")
+    next_page = session.get("notion_next", "/#/stock")
+    start_session(row["id"])
+    return redirect(next_page)
+
+
+def require_admin():
+    person = current_person()
+    return None if person and person["admin"] else erro("Só um admin pode gerir pessoas", 403)
+
+
+def valid_pin(data):
+    pin = str(data.get("pin", "")).strip()
+    return pin.upper() if PIN_RE.fullmatch(pin) else None
+
+
+@app.get("/api/people")
+def listar_pessoas():
+    if (denied := require_admin()):
+        return denied
+    with db_connection() as connection:
+        rows = connection.execute("SELECT id, name, pin_hash, notion_id, is_admin FROM people ORDER BY name").fetchall()
+    return jsonify(people=[{"id": row["id"], "name": row["name"], "admin": bool(row["is_admin"]),
+                            "pin": bool(row["pin_hash"]), "notion": bool(row["notion_id"])} for row in rows])
+
+
+@app.post("/api/people")
+def nova_pessoa():
+    if (denied := require_admin()):
+        return denied
+    data = request.get_json(silent=True) or {}
+    name, pin = str(data.get("name", "")).strip(), valid_pin(data)
+    if not name or not pin:
+        return erro("Indica o nome e um PIN de 4 letras ou números")
+    try:
+        with db_connection() as connection:
+            connection.execute("INSERT INTO people (name, pin_hash, is_admin) VALUES (?, ?, ?)",
+                               (name, generate_password_hash(pin), int(bool(data.get("admin")))))
+        return jsonify(msg="Pessoa adicionada")
+    except DB_INTEGRITY_ERRORS:
+        return erro("Já existe uma pessoa com esse nome", 409)
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.patch("/api/people/<int:person_id>")
+def editar_pessoa(person_id):
+    if (denied := require_admin()):
+        return denied
+    data = request.get_json(silent=True) or {}
+    updates = {}
+    if "name" in data:
+        updates["name"] = str(data["name"]).strip()
+        if not updates["name"]:
+            return erro("Indica o nome")
+    if "pin" in data:
+        pin = valid_pin(data)
+        if not pin:
+            return erro("O PIN tem de ter 4 letras ou números")
+        updates["pin_hash"] = generate_password_hash(pin)
+    if "admin" in data:
+        if person_id == g.person["id"] and not data["admin"]:
+            return erro("Não podes retirar o teu próprio acesso de admin")
+        updates["is_admin"] = int(bool(data["admin"]))
+    if not updates:
+        return erro("Nada para alterar")
+    try:
+        with db_connection() as connection:
+            if connection.execute("SELECT 1 FROM people WHERE id = ?", (person_id,)).fetchone() is None:
+                return erro("Pessoa não encontrada", 404)
+            # As colunas vem da lista fixa acima; os valores seguem como parametros.
+            connection.execute(f"UPDATE people SET {', '.join(f'{column} = ?' for column in updates)} WHERE id = ?",
+                               (*updates.values(), person_id))
+        return jsonify(msg="Pessoa atualizada")
+    except DB_INTEGRITY_ERRORS:
+        return erro("Já existe uma pessoa com esse nome", 409)
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.delete("/api/people/<int:person_id>")
+def apagar_pessoa(person_id):
+    if (denied := require_admin()):
+        return denied
+    if person_id == g.person["id"]:
+        return erro("Não podes apagar a tua própria conta")
+    with db_connection() as connection:
+        if connection.execute("SELECT 1 FROM people WHERE id = ?", (person_id,)).fetchone() is None:
+            return erro("Pessoa não encontrada", 404)
+        # O historico guarda o nome, por isso os movimentos desta pessoa continuam legiveis.
+        connection.execute("DELETE FROM people WHERE id = ?", (person_id,))
+    return jsonify(msg="Pessoa apagada")
 
 
 if __name__ == "__main__":
