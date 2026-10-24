@@ -17,7 +17,7 @@ class AuthTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        with patch.dict(os.environ, {'DB_BACKEND': 'sqlite', 'STORAGE_MODE': 'local', 'DB_PATH': str(Path(self.temp.name) / 'stock.db'),
+        with patch.dict(os.environ, {'DB_BACKEND': 'sqlite', 'STORAGE_MODE': 'local', 'DB_PATH': str(Path(self.temp.name) / 'stock.db'), 'MEMBERS_PATH': str(Path(self.temp.name) / 'members.json'),
                                      'PUBLIC_BASE_URL': 'http://localhost', 'NOTION_CLIENT_ID': 'cid', 'NOTION_CLIENT_SECRET': 'secret',
                                      'NOTION_WORKSPACE_ID': LART}):
             spec = importlib.util.spec_from_file_location('auth_server', ROOT / 'backend/app.py')
@@ -40,8 +40,9 @@ class AuthTest(unittest.TestCase):
         # Segundo pedido: a base Members Filtered, com (nome, departamentos) por linha.
         rows = io.BytesIO(json.dumps({'has_more': False, 'results': [
             {'properties': {'Name': {'title': [{'plain_text': title}]}, 'Department': {'multi_select': [{'name': tag} for tag in tags]}}}
-            for title, tags in members]}).encode())
-        with patch.object(self.module.urllib.request, 'urlopen', side_effect=[body, rows]) as urlopen:
+            for title, tags in members or ()]}).encode())
+        # members=None: a API nao deixa ler a base.
+        with patch.object(self.module.urllib.request, 'urlopen', side_effect=[body, OSError() if members is None else rows]) as urlopen:
             response = client.get(f'/api/auth/notion/callback?code=c&state={state}')
         self.assertEqual(urlopen.call_args_list[0].args[0].get_header('Authorization'), 'Basic Y2lkOnNlY3JldA==')
         return response
@@ -87,6 +88,10 @@ class AuthTest(unittest.TestCase):
         self.notion_login(self.client, 'notion-rui', name='Rui Costa', members=[('Rui Costa', ['Powertrain', 'Board'])])
         self.assertEqual((self.user(self.client)['role'], self.user(self.client)['department']), ('Board', 'Powertrain'))
         self.assertEqual(self.client.post('/api/move', json=led).status_code, 403)
+        # Sem acesso a API: usa a copia local da base.
+        Path(self.temp.name, 'members.json').write_text(json.dumps([['Rui Costa', ['Electronics']]]), encoding='utf-8')
+        self.notion_login(self.client, 'notion-rui', name='Rui Costa', members=None)
+        self.assertEqual(self.user(self.client)['department'], 'Electronics')
 
     def test_pin_login_is_disabled(self):
         self.assertEqual(self.client.post('/api/auth/login', json={'person_id': 1, 'pin': 'AB12'}).status_code, 404)

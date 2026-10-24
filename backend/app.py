@@ -238,6 +238,8 @@ NOTION_WORKSPACE_ID = os.getenv("NOTION_WORKSPACE_ID", "").strip().replace("-", 
 # Cargo e departamento vem da base Members Filtered; sem NOTION_TOKEN usa o token do proprio login.
 NOTION_TOKEN = os.getenv("NOTION_TOKEN", "").strip()
 NOTION_MEMBERS_DB = os.getenv("NOTION_MEMBERS_DB", "3d5ce47890c280f8a695ccf113fd66c3").strip()
+# Copia local dessa base ([[nome, [etiquetas]], ...]), usada quando a API do Notion nao a deixa ler. Fora do git: o repo e publico.
+MEMBERS_PATH = Path(os.getenv("MEMBERS_PATH", BASE_DIR.parent / "data" / "notion-members.json"))
 # PIN: PIN_RE = re.compile(r"[A-Za-z0-9]{4}")
 # PIN: shortcut: tentativas falhadas em memoria, so valem com 1 worker; passar para a BD se houver mais.
 # PIN: LOGIN_ATTEMPTS = {}
@@ -2260,10 +2262,7 @@ def notion_callback():
         notion_id = str(notion_user["id"])
     except (OSError, ValueError, KeyError, TypeError):
         return notion_page("O Notion não confirmou o login. Tenta outra vez.")
-    try:
-        member = notion_member(NOTION_TOKEN or token["access_token"], str(notion_user.get("name") or ""))
-    except (OSError, ValueError, KeyError, TypeError):
-        member = None  # sem acesso a base: fica o cargo que ja tinha
+    member = notion_member(token.get("access_token"), str(notion_user.get("name") or ""))
     from_workspace = bool(NOTION_WORKSPACE_ID) and str(token.get("workspace_id", "")).replace("-", "").lower() == NOTION_WORKSPACE_ID
     init_db()
     with db_connection() as connection:
@@ -2298,9 +2297,9 @@ def name_key(name):
     return (words[0], words[-1]) if words else None
 
 
-def notion_member(token, name):
-    # (cargo, departamentos) da base Members Filtered, ou None se o nome nao aparece uma so vez.
-    matches, cursor = [], None
+def notion_members(token):
+    # [[nome, [etiquetas]], ...] da base Members Filtered.
+    rows, cursor = [], None
     while True:
         query = urllib.request.Request(
             f"https://api.notion.com/v1/databases/{NOTION_MEMBERS_DB}/query",
@@ -2309,13 +2308,23 @@ def notion_member(token, name):
         )
         with urllib.request.urlopen(query, timeout=10) as response:
             page = json.load(response)
-        for row in page["results"]:
-            title = "".join(part["plain_text"] for part in row["properties"]["Name"]["title"])
-            if name_key(title) == name_key(name):
-                matches.append([option["name"] for option in row["properties"]["Department"]["multi_select"]])
+        rows += [["".join(part["plain_text"] for part in row["properties"]["Name"]["title"]),
+                  [option["name"] for option in row["properties"]["Department"]["multi_select"]]] for row in page["results"]]
         if not page.get("has_more"):
-            break
+            return rows
         cursor = page["next_cursor"]
+
+
+def notion_member(token, name):
+    # (cargo, departamentos) de quem entra, ou None se o nome nao aparece uma so vez.
+    try:
+        rows = notion_members(NOTION_TOKEN or token)
+    except (OSError, ValueError, KeyError, TypeError):
+        try:
+            rows = json.loads(MEMBERS_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+    matches = [tags for title, tags in rows if name_key(title) == name_key(name)]
     if len(matches) != 1:
         return None
     tags = matches[0]
