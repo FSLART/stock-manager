@@ -24,7 +24,7 @@ const routes = {
   editLocation: () => ['/api/locations', 'PATCH'],
   deleteLocation: () => ['/api/locations', 'DELETE'],
   saveLabel: () => ['/api/labels', 'POST'],
-  deleteLabel: p => [`/api/labels/${p.id}`, 'DELETE'],
+  deleteLabels: () => ['/api/labels', 'DELETE'],
   editCategory: p => [`/api/categories/${encodeURIComponent(p.originalName)}`, 'PATCH'],
   savePart: () => ['/api/parts', 'POST'],
   lookupPart: p => [`/api/parts/lookup?mpn=${encodeURIComponent(p.mpn)}`, 'GET'],

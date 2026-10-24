@@ -239,7 +239,7 @@ provide('inventory', reactive({
   }),
   deleteLocation: guard(name => act('deleteLocation', { name })),
   saveLabel: guard((label, done) => act('saveLabel', label, done)),
-  deleteLabel: guard(id => act('deleteLabel', { id })),
+  deleteLabels: guard((ids, done) => act('deleteLabels', { ids }, done)),
   consume: guard((payload, done) => act('consumeItems', payload, done)),
   revertMovements: guard((ids, done) => act('revertMovements', { ids }, done)),
   async manageCategories() { navigation.push('/stock'); await nextTick(); document.querySelector('nav[aria-label="Categorias"]')?.focus() },

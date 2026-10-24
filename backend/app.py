@@ -1779,15 +1779,19 @@ def guardar_etiqueta():
         return erro(str(exc), 500)
 
 
-@app.delete("/api/labels/<int:label_id>")
-def apagar_etiqueta(label_id):
+@app.delete("/api/labels")
+def apagar_etiquetas():
+    # Apaga uma ou várias etiquetas de uma vez: {"ids": [1, 2, 3]}.
     if STORAGE_MODE != "local":
         return erro("A edição está disponível no modo local")
+    ids = (request.get_json(silent=True) or {}).get("ids")
+    if not isinstance(ids, list) or not 1 <= len(ids) <= 500 or not all(isinstance(label_id, int) and not isinstance(label_id, bool) for label_id in ids):
+        return erro("Indica as etiquetas a apagar")
     try:
         init_db()
         with EXCEL_LOCK, db_connection() as connection:
-            connection.execute("DELETE FROM labels WHERE id = ?", (label_id,))
-        return jsonify(msg="Etiqueta apagada")
+            connection.executemany("DELETE FROM labels WHERE id = ?", [(label_id,) for label_id in ids])
+        return jsonify(msg=f"{len(ids)} etiqueta(s) apagada(s)")
     except Exception as exc:
         return erro(str(exc), 500)
 

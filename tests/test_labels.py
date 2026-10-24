@@ -38,7 +38,7 @@ class LabelsTest(unittest.TestCase):
         self.assertEqual(self.client.post('/api/labels', json=screw).status_code, 200)
         self.assertEqual({key: self.labels()[0][key] for key in ('layout', 'screw', 'titleSize', 'fieldSize')}, {'layout': 'bin', 'screw': 'screw-countersunk', 'titleSize': 14, 'fieldSize': None})
         self.assertEqual(self.client.post('/api/labels', json={**label, 'id': 999}).status_code, 404)
-        self.assertEqual(self.client.delete(f'/api/labels/{label_id}').status_code, 200)
+        self.assertEqual(self.client.delete('/api/labels', json={'ids': [label_id]}).status_code, 200)
         self.assertEqual(self.labels(), [])
 
     def test_creates_several_labels_at_once_or_none(self):
@@ -51,6 +51,14 @@ class LabelsTest(unittest.TestCase):
         for batch in [[], [{**screw, 'title': 'A'}] * 101, [{**screw, 'title': 'M6x10'}, {**screw, 'code': 'Aztec'}], ['x']]:
             self.assertEqual(self.client.post('/api/labels', json={'labels': batch}).status_code, 400)
         self.assertEqual(len(self.labels()), 3)
+
+    def test_deletes_several_labels_at_once(self):
+        base = {'title': 'A', 'fields': [], 'code': '', 'location': '', 'width': 55, 'height': 12}
+        ids = self.client.post('/api/labels', json={'labels': [{**base, 'title': title} for title in 'ABC']}).get_json()['ids']
+        for body in [{}, {'ids': []}, {'ids': ['1']}, {'ids': [True]}, {'ids': list(range(501))}]:
+            self.assertEqual(self.client.delete('/api/labels', json=body).status_code, 400, body)
+        self.assertEqual(self.client.delete('/api/labels', json={'ids': ids[:2]}).status_code, 200)
+        self.assertEqual([entry['title'] for entry in self.labels()], ['C'])
 
     def test_rejects_invalid_labels(self):
         base = {'title': 'A', 'fields': [], 'code': 'QRCode', 'location': '', 'width': 60, 'height': 25}

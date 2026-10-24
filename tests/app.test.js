@@ -732,7 +732,8 @@ it('creates a drawer label, saves it on the server and prints it with its Data M
   const labels = [saved]
   fetch.mockImplementation(async (url, options) => {
     const body = url === '/api/labels' && JSON.parse(options.body)
-    const added = body ? (body.labels || [body]).map((entry, index) => ({ ...entry, id: 7 + labels.length + index })) : []
+    if (body?.ids) labels.splice(0, labels.length, ...labels.filter(entry => !body.ids.includes(entry.id)))
+    const added = body && !body.ids ? (body.labels || [body]).map((entry, index) => ({ ...entry, id: 7 + labels.length + index })) : []
     labels.push(...added)
     return { ok: true, json: async () => body ? { msg: 'Etiqueta guardada', ids: added.map(entry => entry.id) }
       : { ...structuredClone(data), items: [data.items[0], { ...data.items[1], location: 'Caixa 1' }], locations: { 'Caixa 1': '' }, location_codes: { 'Caixa 1': 'K7Q2MX' }, labels: structuredClone(labels) } }
@@ -804,7 +805,18 @@ it('creates a drawer label, saves it on the server and prints it with its Data M
   await wrapper.find('.label-card-title').trigger('click')
   await button('Apagar').trigger('click')
   await flushPromises()
-  expect(fetch.mock.calls.find(([url, options]) => url === '/api/labels/7' && options.method === 'DELETE')).toBeTruthy()
+  const deleted = () => fetch.mock.calls.filter(([url, options]) => url === '/api/labels' && options.method === 'DELETE').map(([, options]) => JSON.parse(options.body).ids)
+  expect(deleted()).toEqual([[7]])
+  // Na lista seleciona-se várias e apagam-se de uma vez.
+  await wrapper.find('button[aria-label="Selecionar M4x16"]').trigger('click')
+  await wrapper.find('button[aria-label="Selecionar M5x20"]').trigger('click')
+  pages = undefined
+  await button('Imprimir selecionadas (2)').trigger('click')
+  await vi.waitFor(() => expect(pages?.[0]).toHaveLength(2))
+  await button('Apagar selecionadas (2)').trigger('click')
+  await flushPromises()
+  expect(deleted().at(-1)).toEqual([10, 11])
+  expect(titles()).toEqual(['R&D', 'M3x10'])
 })
 
 it('explains how to make labels in an illustrated step-by-step tutorial', async () => {

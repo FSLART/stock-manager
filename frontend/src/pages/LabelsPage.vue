@@ -75,7 +75,21 @@ function save() {
 }
 function remove() {
   if (label.value.id == null) return (label.value = null)
-  if (confirm(`Apagar a etiqueta "${label.value.title || 'sem título'}" para toda a equipa?`)) inventory.deleteLabel(label.value.id)
+  if (confirm(`Apagar a etiqueta "${label.value.title || 'sem título'}" para toda a equipa?`)) inventory.deleteLabels([label.value.id])
+}
+
+// Seleção na lista, para imprimir ou apagar várias de uma vez; as que já não existem saem da seleção.
+const picked = ref(new Set())
+watch(labels, list => { picked.value = new Set(list.map(entry => entry.id).filter(id => picked.value.has(id))) })
+function togglePick(id) {
+  const next = new Set(picked.value)
+  if (!next.delete(id)) next.add(id)
+  picked.value = next
+}
+const pickedLabels = computed(() => labels.value.filter(entry => picked.value.has(entry.id)))
+const allPicked = computed(() => labels.value.length > 0 && picked.value.size === labels.value.length)
+function removePicked() {
+  if (confirm(`Apagar ${picked.value.size} etiqueta(s) para toda a equipa?`)) inventory.deleteLabels([...picked.value], () => { picked.value = new Set() })
 }
 
 // O código abre no inventário a localização da etiqueta ou, sem ela, a do componente ligado (como o QR das Localizações).
@@ -155,8 +169,17 @@ async function print(entries) {
       <p v-if="error" class="upload-error" role="alert">{{ error }}</p>
       <template v-if="!label">
         <div v-if="!labels.length" class="empty-workspace">Ainda não há etiquetas. Escolhe um ponto de partida acima: gaveta, parafuso ou eletrónica.</div>
-        <ul v-else class="label-list">
-          <li v-for="entry in labels" :key="entry.id" class="label-card">
+        <!-- Selecionar e imprimir é para todos; apagar só para quem pode editar. -->
+        <div v-if="labels.length" class="label-select-bar">
+          <button type="button" class="toggle-chip" :aria-pressed="allPicked" @click="picked = new Set(allPicked ? [] : labels.map(entry => entry.id))">Selecionar todas</button>
+          <template v-if="picked.size">
+            <button type="button" class="text-button" @click="print(pickedLabels)">Imprimir selecionadas ({{ picked.size }})</button>
+            <button v-if="inventory.canEdit" type="button" class="text-button danger" @click="removePicked">Apagar selecionadas ({{ picked.size }})</button>
+            <button type="button" class="text-button" @click="picked = new Set()">Limpar seleção</button>
+          </template>
+        </div>
+        <ul v-if="labels.length" class="label-list">
+          <li v-for="entry in labels" :key="entry.id" class="label-card" :class="{ picked: picked.has(entry.id) }">
             <!-- A miniatura também abre a etiqueta; para o teclado e leitores de ecrã é o botão do título. -->
             <div class="label-card-preview" aria-hidden="true" @click="open(entry)">
               <div :style="{ zoom: fit(entry) }"><DrawerLabel :label="entry" :code="listSvgs[entry.id] || ''" /></div>
@@ -166,6 +189,7 @@ async function print(entries) {
             <div class="location-actions">
               <button class="text-button" @click="open(entry)">Editar</button>
               <button class="text-button" @click="print([entry])">Imprimir</button>
+              <button type="button" class="toggle-chip" :aria-pressed="picked.has(entry.id)" :aria-label="`Selecionar ${entry.title || 'Sem título'}`" @click="togglePick(entry.id)">{{ picked.has(entry.id) ? '✓ Selecionada' : 'Selecionar' }}</button>
             </div>
           </li>
         </ul>

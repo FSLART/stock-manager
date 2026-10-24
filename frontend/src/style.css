@@ -1719,3 +1719,5 @@ div.location-image{background:var(--bg);border:1px dashed var(--line-strong)}
 .tut-row > :not(.tut-arrow){flex:none}
 .tut-row > .tut-arrow{flex:1 1 0;min-width:0}
 .tutorial-figure .tutorial-stack{justify-items:center}
+.label-select-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:16px 0 0}
+.label-card.picked{border-color:var(--accent)}
