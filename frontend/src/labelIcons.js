@@ -13,9 +13,60 @@ import { componentKind } from './defaultImages.js'
 // Ícones para as etiquetas. Os de eletrónica são os Tabler do inventário (licença embutida por defaultImages.js);
 // os restantes estão desenhados aqui no mesmo estilo: 24 x 24, traço 2, cor do texto.
 const tabler = svg => svg.replace(/<!--[\s\S]*?-->/, '').trim()
-// Haste roscada comum aos parafusos vistos de lado, da base da cabeça (top) até à ponta.
-const shank = top => `<path d="M10 ${top}V21h4V${top}"/><path d="M10 ${top + 4}l4 -1.2M10 ${top + 7.5}l4 -1.2M10 ${top + 11}l4 -1.2"/>`
 const draw = paths => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`
+
+// Peças cheias, como nos desenhos técnicos de ferragens: os furos e os encaixes são buracos (evenodd), não tinta branca,
+// para ficarem certos tanto no papel branco como no editor escuro.
+const solid = d => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd"><path d="${d}"/></svg>`
+const circle = r => `M${12 - r} 12a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0z`
+
+// Parafuso deitado, cheio e roscado. Medidas em grossuras da haste (1 = grossura), eixo em y = 0; 0,6 por mm de comprimento.
+// Acima de 24 mm a haste cresce a um terço e para nos 72 mm, para um M10x100 caber inteiro na etiqueta.
+const mm = value => +value.toFixed(2)
+function screwShape(head, length) {
+  // Cabeça: [comprimento ao longo do parafuso, meia altura, forma].
+  const box = (w, r) => `M0 ${mm(-r)}h${mm(w)}v${mm(2 * r)}h${mm(-w)}z`
+  const half = (w, r) => [w, r, `M${mm(w)} ${mm(-r)}A${mm(w)} ${mm(r)} 0 0 0 ${mm(w)} ${mm(r)}z`]
+  const sunk = (x, r) => `M${mm(x)} ${mm(-r)}L${mm(x + r - 0.5)} -0.5V0.5L${mm(x)} ${mm(r)}z`
+  const heads = {
+    'screw-socket': [1.1, 0.9, box(1.1, 0.9)],
+    'screw-countersunk': [0.65, 1.15, sunk(0, 1.15)],
+    'screw-oval': [0.95, 1.15, `M0.3 -1.15A0.3 1.15 0 0 0 0.3 1.15z${sunk(0.3, 1.15)}`],
+    screw: [0.7, 1.05, `M0.25 -1.05h0.45v2.1h-0.45a0.25 0.25 0 0 1 -0.25 -0.25v-1.6a0.25 0.25 0 0 1 0.25 -0.25z`],
+    'screw-button': half(0.6, 1.05),
+    'screw-truss': half(0.5, 1.3),
+    bolt: [0.75, 1, box(0.75, 1)],
+    'screw-flange': [0.78, 1.2, `${box(0.6, 0.85)}M0.6 -1.2h0.18v2.4h-0.18z`],
+    'screw-set': [0, 0.5, ''],
+  }
+  if (!heads[head]) return null
+  const [start, r, shape] = heads[head]
+  // As de embutir contam para o comprimento do parafuso.
+  const sunken = head === 'screw-countersunk' || head === 'screw-oval'
+  const drawn = length <= 24 ? length : Math.min(24 + (length - 24) / 3, 40)
+  const shank = Math.max(0.6 * drawn - (sunken ? start : 0), 1), end = start + shank
+  // Rosca fina, como nas etiquetas de caixas de parafusos: a haste é cheia e só as arestas têm dentes miúdos
+  // (passo ~0,3, fundo 0,12), a de baixo desfasada meio passo. Acaba antes da ponta, que fica lisa e chanfrada.
+  const last = end - 0.2
+  const teeth = Math.max(3, Math.round((last - start) / 0.3)), step = (last - start) / teeth
+  const xs = Array.from({ length: teeth + 1 }, (_, index) => start + index * step)
+  const top = xs.slice(1).map(x => `L${mm(x - step / 2)} -0.38L${mm(x)} -0.5`).join('')
+  const tip = `L${mm(end - 0.1)} -0.5L${mm(end)} -0.4V0.4L${mm(end - 0.1)} 0.5`
+  const bottom = xs.slice(1).reverse().map(x => `L${mm(x - step / 2)} 0.5L${mm(x - step)} 0.38`).join('')
+  return { width: end, r, body: `<path d="${shape}M${mm(start)} -0.5${top}${tip}${bottom}L${mm(start)} 0.5z"/>` }
+}
+// O desenho da etiqueta: a rosca e o comprimento vêm do título ("M3x10").
+export function screwDrawing(head, title) {
+  const length = Math.min(Math.max(Number(String(title).match(/M\d+(?:[.,]\d+)?\s*[x×]\s*(\d+(?:[.,]\d+)?)/i)?.[1]?.replace(',', '.')) || 10, 2), 200)
+  const screw = screwShape(head, length)
+  return screw ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 ${mm(-screw.r)} ${mm(screw.width)} ${mm(2 * screw.r)}" fill="currentColor">${screw.body}</svg>` : ''
+}
+// O mesmo parafuso, curto e de pé, para o seletor: o que se escolhe é o que sai na etiqueta.
+function screwIcon(head) {
+  const { width, r, body } = screwShape(head, 5)
+  const scale = Math.min(21 / width, 20 / (2 * r))
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><g transform="translate(12 ${mm((24 - width * scale) / 2)}) rotate(90) scale(${mm(scale)})">${body}</g></svg>`
+}
 
 export const ICON_GROUPS = [
   ['Eletrónica', [
@@ -36,40 +87,34 @@ export const ICON_GROUPS = [
   ]],
   // Parafusos vistos de lado: a cabeça muda, a haste roscada é sempre a mesma.
   ['Parafusos (cabeça)', [
-    ['screw-socket', 'Parafuso cilíndrico (Allen)', draw(`<rect x="7" y="3" width="10" height="5" rx="1"/><path d="M10.5 3v2h3v-2"/>${shank(8)}`)],
-    ['screw-countersunk', 'Parafuso de embutir', draw(`<path d="M5 4h14l-5 5h-4z"/>${shank(9)}`)],
-    ['screw-oval', 'Parafuso lentilha', draw(`<path d="M5 6c2 -3.5 12 -3.5 14 0l-5 4h-4z"/>${shank(10)}`)],
-    ['screw', 'Parafuso panela', draw(`<path d="M6 8v-3a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v3z"/>${shank(8)}`)],
-    ['screw-button', 'Parafuso abaulado', draw(`<path d="M5 8a7 5 0 0 1 14 0z"/>${shank(8)}`)],
-    ['screw-truss', 'Parafuso de cabeça larga', draw(`<path d="M2.5 8c1.5 -4.5 17.5 -4.5 19 0z"/>${shank(8)}`)],
-    ['bolt', 'Parafuso sextavado', draw(`<path d="M6 3h12v5h-12z"/><path d="M10 3v5M14 3v5"/>${shank(8)}`)],
-    ['screw-flange', 'Parafuso sextavado com flange', draw(`<path d="M7 3h10v3h-10z"/><path d="M10 3v3M14 3v3"/><path d="M4.5 6h15v2h-15z"/>${shank(8)}`)],
-    ['screw-set', 'Parafuso sem cabeça (grub)', draw(`<path d="M10 3v18h4v-18z"/><path d="M11 3v1.5h2v-1.5"/><path d="M10 8l4 -1.2M10 11.5l4 -1.2M10 15l4 -1.2M10 18.5l4 -1.2"/>`)],
-  ]],
-  // Encaixes vistos de cima, na cabeça redonda.
+    ['screw-socket', 'Parafuso cilíndrico (Allen)'], ['screw-countersunk', 'Parafuso de embutir'], ['screw-oval', 'Parafuso lentilha'],
+    ['screw', 'Parafuso panela'], ['screw-button', 'Parafuso abaulado'], ['screw-truss', 'Parafuso de cabeça larga'], ['bolt', 'Parafuso sextavado'],
+    ['screw-flange', 'Parafuso sextavado com flange'], ['screw-set', 'Parafuso sem cabeça (grub)'],
+  ].map(([key, name]) => [key, name, screwIcon(key)])],
+  // Encaixes vistos de cima: cabeça redonda cheia com o encaixe recortado.
   ['Encaixe', [
-    ['drive-slot', 'Encaixe de fenda', draw('<circle cx="12" cy="12" r="9"/><path d="M6 11h12v2h-12z"/>')],
-    ['drive-phillips', 'Encaixe Phillips', draw('<circle cx="12" cy="12" r="9"/><path d="M12 6.5v11M6.5 12h11"/>')],
-    ['drive-pozidriv', 'Encaixe Pozidriv', draw('<circle cx="12" cy="12" r="9"/><path d="M12 6.5v11M6.5 12h11M9 9l1.2 1.2M15 9l-1.2 1.2M9 15l1.2 -1.2M15 15l-1.2 -1.2"/>')],
-    ['drive-hex', 'Encaixe Allen', draw('<circle cx="12" cy="12" r="9"/><path d="M12 7.5l3.9 2.25v4.5l-3.9 2.25l-3.9 -2.25v-4.5z"/>')],
-    ['drive-torx', 'Encaixe Torx', draw('<circle cx="12" cy="12" r="9"/><path d="M12 7.4L13.2 9.8L16 9.7L14.5 12L16 14.3L13.2 14.2L12 16.6L10.8 14.2L8 14.3L9.5 12L8 9.7L10.7 9.8z"/>')],
-    ['drive-square', 'Encaixe quadrado', draw('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5h5v5h-5z"/>')],
-    // Cabeça sextavada vista de cima (para parafusos sextavados), cheia como nas etiquetas Gridfinity.
-    ['drive-hex-head', 'Cabeça sextavada (topo)', draw('<path d="M12 3l7.8 4.5v9l-7.8 4.5l-7.8 -4.5v-9z" fill="currentColor"/>')],
+    ['drive-slot', 'Encaixe de fenda', solid(`${circle(9.5)}M5.5 10.6h13v2.8h-13z`)],
+    ['drive-phillips', 'Encaixe Phillips', solid(`${circle(9.5)}M10.6 5.8h2.8v4.8h4.8v2.8h-4.8v4.8h-2.8v-4.8h-4.8v-2.8h4.8z`)],
+    ['drive-pozidriv', 'Encaixe Pozidriv', solid(`${circle(9.5)}M11 5.8h2v5.2h5.2v2h-5.2v5.2h-2v-5.2h-5.2v-2h5.2zM8.2 8.2h1.7v1.7h-1.7zM14.1 8.2h1.7v1.7h-1.7zM8.2 14.1h1.7v1.7h-1.7zM14.1 14.1h1.7v1.7h-1.7z`)],
+    ['drive-hex', 'Encaixe Allen', solid(`${circle(9.5)}M12 7.2l4.2 2.4v4.8l-4.2 2.4l-4.2 -2.4v-4.8z`)],
+    ['drive-torx', 'Encaixe Torx', solid(`${circle(9.5)}M12 6.6L13.4 9.4L16.6 9.3L14.9 12L16.6 14.7L13.4 14.6L12 17.4L10.6 14.6L7.4 14.7L9.1 12L7.4 9.3L10.6 9.4z`)],
+    ['drive-square', 'Encaixe quadrado', solid(`${circle(9.5)}M9.2 9.2h5.6v5.6h-5.6z`)],
+    // Cabeça sextavada vista de cima (para parafusos sextavados).
+    ['drive-hex-head', 'Cabeça sextavada (topo)', solid('M12 2.5l8.2 4.75v9.5l-8.2 4.75l-8.2 -4.75v-9.5z')],
   ]],
   ['Porcas', [
-    ['nut', 'Porca sextavada', draw('<path d="M12 3l7.8 4.5v9l-7.8 4.5l-7.8 -4.5v-9z"/><circle cx="12" cy="12" r="3.5"/>')],
+    ['nut', 'Porca sextavada', solid(`M12 2.5l8.2 4.75v9.5l-8.2 4.75l-8.2 -4.75v-9.5z${circle(4.2)}`)],
     ['nut-nyloc', 'Porca autoblocante', draw('<path d="M5 11h14v8h-14z"/><path d="M9.5 11v8M14.5 11v8"/><path d="M7 11v-3a1 1 0 0 1 1 -1h8a1 1 0 0 1 1 1v3"/>')],
     ['nut-flange', 'Porca com flange', draw('<path d="M7 5h10v9h-10z"/><path d="M10.3 5v9M13.7 5v9"/><path d="M4 14h16v3h-16z"/>')],
     ['nut-cap', 'Porca cega', draw('<path d="M6 13h12v6h-12z"/><path d="M10 13v6M14 13v6"/><path d="M7 13a5 5 0 0 1 10 0"/>')],
     ['nut-wing', 'Porca borboleta', draw('<path d="M9 11h6v8h-6z"/><path d="M9 16c-3 0 -5 -4 -5 -10c3 0 5 3 5 6M15 16c3 0 5 -4 5 -10c-3 0 -5 3 -5 6"/>')],
-    ['nut-square', 'Porca quadrada', draw('<path d="M5 5h14v14h-14z"/><circle cx="12" cy="12" r="3.5"/>')],
+    ['nut-square', 'Porca quadrada', solid(`M4 4h16v16h-16z${circle(4.2)}`)],
     ['insert', 'Inserto roscado', draw('<path d="M8 4h8v16h-8z"/><path d="M8 8l8 2M8 12l8 2M8 16l8 2"/>')],
   ]],
   ['Anilhas', [
-    ['washer', 'Anilha lisa', draw('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/>')],
-    ['washer-fender', 'Anilha larga', draw('<circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="2"/>')],
-    ['washer-split', 'Anilha de pressão', draw('<path d="M19.9 10.6A8 8 0 1 0 19.9 13.4L15.9 12.7A4 4 0 1 1 15.9 11.3z"/>')],
+    ['washer', 'Anilha lisa', solid(`${circle(9.5)}${circle(4.5)}`)],
+    ['washer-fender', 'Anilha larga', solid(`${circle(9.5)}${circle(2.3)}`)],
+    ['washer-split', 'Anilha de pressão', solid('M21.4 10.3A9.5 9.5 0 1 0 21.4 13.7L16.4 12.8A4.5 4.5 0 1 1 16.4 11.2z')],
     ['washer-external', 'Anilha dentada exterior', draw('<circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="3"/><path d="M17.5 14.3L20.3 15.4M14.3 17.5L15.4 20.3M9.7 17.5L8.6 20.3M6.5 14.3L3.7 15.4M6.5 9.7L3.7 8.6M9.7 6.5L8.6 3.7M14.3 6.5L15.4 3.7M17.5 9.7L20.3 8.6"/>')],
     ['washer-internal', 'Anilha dentada interior', draw('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M16.6 13.9L14.8 13.1M13.9 16.6L13.1 14.8M10.1 16.6L10.9 14.8M7.4 13.9L9.2 13.1M7.4 10.1L9.2 10.9M10.1 7.4L10.9 9.2M13.9 7.4L13.1 9.2M16.6 10.1L14.8 10.9"/>')],
   ]],
@@ -89,36 +134,4 @@ const hardware = [[/embutir|escarea|countersunk|flat head/, 'screw-countersunk']
 export function iconFor(category) {
   const name = String(category || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
   return hardware.find(([pattern]) => pattern.test(name))?.[1] || componentKind(category) || 'chip'
-}
-
-// Parafuso deitado e cheio, como nas etiquetas de caixas Gridfinity: a cabeça ocupa a altura toda e a haste cresce com o
-// comprimento do título ("M3x10"). Medidas em diâmetros da haste (1 = grossura); 0,6 por mm de comprimento.
-// Acima de 24 mm a haste aparece partida, para um M5x40 não ocupar a etiqueta inteira.
-const mm = value => +value.toFixed(2)
-export function screwDrawing(head, title) {
-  const length = Math.min(Math.max(Number(String(title).match(/M\d+(?:[.,]\d+)?\s*[x×]\s*(\d+(?:[.,]\d+)?)/i)?.[1]?.replace(',', '.')) || 10, 2), 200)
-  // Cabeça: [comprimento ao longo do parafuso, meia altura, forma com o eixo em y = 0].
-  const box = (w, r) => `<rect y="${mm(-r)}" width="${mm(w)}" height="${mm(2 * r)}"/>`
-  const half = (w, r) => [w, r, `<path d="M${mm(w)} ${mm(-r)}A${mm(w)} ${mm(r)} 0 0 0 ${mm(w)} ${mm(r)}z"/>`]
-  const sunk = (x, r) => `<path d="M${mm(x)} ${mm(-r)}L${mm(x + r - 0.5)} -0.5V0.5L${mm(x)} ${mm(r)}z"/>`
-  const heads = {
-    'screw-socket': [1, 0.8, box(1, 0.8)],
-    'screw-countersunk': [0.5, 1, sunk(0, 1)],
-    'screw-oval': [0.75, 1, `<path d="M0.25 -1A0.25 1 0 0 0 0.25 1z"/>${sunk(0.25, 1)}`],
-    screw: [0.6, 0.9, `<rect y="-0.9" width="0.6" height="1.8" rx="0.2"/>`],
-    'screw-button': half(0.55, 0.9),
-    'screw-truss': half(0.45, 1.15),
-    bolt: [0.65, 0.85, box(0.65, 0.85)],
-    'screw-flange': [0.65, 1.05, `${box(0.5, 0.75)}<rect x="0.5" y="-1.05" width="0.15" height="2.1"/>`],
-    'screw-set': [0, 0.5, ''],
-  }
-  if (!heads[head]) return ''
-  const [start, r, shape] = heads[head]
-  // As de embutir contam para o comprimento do parafuso.
-  const sunken = head === 'screw-countersunk' || head === 'screw-oval'
-  const shank = Math.max(0.6 * Math.min(length, 24) - (sunken ? start : 0), 1), gap = length > 24 ? 0.6 : 0
-  const split = start + shank * 0.55
-  const rod = gap ? `<rect x="${mm(start)}" y="-0.5" width="${mm(split - start)}" height="1"/><rect x="${mm(split + gap)}" y="-0.5" width="${mm(start + shank - split)}" height="1"/>`
-    : `<rect x="${mm(start)}" y="-0.5" width="${mm(shank)}" height="1"/>`
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 ${mm(-r)} ${mm(start + shank + gap)} ${mm(2 * r)}" fill="currentColor">${shape}${rod}</svg>`
 }

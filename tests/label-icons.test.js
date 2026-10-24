@@ -16,10 +16,14 @@ it('suggests the most specific icon for a category', () => {
 it('draws a screw whose length follows the size in the title', () => {
   const width = (head, title) => Number(screwDrawing(head, title).match(/viewBox="0 [-\d.]+ ([\d.]+) /)[1])
   expect(width('screw', 'M3x10')).toBeLessThan(width('screw', 'M3x20'))
-  // Sem tamanho no título desenha 10 mm; acima de 24 mm a haste aparece partida e deixa de crescer.
+  // Sem tamanho no título desenha 10 mm; acima de 24 mm a haste fica inteira, cresce mais devagar e para nos 72 mm.
   expect(width('screw', 'Parafusos')).toBe(width('screw', 'M3x10'))
-  expect(screwDrawing('screw', 'M5x30').match(/<rect x=/g)).toHaveLength(2)
-  expect(width('screw', 'M5x60')).toBe(width('screw', 'M5x30'))
+  // A haste é uma peça só, com mais dentes de rosca quanto mais comprida.
+  const teeth = title => screwDrawing('screw', title).match(/L[\d.]+ -0\.38/g).length
+  expect(teeth('M3x10')).toBeLessThan(teeth('M10x50'))
+  expect(width('screw', 'M5x30')).toBeLessThan(width('screw', 'M10x50'))
+  expect(width('screw', 'M10x50')).toBeLessThan(width('screw', 'M10x100'))
+  expect(width('screw', 'M10x100')).toBe(width('screw', 'M10x72'))
   // Nos de embutir o comprimento inclui a cabeça.
   expect(width('screw-countersunk', 'M3x10')).toBeLessThan(width('screw', 'M3x10'))
   expect(screwDrawing('', 'M3x10')).toBe('')

@@ -41,6 +41,17 @@ class LabelsTest(unittest.TestCase):
         self.assertEqual(self.client.delete(f'/api/labels/{label_id}').status_code, 200)
         self.assertEqual(self.labels(), [])
 
+    def test_creates_several_labels_at_once_or_none(self):
+        screw = {'fields': [], 'code': '', 'location': '', 'width': 55, 'height': 12, 'icon': 'drive-hex', 'layout': 'bin', 'screw': 'screw-socket'}
+        response = self.client.post('/api/labels', json={'labels': [{**screw, 'title': title} for title in ('M3x10', 'M4x16', 'M5x20')]})
+        self.assertEqual(response.status_code, 200, response.json)
+        self.assertEqual(len(response.get_json()['ids']), 3)
+        self.assertEqual([(entry['title'], entry['screw']) for entry in self.labels()], [('M3x10', 'screw-socket'), ('M4x16', 'screw-socket'), ('M5x20', 'screw-socket')])
+        # Uma etiqueta inválida no lote não deixa guardar nenhuma.
+        for batch in [[], [{**screw, 'title': 'A'}] * 101, [{**screw, 'title': 'M6x10'}, {**screw, 'code': 'Aztec'}], ['x']]:
+            self.assertEqual(self.client.post('/api/labels', json={'labels': batch}).status_code, 400)
+        self.assertEqual(len(self.labels()), 3)
+
     def test_rejects_invalid_labels(self):
         base = {'title': 'A', 'fields': [], 'code': 'QRCode', 'location': '', 'width': 60, 'height': 25}
         for change in [{'code': 'Aztec'}, {'width': 5}, {'height': '25'}, {'fields': [{}] * 5}, {'fields': ['x']}, {'id': 'x'}, {'item': '3'}, {'layout': 'grid'}, {'titleSize': 2}, {'fieldSize': '12'}]:

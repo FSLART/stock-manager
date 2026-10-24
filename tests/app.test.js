@@ -731,8 +731,10 @@ it('creates a drawer label, saves it on the server and prints it with its Data M
   const saved = { id: 7, title: 'Armário 2', fields: [{ name: 'Posição', value: 'A3' }], code: 'QRCode', location: '', width: 60, height: 25 }
   const labels = [saved]
   fetch.mockImplementation(async (url, options) => {
-    if (url === '/api/labels') labels.push({ ...JSON.parse(options.body), id: 8 })
-    return { ok: true, json: async () => url === '/api/labels' ? { msg: 'Etiqueta guardada', id: 8 }
+    const body = url === '/api/labels' && JSON.parse(options.body)
+    const added = body ? (body.labels || [body]).map((entry, index) => ({ ...entry, id: 7 + labels.length + index })) : []
+    labels.push(...added)
+    return { ok: true, json: async () => body ? { msg: 'Etiqueta guardada', ids: added.map(entry => entry.id) }
       : { ...structuredClone(data), items: [data.items[0], { ...data.items[1], location: 'Caixa 1' }], locations: { 'Caixa 1': '' }, location_codes: { 'Caixa 1': 'K7Q2MX' }, labels: structuredClone(labels) } }
   })
   window.history.replaceState(null, '', '/#/labels')
@@ -742,7 +744,10 @@ it('creates a drawer label, saves it on the server and prints it with its Data M
   wrapper = mount(App, { attachTo: document.body })
   await flushPromises()
   const button = text => wrapper.findAll('button').find(button => button.text() === text)
-  // A primeira etiqueta da equipa abre logo; sem alterações não há nada para guardar.
+  // A página abre na lista das etiquetas da equipa; carregar numa abre o editor, sem nada para guardar.
+  expect(wrapper.findAll('.label-card-title').map(title => title.text())).toEqual(['Armário 2'])
+  expect(wrapper.find('.drawer-label-editor').exists()).toBe(false)
+  await wrapper.find('.label-card-title').trigger('click')
   expect(wrapper.find('input[placeholder="Armário 1"]').element.value).toBe('Armário 2')
   expect(button('Guardar').attributes('disabled')).toBeDefined()
   await button('+ Gaveta').trigger('click')
@@ -764,8 +769,19 @@ it('creates a drawer label, saves it on the server and prints it with its Data M
   const post = fetch.mock.calls.find(([url]) => url === '/api/labels')
   expect(post[1].method).toBe('POST')
   expect(JSON.parse(post[1].body)).toEqual({ title: 'R&D', fields: [{ name: 'valor', value: '10 Ω' }], code: 'DataMatrix', location: '', width: 55, height: 25, icon: 'nut', item: 2, layout: 'drawer', screw: '', titleSize: null, fieldSize: null })
-  await button('Imprimir').trigger('click')
+  // Guardar volta à lista, onde a etiqueta nova já aparece e se imprime.
+  const titles = () => wrapper.findAll('.label-card-title').map(title => title.text())
+  expect(titles()).toEqual(['Armário 2', 'R&D'])
+  await wrapper.findAll('.label-card')[1].findAll('button').find(button => button.text() === 'Imprimir').trigger('click')
   await vi.waitFor(() => expect(printed).toEqual([[expect.stringMatching(/#\/stock\?box=K7Q2MX$/), 'R&Dvalor10 Ω']]))
+  // Imprimir todas mistura tamanhos: cada etiqueta sai numa página do seu tamanho.
+  let pages
+  vi.stubGlobal('print', () => { pages = [[...document.querySelectorAll('.qr-labels .drawer-label')].map(label => label.className), [...document.head.querySelectorAll('style')].at(-1).textContent] })
+  await button('Imprimir todas (2)').trigger('click')
+  await vi.waitFor(() => expect(pages).toBeDefined())
+  expect(pages[0]).toEqual(['drawer-label label-60x25', 'drawer-label label-55x25'])
+  expect(pages[1]).toContain('@page label-60x25{size:60mm 25mm;margin:0}')
+  expect(pages[1]).toContain('@page label-55x25{size:55mm 25mm;margin:0}')
   expect(document.querySelector('.qr-labels')).toBeNull()
   // O ponto de partida "Parafuso" é uma etiqueta de caixa com o desenho do parafuso, que cresce com o título.
   await button('+ Parafuso').trigger('click')
@@ -776,10 +792,35 @@ it('creates a drawer label, saves it on the server and prints it with its Data M
   expect(Number(drawing().split(' ')[2])).toBeGreaterThan(Number(short.split(' ')[2]))
   await wrapper.find('input[aria-label="Letra do título (pt)"]').setValue(14)
   expect(wrapper.find('.drawer-label-preview .drawer-label').attributes('style')).toContain('--title: 14pt')
-  await wrapper.findAll('.drawer-label-bar .toggle-chip')[0].trigger('click')
+  // Várias de uma vez: um título por linha cria uma etiqueta para cada, iguais no resto.
+  await button('Várias de uma vez').trigger('click')
+  await wrapper.find('textarea').setValue('M3x10\nM4x16\n\n M5x20 ')
+  expect(wrapper.findAll('.drawer-label-preview strong').map(title => title.text())).toEqual(['M3x10', 'M4x16', 'M5x20'])
+  await button('Guardar 3').trigger('click')
+  await flushPromises()
+  const batch = JSON.parse(fetch.mock.calls.filter(([url]) => url === '/api/labels').at(-1)[1].body).labels
+  expect(batch.map(entry => [entry.title, entry.screw, entry.titleSize])).toEqual([['M3x10', 'screw-countersunk', 14], ['M4x16', 'screw-countersunk', 14], ['M5x20', 'screw-countersunk', 14]])
+  expect(titles()).toEqual(['Armário 2', 'R&D', 'M3x10', 'M4x16', 'M5x20'])
+  await wrapper.find('.label-card-title').trigger('click')
   await button('Apagar').trigger('click')
   await flushPromises()
   expect(fetch.mock.calls.find(([url, options]) => url === '/api/labels/7' && options.method === 'DELETE')).toBeTruthy()
+})
+
+it('explains how to make labels in an illustrated step-by-step tutorial', async () => {
+  window.history.replaceState(null, '', '/#/labels')
+  wrapper = mount(App, { attachTo: document.body })
+  await flushPromises()
+  await wrapper.findAll('button').find(button => button.text().includes('Tutorial')).trigger('click')
+  const dialog = wrapper.find('.tutorial-dialog')
+  expect(dialog.element.open).toBe(true)
+  expect(dialog.find('.eyebrow').text()).toBe('Passo 1 de 8')
+  expect(dialog.find('h2').text()).toBe('Começa por um modelo')
+  expect(dialog.findAll('.tutorial-figure .drawer-label')).toHaveLength(3)
+  for (let step = 1; step < 8; step++) await dialog.findAll('button').find(button => button.text() === 'Seguinte').trigger('click')
+  expect(dialog.find('h2').text()).toBe('Guardar e imprimir')
+  await dialog.findAll('button').find(button => button.text() === 'Concluir').trigger('click')
+  expect(dialog.element.open).toBe(false)
 })
 
 it('replaces the BOM of a saved PCB project and keeps its name and STEP', async () => {

@@ -1741,6 +1741,22 @@ def guardar_etiqueta():
     if STORAGE_MODE != "local":
         return erro("A edição está disponível no modo local")
     data = request.get_json(silent=True) or {}
+    # {"labels": [...]} cria várias de uma vez (ex.: parafusos de vários tamanhos): ou ficam todas ou nenhuma.
+    batch = data.get("labels")
+    if batch is not None:
+        if not isinstance(batch, list) or not 1 <= len(batch) <= 100 or not all(isinstance(entry, dict) for entry in batch):
+            return erro("Envia entre 1 e 100 etiquetas")
+        try:
+            labels = [label_from_json(entry) for entry in batch]
+        except ValueError as exc:
+            return erro(str(exc))
+        try:
+            init_db()
+            with EXCEL_LOCK, db_connection() as connection:
+                ids = [connection.execute("INSERT INTO labels (data) VALUES (?)", (json.dumps(label, ensure_ascii=False),)).lastrowid for label in labels]
+            return jsonify(msg=f"{len(ids)} etiqueta(s) guardada(s)", ids=ids)
+        except Exception as exc:
+            return erro(str(exc), 500)
     label_id = data.get("id")
     if label_id is not None and (not isinstance(label_id, int) or isinstance(label_id, bool)):
         return erro("Etiqueta inválida")

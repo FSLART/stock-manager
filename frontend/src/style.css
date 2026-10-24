@@ -1619,8 +1619,8 @@ div.location-image{background:var(--bg);border:1px dashed var(--line-strong)}
 .drawer-label-bar .toggle-chips{min-width:0}
 .drawer-label-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:18px;margin-top:16px;align-items:start}
 .drawer-label-editor{margin:0;color-scheme:dark}
-.drawer-label-editor input{min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--ink);font-size:15px;font-weight:400}
-.drawer-label-editor input:focus{border-color:var(--accent);outline:0}
+.drawer-label-editor input,.drawer-label-editor textarea{min-width:0;font-family:inherit;resize:vertical;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--ink);font-size:15px;font-weight:400}
+.drawer-label-editor input:focus,.drawer-label-editor textarea:focus{border-color:var(--accent);outline:0}
 .drawer-label-field{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr) 34px;gap:8px;align-items:center;margin-bottom:8px}
 .drawer-label-field .del{grid-area:auto}
 .drawer-label-size{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -1665,8 +1665,46 @@ div.location-image{background:var(--bg);border:1px dashed var(--line-strong)}
 /* Com a linha dos valores, ícones e título encolhem para tudo caber na altura. */
 .drawer-label.bin:has(small) strong{font-size:var(--title,calc(var(--h)*.24))}
 .drawer-label.bin:has(small) .bin-icons{height:calc(var(--h)*.28)}
-.label-with-size{display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:12px;align-items:end}
+.label-with-size{display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:12px;align-items:start}
 .label-fields-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
 .label-fields-head .editor-label{margin:0}
 .label-fields-head label{flex-direction:row;align-items:center;gap:8px}
 .label-fields-head input{width:96px}
+/* Lista de etiquetas: miniatura de cada uma num cartão; o editor abre ao carregar. */
+.label-list{list-style:none;margin:18px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.label-card{display:flex;flex-direction:column;gap:6px;padding:14px;border:1px solid var(--line);border-radius:12px;min-width:0}
+.label-card:hover{border-color:var(--line-strong)}
+.label-card-preview{display:grid;place-items:center;height:120px;overflow:hidden;border-radius:10px;background:var(--bg);cursor:pointer}
+.label-card-preview .drawer-label{border-radius:1mm;box-shadow:0 1mm 3mm #0008}
+.label-card-title{align-self:start;max-width:100%;padding:0;border:0;background:none;color:var(--ink);font:inherit;font-weight:700;text-align:left;overflow-wrap:anywhere}
+.label-card-title:hover{color:var(--accent)}
+/* Várias de uma vez: todas as etiquetas, umas por baixo das outras, um pouco menores. */
+.drawer-label-preview.many{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:14px;max-height:480px}
+.drawer-label-preview.many .drawer-label{flex:none;zoom:1.25}
+/* Tutorial das etiquetas: um passo por vez, com etiquetas de exemplo como imagens. */
+.label-heading-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.tutorial-button span{display:inline-grid;place-items:center;width:20px;height:20px;margin-right:4px;border-radius:50%;background:var(--accent);color:var(--on-accent);font-weight:800}
+.tutorial-dialog{width:min(640px,94vw);max-height:92vh;overflow:auto;padding:22px 24px;border:1px solid var(--line)}
+.tutorial-head{display:flex;align-items:center;justify-content:space-between;padding:0}
+.tutorial-head .eyebrow{margin:0}
+.tutorial-dialog h2{margin:4px 0 0;font-size:24px}
+.tutorial-figure{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:14px;min-height:190px;margin:16px 0;padding:18px;border:1px dashed var(--line-strong);border-radius:12px;background:var(--bg)}
+.tutorial-figure .drawer-label{flex:none;border-radius:1mm;box-shadow:0 1mm 3mm #0008}
+.tutorial-figure figure{display:grid;justify-items:center;gap:8px;margin:0}
+.tutorial-figure figcaption{color:var(--muted);font-size:12px;font-weight:600}
+.tutorial-buttons{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;width:100%}
+.tutorial-buttons .primary{display:inline-flex;align-items:center;min-height:40px;padding:0 18px}
+.tutorial-icons{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;width:100%;color:var(--ink)}
+.tutorial-icons span{width:30px;height:30px}
+.tutorial-icons svg{display:block;width:100%;height:100%}
+.tutorial-arrow{color:var(--accent);font-size:28px;font-weight:800}
+.tutorial-phone{max-width:150px;padding:12px;border:2px solid var(--line-strong);border-radius:16px;font-size:13px;text-align:center}
+.tutorial-lines{margin:0;padding:10px 14px;border:1px solid var(--line);border-radius:9px;background:var(--panel);font:15px/1.5 var(--body)}
+.tutorial-stack{display:grid;gap:8px}
+.tutorial-text{margin:0 0 18px;font-size:16px;line-height:1.5}
+.tutorial-nav{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.tutorial-nav .primary{min-height:44px}
+.tutorial-dots{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
+.tutorial-dot{width:10px;height:10px;padding:0;border:0;border-radius:50%;background:var(--line-strong)}
+.tutorial-dot[aria-current=step]{background:var(--accent)}
+@media(max-width:560px){.tutorial-dialog{padding:18px 16px}.tutorial-figure{padding:12px}.tutorial-dot{width:12px;height:12px}}
