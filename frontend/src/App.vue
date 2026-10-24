@@ -39,7 +39,7 @@ provide('movementFilter', ref(''))
 function guard(fn) {
   return (...args) => !auth.enabled || auth.user ? fn(...args) : loginDialog.value.open().then(ok => ok && fn(...args))
 }
-const categories = ref([]), items = ref([]), parts = ref([]), locationImages = ref({}), locationCodes = ref({}), current = ref(null), section = ref(null), query = ref('')
+const categories = ref([]), items = ref([]), parts = ref([]), locationImages = ref({}), locationCodes = ref({}), labels = ref([]), current = ref(null), section = ref(null), query = ref('')
 const busy = ref(false), loading = ref(true), toastMessage = ref(''), toastUndo = ref(null), formError = ref('')
 const movement = ref(null), categoryForm = ref(null), partsCatalog = ref(null), labelScanner = ref(null)
 const csvImport = ref(null), csvError = ref('')
@@ -209,6 +209,7 @@ provide('inventory', reactive({
   items: computed(() => items.value),
   locations: computed(() => locationImages.value),
   codes: computed(() => locationCodes.value),
+  labels: computed(() => labels.value),
   canEdit: computed(() => canEdit.value),
   editLocation: guard(async ({ file, ...payload }, done) => {
     if (file) {
@@ -217,6 +218,8 @@ provide('inventory', reactive({
     await act('editLocation', payload, done)
   }),
   deleteLocation: guard(name => act('deleteLocation', { name })),
+  saveLabel: guard((label, done) => act('saveLabel', label, done)),
+  deleteLabel: guard(id => act('deleteLabel', { id })),
   consume: guard((payload, done) => act('consumeItems', payload, done)),
   revertMovements: guard((ids, done) => act('revertMovements', { ids }, done)),
   async manageCategories() { navigation.push('/stock'); await nextTick(); document.querySelector('nav[aria-label="Categorias"]')?.focus() },
@@ -239,6 +242,7 @@ async function load() {
   parts.value = data.parts || []
   locationImages.value = data.locations || {}
   locationCodes.value = data.location_codes || {}
+  labels.value = data.labels || []
   if (pendingBox) openBox()
   canEdit.value = Boolean(data.can_edit)
   const ids = new Set(data.items.map(item => item.id))

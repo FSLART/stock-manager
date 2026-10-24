@@ -48,6 +48,7 @@ const links = [
   { label: 'Início', route: '/', key: 'home' },
   { label: 'Inventário', route: '/stock', key: 'stock' },
   { label: 'Localizações', route: '/locations', key: 'locations' },
+  { label: 'Etiquetas', route: '/labels', key: 'labels' },
   { label: 'Simulação analógica', route: '/analog-simulation', key: 'analog-simulation' },
   { label: 'Movimentos', route: '/movements', key: 'movements' },
   { label: 'PCB e os seus BOMs', route: '/pcbs', key: 'pcbs' },

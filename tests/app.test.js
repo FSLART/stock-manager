@@ -709,6 +709,46 @@ it('prints one QR label per selected box with its fixed code', async () => {
   expect(document.querySelector('.qr-labels')).toBeNull()
 })
 
+it('creates a drawer label, saves it on the server and prints it with its Data Matrix', async () => {
+  const saved = { id: 7, title: 'Armário 2', fields: [{ name: 'Posição', value: 'A3' }], code: 'QRCode', location: '', width: 60, height: 25 }
+  const labels = [saved]
+  fetch.mockImplementation(async (url, options) => {
+    if (url === '/api/labels') labels.push({ ...JSON.parse(options.body), id: 8 })
+    return { ok: true, json: async () => url === '/api/labels' ? { msg: 'Etiqueta guardada', id: 8 }
+      : { ...structuredClone(data), locations: { 'Caixa 1': '' }, location_codes: { 'Caixa 1': 'K7Q2MX' }, labels: structuredClone(labels) } }
+  })
+  window.history.replaceState(null, '', '/#/labels')
+  vi.stubGlobal('confirm', () => true)
+  let printed
+  vi.stubGlobal('print', () => { printed = [...document.querySelectorAll('.qr-labels .drawer-label')].map(label => [label.querySelector('title')?.textContent, label.querySelector('.drawer-label-text').textContent]) })
+  wrapper = mount(App, { attachTo: document.body })
+  await flushPromises()
+  const button = text => wrapper.findAll('button').find(button => button.text() === text)
+  // A primeira etiqueta da equipa abre logo; sem alterações não há nada para guardar.
+  expect(wrapper.find('input[placeholder="Armário 1"]').element.value).toBe('Armário 2')
+  expect(button('Guardar').attributes('disabled')).toBeDefined()
+  await button('Nova etiqueta').trigger('click')
+  await wrapper.find('input[placeholder="Armário 1"]').setValue('Armário 1')
+  await wrapper.find('input[aria-label="Valor do campo 2"]').setValue('D20')
+  await flushPromises()
+  expect(wrapper.find('.drawer-label-preview .drawer-label-text').text()).toBe('Armário 1ModeloPosiçãoD20')
+  expect(wrapper.find('.drawer-label-preview title').text()).toBe('Armário 1\nPosição: D20')
+  // Ligada a uma caixa, o código abre-a no inventário pelo código fixo.
+  await wrapper.find('input[list="drawer-label-locations"]').setValue('Caixa 1')
+  await button('Guardar').trigger('click')
+  await flushPromises()
+  const post = fetch.mock.calls.find(([url]) => url === '/api/labels')
+  expect(post[1].method).toBe('POST')
+  expect(JSON.parse(post[1].body)).toEqual({ title: 'Armário 1', fields: [{ name: 'Modelo', value: '' }, { name: 'Posição', value: 'D20' }], code: 'DataMatrix', location: 'Caixa 1', width: 60, height: 25 })
+  await button('Imprimir').trigger('click')
+  await vi.waitFor(() => expect(printed).toEqual([[expect.stringMatching(/#\/stock\?box=K7Q2MX$/), 'Armário 1ModeloPosiçãoD20']]))
+  expect(document.querySelector('.qr-labels')).toBeNull()
+  await wrapper.findAll('.drawer-label-bar .toggle-chip')[0].trigger('click')
+  await button('Apagar').trigger('click')
+  await flushPromises()
+  expect(fetch.mock.calls.find(([url, options]) => url === '/api/labels/7' && options.method === 'DELETE')).toBeTruthy()
+})
+
 it('replaces the BOM of a saved PCB project and keeps its name and STEP', async () => {
   const step = { name: 'placa.step', url: '/uploads/placa.step' }
   localStorage.setItem('stocklart-pcb-projects', JSON.stringify([{ id: 'p1', name: 'Placa', fileName: 'v1.csv', step, items: [{ reference: 'R1', value: '10k', description: '—', footprint: '—', partNumber: '—', quantity: 1 }] }]))

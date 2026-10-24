@@ -199,6 +199,11 @@ def init_mysql_schema(connection):
             image VARCHAR(1000) NOT NULL DEFAULT '',
             code VARCHAR(16) NOT NULL DEFAULT ''
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
+        # Etiquetas da pagina Etiquetas, partilhadas pela equipa; data e o JSON validado por label_from_json.
+        """CREATE TABLE IF NOT EXISTS labels (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            data LONGTEXT NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
     ):
         if mariadb:
             sql = sql.replace("utf8mb4_0900_as_ci", "utf8mb4_uca1400_as_ci").replace("utf8mb4_0900_bin", "utf8mb4_bin")
@@ -498,6 +503,10 @@ def init_sqlite_schema(connection):
             image TEXT NOT NULL DEFAULT '',
             code TEXT NOT NULL DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS labels (
+            id INTEGER PRIMARY KEY,
+            data TEXT NOT NULL
+        );
         """
     )
     category_columns = {
@@ -654,6 +663,32 @@ def db_locations():
                 connection.execute("INSERT INTO locations (name, image, code) VALUES (?, '', ?)", (name, code))
             rows[name] = {"name": name, "image": rows.get(name, {}).get("image", ""), "code": code}
     return rows.values()
+
+
+def db_labels():
+    init_db()
+    with db_connection() as connection:
+        return [{**json.loads(row["data"]), "id": row["id"]} for row in connection.execute("SELECT id, data FROM labels ORDER BY id")]
+
+
+def label_from_json(data):
+    # Etiqueta vinda do browser: so ficam os campos conhecidos, com os limites do editor.
+    text = lambda value, limit: value.strip()[:limit] if isinstance(value, str) else ""
+    fields, width, height = data.get("fields"), data.get("width"), data.get("height")
+    if not isinstance(fields, list) or len(fields) > 4 or not all(isinstance(field, dict) for field in fields):
+        raise ValueError("Uma etiqueta tem no máximo 4 campos")
+    if data.get("code") not in {"DataMatrix", "QRCode", ""}:
+        raise ValueError("Código inválido")
+    if not all(isinstance(size, (int, float)) and not isinstance(size, bool) for size in (width, height)) or not (20 <= width <= 150 and 10 <= height <= 100):
+        raise ValueError("O tamanho vai de 20 x 10 a 150 x 100 mm")
+    return {
+        "title": text(data.get("title"), 40),
+        "fields": [{"name": text(field.get("name"), 20), "value": text(field.get("value"), 30)} for field in fields],
+        "code": data["code"],
+        "location": text(data.get("location"), 255),
+        "width": width,
+        "height": height,
+    }
 
 
 def save_parts(parts):
@@ -1208,6 +1243,7 @@ def data_from_items(items):
         "parts": db_parts(),
         "locations": {row["name"]: image_path(row["image"]) for row in locations},
         "location_codes": {row["name"]: row["code"] for row in locations},
+        "labels": db_labels(),
         "can_edit": STORAGE_MODE == "local",
         "auth": True,
         "user": current_person(),
@@ -1669,6 +1705,47 @@ def apagar_localizacao():
                 return erro(f"{name} ainda tem componentes. Move-os antes de apagar.", 409)
             connection.execute("DELETE FROM locations WHERE name = ?", (name,))
         return jsonify(msg=f"Localização {name} apagada")
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.post("/api/labels")
+def guardar_etiqueta():
+    # Sem id cria uma etiqueta nova; com id substitui a guardada.
+    if STORAGE_MODE != "local":
+        return erro("A edição está disponível no modo local")
+    data = request.get_json(silent=True) or {}
+    label_id = data.get("id")
+    if label_id is not None and (not isinstance(label_id, int) or isinstance(label_id, bool)):
+        return erro("Etiqueta inválida")
+    try:
+        label = label_from_json(data)
+    except ValueError as exc:
+        return erro(str(exc))
+    try:
+        init_db()
+        with EXCEL_LOCK, db_connection() as connection:
+            stored = json.dumps(label, ensure_ascii=False)
+            if label_id is None:
+                label_id = connection.execute("INSERT INTO labels (data) VALUES (?)", (stored,)).lastrowid
+            elif connection.execute("SELECT 1 FROM labels WHERE id = ?", (label_id,)).fetchone():
+                connection.execute("UPDATE labels SET data = ? WHERE id = ?", (stored, label_id))
+            else:
+                return erro("Etiqueta não encontrada", 404)
+        return jsonify(msg=f"Etiqueta {label['title'] or 'sem título'} guardada", id=label_id)
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.delete("/api/labels/<int:label_id>")
+def apagar_etiqueta(label_id):
+    if STORAGE_MODE != "local":
+        return erro("A edição está disponível no modo local")
+    try:
+        init_db()
+        with EXCEL_LOCK, db_connection() as connection:
+            connection.execute("DELETE FROM labels WHERE id = ?", (label_id,))
+        return jsonify(msg="Etiqueta apagada")
     except Exception as exc:
         return erro(str(exc), 500)
 
