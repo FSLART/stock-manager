@@ -144,7 +144,12 @@ export function createApi({ onUnauthorized } = {}) {
     if (appsScript && typeof file === 'string') throw new Error('Links de imagem só funcionam no servidor local; descarrega a imagem e carrega o ficheiro')
     if (appsScript) return (await callGoogle('uploadImage', { data: await jpegBase64(file) })).url
     const body = new FormData()
-    body.append(typeof file === 'string' ? 'url' : 'image', file)
+    if (typeof file === 'string') body.append('url', file)
+    else {
+      // Sem descodificador no browser (HEIC em alguns), vai o original e o servidor reduz ou recusa.
+      const small = await shrink(file).then(canvas => new Promise(done => canvas.toBlob(done, 'image/jpeg', 0.82))).catch(() => null)
+      body.append('image', small || file, small ? 'foto.jpg' : file.name)
+    }
     const response = await fetch('/api/images', { method: 'POST', body })
     const data = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(data.error || 'Não foi possível enviar a imagem')
@@ -168,19 +173,22 @@ export function createApi({ onUnauthorized } = {}) {
   return { request, direct, load, syncPending, uploadImage, uploadStep, importInventory: items => direct('importItems', { items }) }
 }
 
-async function jpegBase64(file) {
+// Uma foto de telemóvel (3–12 MB) fica com 800 px no lado maior, sem margens: ~100 KB e cabe no limite de 5 MB.
+async function shrink(file, size = 800) {
   let bitmap
   try { bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' }) }
   catch { throw new Error('O ficheiro enviado não é uma imagem válida') }
   try {
+    const scale = Math.min(1, size / Math.max(bitmap.width, bitmap.height))
     const canvas = document.createElement('canvas')
-    canvas.width = canvas.height = 800
+    canvas.width = Math.round(bitmap.width * scale)
+    canvas.height = Math.round(bitmap.height * scale)
     const ctx = canvas.getContext('2d')
-    const scale = Math.min(800 / bitmap.width, 800 / bitmap.height)
-    const w = bitmap.width * scale, h = bitmap.height * scale
+    // Um PNG transparente ficaria preto em JPEG.
     ctx.fillStyle = '#fff'
-    ctx.fillRect(0, 0, 800, 800)
-    ctx.drawImage(bitmap, (800 - w) / 2, (800 - h) / 2, w, h)
-    return canvas.toDataURL('image/jpeg', 0.88).split(',')[1]
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    return canvas
   } finally { bitmap.close() }
 }
+const jpegBase64 = async file => (await shrink(file)).toDataURL('image/jpeg', 0.82).split(',')[1]

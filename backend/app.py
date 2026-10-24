@@ -1231,17 +1231,13 @@ def upload_image():
             return erro("Esse link não devolveu uma imagem (sites como a Mouser bloqueiam downloads). Copia a imagem no site e cola-a aqui com Ctrl+V.")
         return erro("O ficheiro enviado não é uma imagem válida")
 
-    contained = ImageOps.contain(source, NORMALIZED_IMAGE_SIZE, Image.Resampling.LANCZOS)
-    normalized = Image.new("RGB", NORMALIZED_IMAGE_SIZE, "white")
-    offset = (
-        (NORMALIZED_IMAGE_SIZE[0] - contained.width) // 2,
-        (NORMALIZED_IMAGE_SIZE[1] - contained.height) // 2,
-    )
-    normalized.paste(contained, offset)
+    # Sem margens brancas: a foto mantém a proporção e o CSS decide como a mostrar.
+    normalized = source.copy()
+    normalized.thumbnail(NORMALIZED_IMAGE_SIZE, Image.Resampling.LANCZOS)
     filename = f"{uuid4().hex}.jpg"
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     output = BytesIO()
-    normalized.save(output, format="JPEG", quality=88, optimize=True)
+    normalized.save(output, format="JPEG", quality=82, optimize=True)
     (UPLOAD_DIR / secure_filename(filename)).write_bytes(output.getvalue())
     return jsonify(url=f"/uploads/{filename}")
 

@@ -124,6 +124,19 @@ class EditingTest(unittest.TestCase):
         self.assertEqual(self.client.patch('/api/items/1', json={**body, 'image': ''}).status_code, 200)
         self.assertEqual(self.module.db_items()[0]['image'], '')
 
+    def test_uploaded_photo_is_shrunk_without_white_margins(self):
+        from io import BytesIO
+        from PIL import Image
+        photo = BytesIO()
+        Image.new('RGB', (4000, 3000), 'red').save(photo, format='JPEG')
+        photo.seek(0)
+        response = self.client.post('/api/images', data={'image': (photo, 'caixa.jpg')})
+        self.assertEqual(response.status_code, 200, response.json)
+        with Image.open(Path(self.temp.name) / 'uploads' / Path(response.json['url']).name) as saved:
+            self.assertEqual(saved.size, (800, 600))
+            self.assertGreater(saved.getpixel((0, 0))[0], 200)
+            self.assertLess(saved.getpixel((0, 0))[1], 60)
+
 
     def test_image_link_is_downloaded_and_private_or_bad_links_are_refused(self):
         from io import BytesIO
