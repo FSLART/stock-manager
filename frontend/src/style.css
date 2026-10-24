@@ -1147,6 +1147,11 @@ a.text-button{display:inline-flex;align-items:center;text-decoration:none}
   overflow-wrap: anywhere;
 }
 .category-nav .n { flex: none; }
+/* Subcategorias: cada nível entra 16px. No telemóvel as pílulas redefinem o padding e ficam alinhadas. */
+.category-nav .cat-row > button:first-child { padding-left: calc(10px + var(--depth, 0) * 16px); }
+.trail { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 6px; margin: 0 0 -6px; color: var(--muted); font-size: 13px; }
+.trail button { padding: 4px 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 600; }
+.trail button:hover { color: var(--accent); }
 .sidebar .cat-edit { flex: none; }
 .import-csv-button{min-height:52px;border-color:var(--accent);color:var(--accent)}
 .csv-import-dialog{width:min(820px,94vw);max-height:90vh;overflow:auto}
@@ -1221,7 +1226,7 @@ a.notion-login{display:inline-flex;align-items:center;text-decoration:none}
  .stock-shell .filter-section{order:3}
  .filter-section:not(.open) .quick-filters{display:none}
  .sidebar .side-btn{margin-top:0}
- .stock-shell .heading{order:4}
+ .stock-shell .heading,.stock-shell .trail{order:4}
  .stock-shell .mobile-sort{order:5}
  .stock-shell .list{order:6}
  .sidebar-heading{display:none}

@@ -56,6 +56,24 @@ it('folds sidebar sections and hides empty categories until asked', async () => 
   expect(names()).toEqual(['Tudo', 'LEDs', 'R&D', 'Vazia'])
 })
 
+it('nests subcategories under their parent and counts them in the parent', async () => {
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), categories: [
+    { name: 'Passivos', props: ['x'], image: false, section: 'Componentes eletrónicos', parent: null },
+    { ...data.categories[1], section: 'Componentes eletrónicos', parent: 'Passivos' },
+    { ...data.categories[0], section: 'Componentes eletrónicos', parent: null },
+  ] }) })
+  wrapper = mount(App)
+  await flushPromises()
+  const rows = () => wrapper.findAll('nav .cat-row > button:first-child')
+  // A mãe vazia aparece porque a filha tem stock, e a filha vem logo a seguir, um nível dentro.
+  expect(rows().map(button => button.text().replace(/\d+$/, '').trim())).toEqual(['Tudo', 'Passivos', 'R&D', 'LEDs'])
+  expect(rows()[2].attributes('style')).toContain('--depth: 1')
+  await rows()[1].trigger('click')
+  expect(wrapper.find('.sub').text()).toBe('1 referência · 20 unidades')
+  await rows()[2].trigger('click')
+  expect(wrapper.find('.trail').text()).toBe('Passivos›')
+})
+
 it('clamps a decrement at zero and sends only the actual stock change', async () => {
   vi.useFakeTimers()
   wrapper = mount(App)
@@ -238,7 +256,7 @@ it('edits category and field names while sending the original field identity', a
   await form.trigger('submit')
   await flushPromises()
   const request = fetch.mock.calls.find(([url, options]) => url === '/api/categories/LEDs' && options.method === 'PATCH')
-  expect(JSON.parse(request[1].body)).toEqual({ originalName: 'LEDs', name: 'Luzes', fields: [{ source: 'cor', name: 'tonalidade' }], image: true, section: 'Componentes eletrónicos' })
+  expect(JSON.parse(request[1].body)).toEqual({ originalName: 'LEDs', name: 'Luzes', fields: [{ source: 'cor', name: 'tonalidade' }], image: true, section: 'Componentes eletrónicos', parent: null })
 })
 
 it('creates a category with one input per property, like the edit form', async () => {
@@ -253,7 +271,7 @@ it('creates a category with one input per property, like the edit form', async (
   await form.trigger('submit')
   await flushPromises()
   const request = fetch.mock.calls.find(([url, options]) => url === '/api/categories' && options.method === 'POST')
-  expect(JSON.parse(request[1].body)).toEqual({ name: 'Díodos', props: ['tipo', 'tensão'], image: false, section: 'Componentes eletrónicos' })
+  expect(JSON.parse(request[1].body)).toEqual({ name: 'Díodos', props: ['tipo', 'tensão'], image: false, section: 'Componentes eletrónicos', parent: null })
 })
 
 it('reorders category properties and sends them in the new order', async () => {

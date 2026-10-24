@@ -138,7 +138,8 @@ def init_mysql_schema(connection):
             name VARCHAR(255) COLLATE utf8mb4_0900_as_ci UNIQUE NOT NULL,
             props LONGTEXT NOT NULL,
             image_enabled INTEGER NOT NULL DEFAULT 0,
-            section VARCHAR(64) NOT NULL DEFAULT 'Componentes eletrónicos'
+            section VARCHAR(64) NOT NULL DEFAULT 'Componentes eletrónicos',
+            parent_id BIGINT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
         """CREATE TABLE IF NOT EXISTS items (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -222,6 +223,8 @@ def init_mysql_schema(connection):
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'categories' AND COLUMN_NAME = 'section'").fetchone():
         connection.execute("ALTER TABLE categories ADD COLUMN section VARCHAR(64) NOT NULL DEFAULT 'Componentes eletrónicos'")
         split_sections(connection)
+    if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'categories' AND COLUMN_NAME = 'parent_id'").fetchone():
+        connection.execute("ALTER TABLE categories ADD COLUMN parent_id BIGINT NULL")
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'parts' AND COLUMN_NAME = 'datasheet'").fetchone():
         connection.execute("ALTER TABLE parts ADD COLUMN datasheet VARCHAR(1000) NOT NULL DEFAULT ''")
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'locations' AND COLUMN_NAME = 'code'").fetchone():
@@ -445,7 +448,9 @@ def init_sqlite_schema(connection):
             name TEXT UNIQUE NOT NULL COLLATE NOCASE,
             props TEXT NOT NULL,
             image_enabled INTEGER NOT NULL DEFAULT 0,
-            section TEXT NOT NULL DEFAULT 'Componentes eletrónicos'
+            section TEXT NOT NULL DEFAULT 'Componentes eletrónicos',
+            -- Subcategorias: sem FK porque apagar a mãe passa as filhas para o nível de cima.
+            parent_id INTEGER
         );
         CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY,
@@ -519,6 +524,8 @@ def init_sqlite_schema(connection):
     if "section" not in category_columns:
         connection.execute("ALTER TABLE categories ADD COLUMN section TEXT NOT NULL DEFAULT 'Componentes eletrónicos'")
         split_sections(connection)
+    if "parent_id" not in category_columns:
+        connection.execute("ALTER TABLE categories ADD COLUMN parent_id INTEGER")
     item_columns = {
         row["name"] for row in connection.execute("PRAGMA table_info(items)")
     }
@@ -620,14 +627,16 @@ def db_categories():
     init_db()
     with db_connection() as connection:
         rows = connection.execute(
-            "SELECT name, props, image_enabled, section FROM categories ORDER BY id"
+            "SELECT id, name, props, image_enabled, section, parent_id FROM categories ORDER BY id"
         ).fetchall()
+    names = {row["id"]: row["name"] for row in rows}
     return [
         {
             "name": row["name"],
             "props": json.loads(row["props"]),
             "image": bool(row["image_enabled"]),
             "section": row["section"],
+            "parent": names.get(row["parent_id"]),
         }
         for row in rows
     ]
@@ -1959,6 +1968,33 @@ def procurar_peca():
     return jsonify(part=part, image=first("image"))
 
 
+def descendant_ids(connection, category_id):
+    children = {}
+    for row in connection.execute("SELECT id, parent_id FROM categories"):
+        children.setdefault(row["parent_id"], []).append(row["id"])
+    found, stack = [], [category_id]
+    while stack:
+        for child in children.get(stack.pop(), []):
+            if child not in found:
+                found.append(child)
+                stack.append(child)
+    return found
+
+
+def resolve_parent(connection, parent, section, own_id=None):
+    # Devolve (id da categoria-mãe, erro). A filha fica sempre na secção da mãe.
+    if not parent:
+        return None, None
+    row = connection.execute("SELECT id, section FROM categories WHERE name = ? COLLATE NOCASE", (str(parent),)).fetchone()
+    if row is None:
+        return None, "Categoria-mãe não encontrada"
+    if own_id is not None and (row["id"] == own_id or row["id"] in descendant_ids(connection, own_id)):
+        return None, "Uma categoria não pode ficar dentro de si própria"
+    if row["section"] != section:
+        return None, "Uma subcategoria fica na secção da categoria-mãe"
+    return row["id"], None
+
+
 @app.patch("/api/categories/<path:original_name>")
 def editar_categoria(original_name):
     if STORAGE_MODE != "local":
@@ -1984,6 +2020,9 @@ def editar_categoria(original_name):
             category = connection.execute("SELECT * FROM categories WHERE name = ? COLLATE NOCASE", (original_name,)).fetchone()
             if category is None:
                 return erro("Categoria não encontrada", 404)
+            parent_id, problem = resolve_parent(connection, data["parent"], section, category["id"]) if "parent" in data else (category["parent_id"], None)
+            if problem:
+                return erro(problem)
             old_names = json.loads(category["props"])
             sources = [field.get("source") for field in fields if field.get("source") is not None]
             if any(not isinstance(source, str) or source not in old_names for source in sources) or len(set(sources)) != len(sources):
@@ -1997,8 +2036,11 @@ def editar_categoria(original_name):
                     return erro("Esta alteração criaria componentes duplicados. Mantém uma propriedade que os distinga.", 409)
                 keys.add(key)
                 updates.append((json.dumps(props, ensure_ascii=False), key, item["id"]))
-            connection.execute("UPDATE categories SET name = ?, props = ?, image_enabled = ?, section = ? WHERE id = ?",
-                               (name, json.dumps(names, ensure_ascii=False), int(bool(data.get("image"))), section, category["id"]))
+            connection.execute("UPDATE categories SET name = ?, props = ?, image_enabled = ?, section = ?, parent_id = ? WHERE id = ?",
+                               (name, json.dumps(names, ensure_ascii=False), int(bool(data.get("image"))), section, parent_id, category["id"]))
+            # As subcategorias mudam de secção com a mãe.
+            for child_id in descendant_ids(connection, category["id"]):
+                connection.execute("UPDATE categories SET section = ? WHERE id = ?", (section, child_id))
             # Temporary keys let fields be reordered without transient uniqueness collisions.
             for _, _, item_id in updates:
                 connection.execute("UPDATE items SET `key` = ? WHERE id = ?", (uuid4().hex, item_id))
@@ -2031,9 +2073,12 @@ def nova_categoria():
         if any(category["name"].casefold() == name.casefold() for category in db_categories()):
             return erro("Essa categoria já existe")
         with db_connection() as connection:
+            parent_id, problem = resolve_parent(connection, data.get("parent"), section)
+            if problem:
+                return erro(problem)
             connection.execute(
-                "INSERT INTO categories (name, props, image_enabled, section) VALUES (?, ?, ?, ?)",
-                (name, json.dumps(props, ensure_ascii=False), int(image_enabled), section),
+                "INSERT INTO categories (name, props, image_enabled, section, parent_id) VALUES (?, ?, ?, ?, ?)",
+                (name, json.dumps(props, ensure_ascii=False), int(image_enabled), section, parent_id),
             )
         return jsonify(msg="Categoria pronta para receber o primeiro item")
     except Exception as exc:
@@ -2050,7 +2095,7 @@ def apagar_categoria(name):
         init_db()
         with db_connection() as connection:
             row = connection.execute(
-                "SELECT id, name FROM categories WHERE name = ? COLLATE NOCASE", (name,)
+                "SELECT id, name, parent_id FROM categories WHERE name = ? COLLATE NOCASE", (name,)
             ).fetchone()
             if not row:
                 return erro("Categoria não encontrada", 404)
@@ -2060,6 +2105,8 @@ def apagar_categoria(name):
             n_itens = len(removed)
             record_movements(connection, [{"type": "delete", "item_id": item["id"], "cat": row["name"], "props": json.loads(item["props"]),
                                            "delta": -item["qty"], "before": item["qty"]} for item in removed])
+            # As subcategorias e o seu stock ficam: sobem um nível.
+            connection.execute("UPDATE categories SET parent_id = ? WHERE parent_id = ?", (row["parent_id"], row["id"]))
             connection.execute("DELETE FROM categories WHERE id = ?", (row["id"],))
         # read_items obtem os restantes itens e save_items reconstrui as folhas,
         # deixando de criar a folha da categoria apagada.

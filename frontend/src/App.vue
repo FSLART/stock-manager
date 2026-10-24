@@ -50,7 +50,20 @@ const normalize = value => String(value).toLowerCase().replace(/\s+/g, '')
 const propertyFilters = ref({}), filterSearch = ref({}), stockFilter = ref(''), imageFilter = ref(''), locationFilter = ref('')
 const filtersOpen = ref(false), sortKey = ref(''), sortDirection = ref(1)
 const sectionOf = computed(() => Object.fromEntries(categories.value.map(c => [c.name, c.section])))
-const inScope = item => current.value ? item.cat === current.value : !section.value || sectionOf.value[item.cat] === section.value
+// Subcategorias: uma categoria mostra o seu stock e o de todas as que estão dentro dela.
+const childrenOf = computed(() => {
+  const names = new Set(categories.value.map(c => c.name)), map = new Map()
+  for (const c of categories.value) { const parent = names.has(c.parent) ? c.parent : null; map.set(parent, [...(map.get(parent) || []), c]) }
+  return map
+})
+const subtree = name => [name, ...(childrenOf.value.get(name) || []).flatMap(c => subtree(c.name))]
+const scope = computed(() => new Set(current.value ? subtree(current.value) : []))
+const trail = computed(() => {
+  const byName = new Map(categories.value.map(c => [c.name, c])), path = []
+  for (let c = byName.get(byName.get(current.value)?.parent); c && !path.includes(c.name); c = byName.get(c.parent)) path.unshift(c.name)
+  return path
+})
+const inScope = item => current.value ? scope.value.has(item.cat) : !section.value || sectionOf.value[item.cat] === section.value
 // Secções dobradas e categorias sem referências ficam escondidas; a categoria aberta mostra-se sempre.
 const folded = ref(new Set(readStored('stocklart-folded-sections', []))), showEmpty = ref(readStored('stocklart-show-empty', false) === true)
 const filled = computed(() => new Set(items.value.map(item => item.cat)))
@@ -58,7 +71,14 @@ const emptyCount = computed(() => categories.value.filter(c => !filled.value.has
 const sections = computed(() => [...new Set(categories.value.map(c => c.section))].map(name => {
   const all = categories.value.filter(c => c.section === name)
   const open = !folded.value.has(name) || all.some(c => c.name === current.value)
-  return { name, open, categories: open ? all.filter(c => showEmpty.value || filled.value.has(c.name) || c.name === current.value) : [] }
+  // Árvore achatada por ordem, com a profundidade para a indentação; uma mãe aparece se algo dentro dela tiver stock.
+  const rows = [], visit = (category, depth) => {
+    if (!showEmpty.value && !subtree(category.name).some(n => filled.value.has(n) || n === current.value)) return
+    rows.push({ ...category, depth })
+    for (const child of childrenOf.value.get(category.name) || []) visit(child, depth + 1)
+  }
+  if (open) for (const category of childrenOf.value.get(null) || []) if (category.section === name) visit(category, 0)
+  return { name, open, categories: rows }
 }))
 function fold(name) {
   folded.value = new Set(folded.value.has(name) ? [...folded.value].filter(entry => entry !== name) : [...folded.value, name])
@@ -74,7 +94,7 @@ const facets = computed(() => propertyKeys.value.map(key => ({ key, values: [...
 )].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true })) })))
 // "Tudo" mistura categorias com propriedades diferentes: uma coluna Descrição em vez de uma por propriedade.
 // Dentro de uma categoria cada propriedade tem a sua coluna, para ordenar e filtrar, e Componente seria repetida.
-const showCategory = computed(() => !current.value)
+const showCategory = computed(() => scope.value.size !== 1)
 const columns = computed(() => [
   ...(showCategory.value ? [{ key: 'cat', label: 'Categoria' }, { key: 'component', label: 'Componente' }] : []),
   ...(showCategory.value ? [{ key: 'desc', label: 'Descrição' }] : propertyKeys.value.map(key => ({ key: `prop:${key}`, label: key }))),
@@ -128,7 +148,7 @@ const estimate = computed(() => {
   const priced = shown.value.map(item => [item, priceOf.value(item)]).filter(([, price]) => price)
   return { value: priced.reduce((sum, [item, { price }]) => sum + item.qty * price, 0), missing: shown.value.length - priced.length }
 })
-const total = name => items.value.filter(item => !name || item.cat === name).reduce((sum, item) => sum + item.qty, 0)
+const total = name => { const names = new Set(name ? subtree(name) : []); return items.value.filter(item => !name || names.has(item.cat)).reduce((sum, item) => sum + item.qty, 0) }
 const sectionTotal = name => items.value.filter(item => sectionOf.value[item.cat] === name).reduce((sum, item) => sum + item.qty, 0)
 const color = name => `hsl(${[...name].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7)} 65% 48%)`
 const locked = computed(() => busy.value || queues.size > 0)
@@ -276,9 +296,9 @@ function deleteItem(item) {
 }
 function deleteCategory(category) {
   const refs = items.value.filter(item => item.cat === category.name)
-  const warning = refs.length
-    ? `Isto vai apagar também ${refs.length} referência(s) (${total(category.name)} unidades) que estão lá dentro. Esta ação não pode ser desfeita.`
-    : 'Esta ação não pode ser desfeita.'
+  const warning = (refs.length
+    ? `Isto vai apagar também ${refs.length} referência(s) (${refs.reduce((sum, item) => sum + item.qty, 0)} unidades) que estão lá dentro. Esta ação não pode ser desfeita.`
+    : 'Esta ação não pode ser desfeita.') + (childrenOf.value.has(category.name) ? '\n\nAs subcategorias ficam e sobem um nível.' : '')
   if (confirm(`Apagar a categoria "${category.name}"?\n\n${warning}`)) {
     act('deleteCategory', { name: category.name }, () => {
       if (current.value === category.name) current.value = null
@@ -439,7 +459,7 @@ onUnmounted(() => {
       <template v-for="group in sections" :key="group.name">
       <div class="cat-section"><button class="fold" :aria-expanded="group.open" :aria-label="`${group.open ? 'Dobrar' : 'Abrir'} ${group.name}`" @click="fold(group.name)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button><button :aria-current="!current && section === group.name" @click="current = null; section = group.name">{{ group.name }} <span class="n">{{ sectionTotal(group.name) }}</span></button></div>
       <div v-for="category in group.categories" :key="category.name" class="cat-row">
-        <button :aria-current="current === category.name" @click="current = category.name; section = null"><span><i class="dot" :style="{ background: color(category.name) }"></i>{{ category.name }}</span><span class="n">{{ total(category.name) }}</span></button>
+        <button :aria-current="current === category.name" :style="{ '--depth': category.depth }" @click="current = category.name; section = null"><span><i class="dot" :style="{ background: color(category.name) }"></i>{{ category.name }}</span><span class="n">{{ total(category.name) }}</span></button>
         <!-- Um só botão discreto por categoria; apagar fica dentro do formulário de edição. -->
         <button v-if="canEdit" class="cat-edit" :aria-label="`Editar categoria ${category.name}`" title="Editar categoria" :disabled="locked" @click="guarded.openCategory(category)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg></button>
         <button v-else class="cat-del" :aria-label="`Apagar categoria ${category.name}`" title="Apagar categoria" :disabled="locked" @click="guarded.deleteCategory(category)">✕</button>
@@ -484,6 +504,7 @@ onUnmounted(() => {
         <p v-if="!facets.length" class="filter-no-values">As propriedades das categorias aparecem aqui como filtros.</p>
       </div>
     </section>
+    <nav v-if="trail.length" class="trail" aria-label="Categorias acima"><template v-for="name in trail" :key="name"><button @click="current = name">{{ name }}</button><span aria-hidden="true">›</span></template></nav>
     <div class="heading"><h1>{{ current || section || 'Tudo em stock' }}</h1><span class="sub">{{ shown.length }} {{ shown.length === 1 ? 'referência' : 'referências' }} · {{ units }} {{ units === 1 ? 'unidade' : 'unidades' }}<template v-if="estimate.value"> · <span class="estimate" :title="`Estimativa: preço do catálogo pelo P/N; sem P/N, mediana de peças da mesma categoria e tamanho.${estimate.missing ? ` ${estimate.missing} sem preço.` : ''}`">≈ {{ euros(estimate.value) }}</span></template></span></div>
     <form v-if="canEdit && selected.size" class="selection-bar" aria-label="Componentes selecionados" @submit.prevent="guarded.setLocation(locationName)">
       <strong>{{ selected.size }} {{ selected.size === 1 ? 'selecionado' : 'selecionados' }}</strong>
