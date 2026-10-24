@@ -1,13 +1,16 @@
 <script setup>
-import { onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { readBarcodesFromImageData } from 'zxing-wasm/reader'
 import { parseLabel, sharpen } from '../label.js'
-defineProps({ action: String })
+import { partNumberOf } from '../stockText.js'
+const props = defineProps({ action: String, items: { type: Array, default: null } })
 const emit = defineEmits(['use'])
 const dialog = ref(null), video = ref(null), overlay = ref(null)
 const label = ref(null), status = ref(''), camera = ref(false), paused = ref(false), reading = ref(false), photo = ref(''), focus = ref(null)
 const FORMATS = ['DataMatrix', 'PDF417']
 let stream = null, liveTimer = null, liveTick = 0
+// Itens em stock com o P/N lido (pode estar em várias localizações). Sem items (BOM) não se mostra.
+const stocked = computed(() => props.items && label.value ? props.items.filter(item => partNumberOf(item).toUpperCase() === label.value.mpn.toUpperCase()) : null)
 
 async function startCamera() {
   try {
@@ -222,6 +225,7 @@ defineExpose({ open })
           <template v-if="label.order"><dt>Encomenda</dt><dd>{{ label.order }}</dd></template>
           <template v-if="label.invoice"><dt>Fatura</dt><dd>{{ label.invoice }}</dd></template>
           <template v-if="label.country"><dt>Origem</dt><dd>{{ label.country }}</dd></template>
+          <template v-if="stocked"><dt>Em stock</dt><dd>{{ stocked.length ? `${stocked.reduce((sum, item) => sum + item.qty, 0)} un.` : 'Não existe em stock' }}<template v-for="item in stocked.filter(item => item.location)" :key="item.id"> · {{ item.qty }} em {{ item.location }}</template></dd></template>
         </dl>
         <p v-if="label.ocr" class="hint">Lido pelo texto da etiqueta (sem código 2D). Confirma o P/N e a quantidade.</p>
         <label>Quantidade <input v-model.number="label.qty" type="number" min="1" step="1" required></label>

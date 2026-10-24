@@ -1,9 +1,10 @@
 <script setup>
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, inject, onUnmounted, ref, watch } from 'vue'
 import { isBrand, isPartNumber, partNumberOf } from '../stockText.js'
 import { euros, priceEstimator } from '../prices.js'
 const props = defineProps({ categories: Array, items: Array, parts: { type: Array, default: () => [] }, busy: Boolean, error: String })
-const emit = defineEmits(['submit', 'clear-error'])
+const emit = defineEmits(['submit', 'clear-error', 'part'])
+const api = inject('api', null)
 const dialog = ref(null)
 const fileInput = ref(null)
 const category = ref('')
@@ -38,6 +39,7 @@ function resetFields() {
   values.value = {}
   categoryQuery.value = category.value
   clearImage()
+  syncNote.value = ''
   emit('clear-error')
 }
 // label vem de uma etiqueta lida (LabelScanner): preenche o P/N, o fabricante e a quantidade.
@@ -79,6 +81,28 @@ function fill(label, image) {
   pickPart(label)
   const stocked = props.items.find(item => partNumberOf(item).toUpperCase() === mpn)
   if (image && selected.value?.image && !stocked?.image && !newImage.value) imageUrl.value = image
+}
+// Vai à Mouser/DigiKey pelo P/N do formulário: o servidor atualiza o catálogo e aqui só se preenchem os campos vazios,
+// o preço (já guardado no catálogo) e a imagem, se o item ainda não tiver uma.
+const syncing = ref(false), syncNote = ref(''), syncFailed = ref(false)
+async function syncPart() {
+  const mpn = partNumber.value
+  syncing.value = true
+  emit('clear-error')
+  try {
+    const { part, image } = await api.direct('lookupPart', { mpn })
+    emit('part', part)
+    if (!dialog.value.open || partNumber.value.toUpperCase() !== mpn.toUpperCase()) return
+    values.value = Object.fromEntries((selected.value?.props || []).map(field => [field, String(values.value[field] ?? '').trim() ||
+      (isPartNumber(field) ? part.mpn : isBrand(field) ? part.manufacturer : part.props[field] ?? '')]))
+    if (editing.value && part.price != null) unitPrice.value = savedPrice.value = part.price
+    if (image && selected.value?.image && !(editing.value?.image && !removeImage.value) && !newImage.value) imageUrl.value = image
+    syncFailed.value = false
+    syncNote.value = `Sincronizado com a Mouser/DigiKey${part.source ? ` (${part.source})` : ''}.`
+  } catch (error) {
+    syncFailed.value = true
+    syncNote.value = error.message
+  } finally { syncing.value = false }
 }
 const catalogPart = computed(() => partNumber.value && props.parts.find(p => p.mpn.toUpperCase() === partNumber.value.toUpperCase()))
 function suggestions(prop) {
@@ -192,8 +216,8 @@ defineExpose({ open, edit, fill, close: () => dialog.value.close() })
         <span class="hint">{{ priceHint }}</span>
       </label>
       <label>Quantidade <input v-model.number="qty" type="number" :min="editing ? 0 : 1" step="1" required></label>
-      <p class="hint" :class="{ error }" role="status">{{ error || (editing ? 'A quantidade indicada substitui o stock atual. Sem nova imagem, a existente é mantida.' : hint) }}</p>
-      <div class="actions"><button type="button" class="ghost" :disabled="busy" @click="dialog.close()">Cancelar</button><button class="primary" :disabled="busy || !selected">{{ editing ? 'Guardar alterações' : mode === 'in' ? 'Adicionar ao stock' : 'Retirar do stock' }}</button></div>
+      <p class="hint" :class="{ error: error || syncFailed && syncNote }" role="status">{{ error || syncNote || (editing ? 'A quantidade indicada substitui o stock atual. Sem nova imagem, a existente é mantida.' : hint) }}</p>
+      <div class="actions"><button type="button" class="text-button sync-part" :disabled="busy || syncing || !canPrice || !api" :title="canPrice ? '' : 'Preenche o P/N para sincronizar'" @click="syncPart">{{ syncing ? 'A sincronizar…' : 'Sincronizar com APIs' }}</button><button type="button" class="ghost" :disabled="busy" @click="dialog.close()">Cancelar</button><button class="primary" :disabled="busy || !selected">{{ editing ? 'Guardar alterações' : mode === 'in' ? 'Adicionar ao stock' : 'Retirar do stock' }}</button></div>
     </form>
   </dialog>
 </template>

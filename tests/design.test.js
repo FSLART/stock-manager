@@ -39,9 +39,9 @@ it('imports a quoted BOM, persists it and reopens it after mounting again', asyn
   await input.trigger('change')
   await flushPromises()
   await wrapper.find('.card-heading .primary-button').trigger('click')
-  expect(wrapper.find('.bom-list').text()).toContain('RC10K')
-  expect(wrapper.find('.bom-list').text()).toContain('Resistor, precision')
-  expect(wrapper.find('.bom-quantity').text()).toBe('2')
+  expect(wrapper.find('.pcb-project-detail .bom-lines').text()).toContain('RC10K')
+  expect(wrapper.find('.pcb-project-detail .bom-lines').text()).toContain('Resistor, precision')
+  expect(wrapper.find('.pcb-project-detail .bom-line-qty').text()).toBe('0 / 2')
   wrapper.unmount()
   wrapper = mount(App)
   await flushPromises()
@@ -74,6 +74,36 @@ it('applies compact preferences and sends completed stock changes to the server'
   vi.useRealTimers()
 })
 
+it('checks BOM lines against stock, totals a build list and keeps the STEP model with the project', async () => {
+  const stock = { ...structuredClone(data), items: [{ id: 7, cat: 'Resistências', props: { 'P/N': '-', Encapsulamento: '0603', 'Resistência (Ω)': '10k' }, qty: 5, image: '', location: 'Cx1' }] }
+  fetch.mockImplementation(async url => url === '/api/pcb-step'
+    ? { ok: true, status: 200, json: async () => ({ url: '/uploads/abc.step' }) }
+    : { ok: true, json: async () => structuredClone(stock) })
+  localStorage.setItem('stocklart-pcb-projects', JSON.stringify([{ id: 'p1', name: 'Motor', fileName: 'motor.csv', createdAt: '', items: [
+    { reference: 'R1,R2', value: '10k', description: '—', footprint: 'R_0603', partNumber: '—', quantity: 2 },
+    { reference: 'U1', value: 'Componente sem valor', description: '—', footprint: '—', partNumber: 'NE555', quantity: 1 },
+  ] }]))
+  wrapper = mount(App)
+  await flushPromises()
+  await open('PCB e os seus BOMs')
+  await wrapper.find('.saved-project-open').trigger('click')
+  expect(wrapper.findAll('.pcb-project-detail .bom-lines .stock-status').map(pill => pill.text())).toEqual(['OK', 'Em falta'])
+  await wrapper.find('input[aria-label="Placas a produzir de Motor"]').setValue(3)
+  expect(wrapper.findAll('.build-list .bom-line-qty').map(qty => qty.text())).toEqual(['5 / 6', '0 / 3'])
+  expect(wrapper.find('.build-list .bom-lines .stock-short').text()).toBe('Insuficiente')
+  // Os estados no topo filtram a lista, e carregar de novo mostra tudo.
+  const missing = wrapper.findAll('.build-list .bom-filter').find(button => button.text() === '1 Em falta')
+  await missing.trigger('click')
+  expect(wrapper.findAll('.build-list .bom-lines strong').map(name => name.text())).toEqual(['NE555'])
+  await missing.trigger('click')
+  expect(wrapper.findAll('.build-list .bom-lines strong')).toHaveLength(2)
+  const step = wrapper.find('input[aria-label="Anexar ficheiro STEP"]')
+  Object.defineProperty(step.element, 'files', { configurable: true, value: [new File(['ISO-10303-21;'], 'motor.step')] })
+  await step.trigger('change')
+  await flushPromises()
+  expect(wrapper.find('a[download="motor.step"]').attributes('href')).toBe('/uploads/abc.step')
+  expect(JSON.parse(localStorage.getItem('stocklart-pcb-projects'))[0].step).toEqual({ name: 'motor.step', url: '/uploads/abc.step' })
+})
 it('keeps an invalid BOM from being saved and reports browser storage failures', async () => {
   wrapper = mount(App)
   await flushPromises()

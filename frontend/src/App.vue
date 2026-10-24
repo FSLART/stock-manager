@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, provide, reactive, ref, shallowReactive, watch } from 'vue'
 import { createApi, readStored, writeStored } from './api.js'
-import { componentValue, describe } from './stockText.js'
+import { componentValue, describe, partNumberOf } from './stockText.js'
 import { euros, priceEstimator } from './prices.js'
 import InventoryCsvImport from './components/InventoryCsvImport.vue'
 import StockItem from './components/StockItem.vue'
@@ -16,6 +16,7 @@ import AnalogSimulationPage from './pages/AnalogSimulationPage.vue'
 import MovementsPage from './pages/MovementsPage.vue'
 import PcbBomPage from './pages/PcbBomPage.vue'
 import SettingsPage from './pages/SettingsPage.vue'
+import LocationsPage from './pages/LocationsPage.vue'
 
 const loginDialog = ref(null)
 const api = createApi({ onUnauthorized() { auth.user = null; loginDialog.value?.open() } })
@@ -35,7 +36,7 @@ provide('movementFilter', ref(''))
 function guard(fn) {
   return (...args) => !auth.enabled || auth.user ? fn(...args) : loginDialog.value.open().then(ok => ok && fn(...args))
 }
-const categories = ref([]), items = ref([]), parts = ref([]), current = ref(null), section = ref(null), query = ref('')
+const categories = ref([]), items = ref([]), parts = ref([]), locationImages = ref({}), current = ref(null), section = ref(null), query = ref('')
 const busy = ref(false), loading = ref(true), toastMessage = ref(''), toastUndo = ref(null), formError = ref('')
 const movement = ref(null), categoryForm = ref(null), partsCatalog = ref(null), labelScanner = ref(null)
 const csvImport = ref(null), csvError = ref('')
@@ -124,7 +125,8 @@ const total = name => items.value.filter(item => !name || item.cat === name).red
 const sectionTotal = name => items.value.filter(item => sectionOf.value[item.cat] === name).reduce((sum, item) => sum + item.qty, 0)
 const color = name => `hsl(${[...name].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7)} 65% 48%)`
 const locked = computed(() => busy.value || queues.size > 0)
-const locations = computed(() => [...new Set(items.value.map(item => item.location).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true })))
+// Inclui as caixas criadas na página Localizações que ainda estão vazias.
+const locations = computed(() => [...new Set([...items.value.map(item => item.location), ...Object.keys(locationImages.value)].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true })))
 const selected = ref(new Set()), locationName = ref('')
 let lastPicked = null
 const allShownSelected = computed(() => shown.value.length > 0 && shown.value.every(item => selected.value.has(item.id)))
@@ -141,14 +143,38 @@ function toggleShown() {
   const on = !allShownSelected.value
   for (const item of shown.value) { if (on) selected.value.add(item.id); else selected.value.delete(item.id) }
 }
+// P/N únicos dos selecionados; "-" é a convenção para "sem P/N".
+const selectedPartNumbers = computed(() => [...new Map(items.value.filter(item => selected.value.has(item.id))
+  .map(partNumberOf).filter(mpn => mpn && mpn !== '-').map(mpn => [mpn.toUpperCase(), mpn])).values()])
+// Um pedido de cada vez, para não bater nos limites da Mouser/DigiKey; o servidor guarda cada peça no catálogo.
+async function syncSelected() {
+  if (busy.value || queues.size) return
+  busy.value = true
+  const mpns = selectedPartNumbers.value, failed = []
+  try {
+    for (const [index, mpn] of mpns.entries()) {
+      toast(`A sincronizar ${index + 1}/${mpns.length}: ${mpn}`)
+      try { await api.direct('lookupPart', { mpn }) } catch (error) { failed.push(`${mpn} (${error.message})`) }
+    }
+    await load()
+    toast(failed.length ? `Sem sincronizar: ${failed.join('; ')}` : `${mpns.length} P/N sincronizado(s) com a Mouser/DigiKey`, failed.length > 0)
+  } finally { busy.value = false }
+}
 function setLocation(location) {
   act('setLocation', { ids: [...selected.value], location }, () => { selected.value = new Set(); locationName.value = '' })
 }
 
-const pages = { home: HomePage, 'analog-simulation': AnalogSimulationPage, movements: MovementsPage, pcbs: PcbBomPage, settings: SettingsPage }
-const routeKeys = { '/': 'home', '/stock': 'stock', '/analog-simulation': 'analog-simulation', '/movements': 'movements', '/pcbs': 'pcbs', '/settings': 'settings' }
-const page = ref(routeKeys[window.location.hash.slice(1)] || 'home')
-function readRoute() { page.value = routeKeys[window.location.hash.slice(1)] || 'home' }
+const pages = { home: HomePage, 'analog-simulation': AnalogSimulationPage, movements: MovementsPage, pcbs: PcbBomPage, settings: SettingsPage, locations: LocationsPage }
+const routeKeys = { '/': 'home', '/stock': 'stock', '/analog-simulation': 'analog-simulation', '/movements': 'movements', '/pcbs': 'pcbs', '/settings': 'settings', '/locations': 'locations' }
+const page = ref('home')
+// #/stock?location=Caixa%201 (o QR de cada caixa) abre o inventário só com essa localização.
+function readRoute() {
+  const [path, search] = window.location.hash.slice(1).split('?')
+  page.value = routeKeys[path] || 'home'
+  const location = new URLSearchParams(search).get('location')
+  if (location !== null) { clearFilters(); locationFilter.value = location }
+}
+readRoute()
 const navigation = { push(path) { window.location.hash = path; readRoute() } }
 provide('navigation', navigation)
 const preferences = reactive({ compact: readStored('stocklart-compact-mode', false) === true, notifications: readStored('stocklart-notifications', true) !== false })
@@ -156,6 +182,16 @@ provide('preferences', preferences)
 provide('inventory', reactive({
   totalUnits: computed(() => total()),
   categoryCount: computed(() => categories.value.length),
+  items: computed(() => items.value),
+  locations: computed(() => locationImages.value),
+  canEdit: computed(() => canEdit.value),
+  editLocation: guard(async ({ file, ...payload }, done) => {
+    if (file) {
+      try { payload.image = await api.uploadImage(file) } catch (error) { return toast(error.message, true) }
+    }
+    await act('editLocation', payload, done)
+  }),
+  deleteLocation: guard(name => act('deleteLocation', { name })),
   async manageCategories() { navigation.push('/stock'); await nextTick(); document.querySelector('nav[aria-label="Categorias"]')?.focus() },
   addMaterial: guard(async () => { navigation.push('/stock'); await nextTick(); if (categories.value.length) movement.value.open(current.value) }),
 }))
@@ -174,6 +210,7 @@ async function load() {
   categories.value = data.categories
   items.value = data.items
   parts.value = data.parts || []
+  locationImages.value = data.locations || {}
   canEdit.value = Boolean(data.can_edit)
   const ids = new Set(data.items.map(item => item.id))
   for (const id of selected.value) if (!ids.has(id)) selected.value.delete(id)
@@ -269,10 +306,11 @@ async function useLabel(label) {
   let found
   try { found = await api.direct('lookupPart', { mpn: label.mpn }) } catch { return }
   if (!found?.part) return
-  parts.value = [...parts.value.filter(part => part.mpn.toUpperCase() !== found.part.mpn.toUpperCase()), found.part]
+  updatePart(found.part)
   await nextTick()
   movement.value.fill(label, found.image)
 }
+function updatePart(found) { parts.value = [...parts.value.filter(part => part.mpn.toUpperCase() !== found.mpn.toUpperCase()), found] }
 async function submitCsv(rows) {
   if (locked.value || !rows.length) return
   busy.value = true
@@ -332,7 +370,7 @@ async function refresh() {
 }
 const guarded = {
   step: guard(stepItem), deleteItem: guard(deleteItem), deleteCategory: guard(deleteCategory), openCategory: guard(openCategory), savePart: guard(savePart),
-  openMovement: guard(() => movement.value.open(current.value)), scanLabel: guard(() => labelScanner.value.open()), editItem: guard(item => movement.value.edit(item)), setLocation: guard(setLocation), importCsv: guard(() => csvImport.value.open()),
+  openMovement: guard(() => movement.value.open(current.value)), scanLabel: guard(() => labelScanner.value.open()), editItem: guard(item => movement.value.edit(item)), setLocation: guard(setLocation), syncSelected: guard(syncSelected), importCsv: guard(() => csvImport.value.open()),
 }
 onMounted(async () => {
   window.addEventListener('online', refresh)
@@ -420,6 +458,7 @@ onUnmounted(() => {
       <datalist id="stock-locations"><option v-for="location in locations" :key="location" :value="location" /></datalist>
       <button class="primary" :disabled="locked || !locationName.trim()">Mover para aqui</button>
       <button type="button" class="text-button" :disabled="locked" @click="guarded.setLocation('')">Tirar localização</button>
+      <button type="button" class="text-button" :disabled="locked || !selectedPartNumbers.length" :title="selectedPartNumbers.length ? '' : 'Nenhum selecionado tem P/N'" @click="guarded.syncSelected">Sincronizar com APIs ({{ selectedPartNumbers.length }})</button>
       <button type="button" class="text-button" @click="selected = new Set()">Limpar seleção</button>
     </form>
     <div class="mobile-sort">
@@ -450,11 +489,11 @@ onUnmounted(() => {
   </main>
   </div>
   </div>
-  <StockMovement ref="movement" :categories="categories" :items="items" :parts="parts" :busy="busy" :error="formError" @submit="submitMovement" @clear-error="formError = ''" />
+  <StockMovement ref="movement" :categories="categories" :items="items" :parts="parts" :busy="busy" :error="formError" @submit="submitMovement" @clear-error="formError = ''" @part="updatePart" />
   <CategoryForm ref="categoryForm" :categories="categories" :busy="busy" :error="categoryError" @submit="submitCategory" @delete="deleteFromForm" />
   <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
   <LoginDialog ref="loginDialog" @login="user => { auth.user = user; toast(`Sessão iniciada: ${user.name}`) }" />
   <PartsCatalog v-if="parts.length" ref="partsCatalog" :parts="parts" :items="items" :categories="categories" :busy="busy" :error="partError" @save="guarded.savePart" @clear-error="partError = ''" />
-  <LabelScanner ref="labelScanner" action="Adicionar ao stock" @use="useLabel" />
+  <LabelScanner ref="labelScanner" :items="items" action="Adicionar ao stock" @use="useLabel" />
   <div id="toast" role="status" :class="{ on: toastMessage }">{{ toastMessage }}<button v-if="toastUndo" class="toast-undo" @click="toastUndo()">Desfazer</button></div>
 </template>

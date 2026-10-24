@@ -1,9 +1,13 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, inject, nextTick, reactive, ref } from 'vue'
 import { parseBom } from '../bom.js'
 import { readStored, writeStored } from '../api.js'
+import { stockCheck } from '../pcbStock.js'
+import { useInventoryContext } from '../composables/useInventoryContext.js'
 import WorkspacePage from '../components/WorkspacePage.vue'
 import LabelScanner from '../components/LabelScanner.vue'
+import BomStockList from '../components/BomStockList.vue'
+import StepViewer from '../components/StepViewer.vue'
 
 const PROJECTS_STORAGE_KEY = 'stocklart-pcb-projects'
 const bomFile = ref(null)
@@ -12,9 +16,24 @@ const bomItems = ref([])
 const projectError = ref('')
 const projects = ref(loadProjects())
 const selectedProject = ref(null)
-const labelScanner = ref(null)
+const labelScanner = ref(null), projectDetail = ref(null)
+const api = inject('api')
+const inventory = useInventoryContext()
+const stepBusy = ref(false), stepError = ref('')
+// Placas a produzir por projeto; 0 deixa o projeto fora da lista de produção.
+const boardCounts = reactive({})
 
 const componentCount = computed(() => bomItems.value.reduce((total, item) => total + item.quantity, 0))
+// Cada linha do BOM do projeto aberto, com o que o BOM diz dela para ver ao abrir a linha.
+const lineStock = computed(() => selectedProject.value?.items.map(line => ({
+  ...stockCheck([{ lines: [line], count: 1 }], inventory.items)[0],
+  details: [
+    line.partNumber !== '—' && line.value !== 'Componente sem valor' && ['Valor', line.value],
+    line.description !== '—' && ['Descrição', line.description],
+    line.footprint !== '—' && ['Footprint', line.footprint],
+  ].filter(Boolean),
+})) ?? [])
+const build = computed(() => stockCheck(projects.value.filter(project => boardCounts[project.id] > 0).map(project => ({ lines: project.items, count: boardCounts[project.id] })), inventory.items))
 
 function loadProjects() {
   const saved = readStored(PROJECTS_STORAGE_KEY, [])
@@ -28,10 +47,6 @@ function saveProjects(updated) {
   projects.value = updated
   projectError.value = ''
   return true
-}
-
-function componentName(item) {
-  return item.partNumber !== '—' ? item.partNumber : item.value
 }
 
 async function selectBom(event) {
@@ -86,12 +101,36 @@ function addLabel({ mpn, manufacturer, qty }) {
   const items = project.items.some(same)
     ? project.items.map(item => same(item) ? { ...item, quantity: item.quantity + qty } : item)
     : [...project.items, { reference: '—', value: 'Componente sem valor', description: manufacturer || '—', footprint: '—', partNumber: mpn, quantity: qty }]
-  const updated = { ...project, items }
-  if (saveProjects(projects.value.map(entry => entry.id === project.id ? updated : entry))) selectedProject.value = updated
+  updateProject({ ...project, items })
 }
 
-function openProject(project) {
+function updateProject(updated) {
+  if (saveProjects(projects.value.map(entry => entry.id === updated.id ? updated : entry))) selectedProject.value = updated
+}
+
+async function attachStep(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  stepError.value = ''
+  if (!file) return
+  if (!/\.(step|stp)$/i.test(file.name)) {
+    stepError.value = 'Seleciona um ficheiro STEP (.step ou .stp).'
+    return
+  }
+  stepBusy.value = true
+  try {
+    const url = await api.uploadStep(file)
+    updateProject({ ...selectedProject.value, step: { name: file.name, url } })
+  } catch (error) {
+    stepError.value = error.message
+  } finally { stepBusy.value = false }
+}
+
+// O projeto abre por baixo da lista de produção: leva a vista até ele.
+async function openProject(project) {
   selectedProject.value = project
+  await nextTick()
+  projectDetail.value?.scrollIntoView?.({ behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' })
 }
 
 function removeProject(projectId) {
@@ -106,7 +145,7 @@ function removeProject(projectId) {
     active="pcbs"
     eyebrow="Produção · listas de materiais"
     title="PCB e os seus BOMs"
-    description="Cria projetos PCB e consulta os seus BOMs. Projetos guardados neste navegador."
+    description="Cria projetos PCB, consulta os seus BOMs e confirma o stock para produzir. Projetos guardados neste navegador; modelos STEP no servidor."
   >
     <section class="workspace-grid">
       <article class="workspace-card workspace-card-wide">
@@ -146,7 +185,7 @@ function removeProject(projectId) {
         <p class="eyebrow">Fluxo de trabalho</p>
         <h2>Projeto e BOM associados</h2>
         <p class="card-muted">
-          Cada projeto mantém o seu nome e o ficheiro BOM correspondente, guardados neste navegador para consulta posterior.
+          Cada projeto mantém o seu nome e o BOM neste navegador, e o modelo STEP no servidor. Indica quantas placas queres produzir de cada projeto para ver o que há em stock.
         </p>
       </article>
     </section>
@@ -169,6 +208,10 @@ function removeProject(projectId) {
           </span>
           <span class="saved-project-count">{{ project.items.reduce((total, item) => total + item.quantity, 0) }}</span>
           </button>
+          <label class="board-count">
+            <span>Placas</span>
+            <input v-model.number="boardCounts[project.id]" type="number" min="0" step="1" placeholder="0" :aria-label="`Placas a produzir de ${project.name}`" />
+          </label>
           <button
             class="saved-project-delete"
             aria-label="Apagar projeto"
@@ -176,9 +219,13 @@ function removeProject(projectId) {
             >×</button>
         </div>
       </div>
+      <div v-if="build.length" class="build-list">
+        <h2>Lista de produção</h2>
+        <BomStockList :rows="build" label="Lista de produção" />
+      </div>
     </section>
 
-    <section v-if="selectedProject" class="workspace-card pcb-project-detail">
+    <section v-if="selectedProject" ref="projectDetail" class="workspace-card pcb-project-detail">
       <div class="card-heading">
         <div>
           <span class="card-icon">PCB</span>
@@ -190,32 +237,26 @@ function removeProject(projectId) {
         </span>
       </div>
       <div class="pcb-detail-grid">
-        <div class="pcb-step-preview">
-          <div class="step-file-mark">BOM</div>
-          <strong>{{ selectedProject.fileName }}</strong>
-          <small>Ficheiro associado ao projeto</small>
-        </div>
-        <div>
-          <p class="eyebrow">Resumo do projeto</p>
-          <div class="project-stat">
-            <strong>{{ selectedProject.items.reduce((total, item) => total + item.quantity, 0) }}</strong
-            ><span>componentes no BOM</span>
+        <div class="pcb-step-panel">
+          <StepViewer v-if="selectedProject.step" :url="selectedProject.step.url" />
+          <div v-else class="pcb-step-empty">
+            <div class="step-file-mark">STEP</div>
+            <small>Sem modelo 3D associado</small>
           </div>
-          <div class="bom-list">
-            <div v-for="(item, index) in selectedProject.items" :key="index" class="bom-row">
-              <span class="bom-component">
-                <strong>{{ componentName(item) }}</strong>
-                <small v-if="item.reference !== '—'">Referências: {{ item.reference }}</small>
-                <small v-if="item.partNumber !== '—' && item.value !== 'Componente sem valor'">
-                  Valor: {{ item.value }}
-                </small>
-                <small v-if="item.description !== '—'">{{ item.description }}</small>
-                <small v-if="item.footprint !== '—'">Footprint: {{ item.footprint }}</small>
-              </span>
-              <strong class="bom-quantity">{{ item.quantity }}</strong>
-            </div>
+          <div class="pcb-step-meta">
+            <strong v-if="selectedProject.step">{{ selectedProject.step.name }}</strong>
+            <span class="pcb-step-actions">
+              <a v-if="selectedProject.step" class="text-button" :href="selectedProject.step.url" :download="selectedProject.step.name">Descarregar STEP</a>
+              <label class="text-button">
+                {{ stepBusy ? 'A enviar…' : selectedProject.step ? 'Substituir STEP' : 'Anexar STEP' }}
+                <input type="file" class="sr-only" accept=".step,.stp" aria-label="Anexar ficheiro STEP" :disabled="stepBusy" @change="attachStep" />
+              </label>
+            </span>
+            <div v-if="stepError" class="upload-error" role="alert">{{ stepError }}</div>
+            <small>BOM: {{ selectedProject.fileName }} · <b>{{ selectedProject.items.reduce((total, item) => total + item.quantity, 0) }}</b> componentes</small>
           </div>
         </div>
+        <BomStockList :rows="lineStock" :label="`BOM de ${selectedProject.name}`" />
       </div>
     </section>
     <LabelScanner ref="labelScanner" action="Adicionar ao BOM" @use="addLabel" />

@@ -37,6 +37,8 @@ class OcrTest(unittest.TestCase):
         self.assertEqual(match('x VGO39NCHXTB103 HDK( 14 SMD', PARTS)['mpn'], 'VG039NCHXTB103')
         self.assertEqual(match('NCHXTB103 14 SMD B21-06-12', PARTS)['mpn'], 'VG039NCHXTB103')
         self.assertEqual(match('P/N 428150042', PARTS)['mpn'], '42815-0042 (Loose Piece)')
+        self.assertEqual(match('(1P) Part No.: 150 060 GS5 504 0 wets 25 pcs', [*PARTS, {'mpn': '150060GS55040', 'manufacturer': 'Wurth Elektronik'}]),
+                         {'mpn': '150060GS55040', 'manufacturer': 'Wurth Elektronik', 'qty': 25, 'ocr': True})
 
     def test_ignores_text_without_a_part_number(self):
         match = self.module.match_label_text

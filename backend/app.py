@@ -14,6 +14,7 @@ from io import BytesIO
 import os
 # SQLite e a base de dados local onde ficam categorias, componentes e quantidades.
 import socket
+import shutil
 import sqlite3
 import sys
 # Permite executar o verificador do Excel sem bloquear os pedidos web.
@@ -185,6 +186,11 @@ def init_mysql_schema(connection):
             source VARCHAR(255) NOT NULL DEFAULT '',
             datasheet VARCHAR(1000) NOT NULL DEFAULT ''
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
+        # Foto de cada caixa/gaveta; o nome e o mesmo texto guardado em items.location.
+        """CREATE TABLE IF NOT EXISTS locations (
+            name VARCHAR(255) PRIMARY KEY,
+            image VARCHAR(1000) NOT NULL DEFAULT ''
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
     ):
         if mariadb:
             sql = sql.replace("utf8mb4_0900_as_ci", "utf8mb4_uca1400_as_ci").replace("utf8mb4_0900_bin", "utf8mb4_bin")
@@ -220,6 +226,7 @@ NOTION_WORKSPACE_ID = os.getenv("NOTION_WORKSPACE_ID", "").strip().replace("-", 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 NORMALIZED_IMAGE_SIZE = (800, 800)
 MAX_IMAGE_DOWNLOAD = 10 * 1024 * 1024
+MAX_STEP_SIZE = 40 * 1024 * 1024
 # Ficheiro sincronizado com a base de dados. EXCEL_PATH no ambiente permite
 # escolher outro livro sem alterar o codigo.
 EXCEL_PATH = Path(os.getenv("EXCEL_PATH", BASE_DIR / "Stock_sala.xlsx"))
@@ -443,6 +450,10 @@ def init_sqlite_schema(connection):
             source TEXT NOT NULL DEFAULT '',
             datasheet TEXT NOT NULL DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS locations (
+            name TEXT PRIMARY KEY,
+            image TEXT NOT NULL DEFAULT ''
+        );
         """
     )
     category_columns = {
@@ -564,6 +575,13 @@ def db_parts():
     with db_connection() as connection:
         rows = connection.execute("SELECT * FROM parts ORDER BY mpn").fetchall()
     return [{**dict(row), "props": json.loads(row["props"])} for row in rows]
+
+
+def db_locations():
+    init_db()
+    with db_connection() as connection:
+        rows = connection.execute("SELECT name, image FROM locations").fetchall()
+    return {row["name"]: image_path(row["image"]) for row in rows}
 
 
 def save_parts(parts):
@@ -1115,6 +1133,7 @@ def data_from_items(items):
         "categories": db_categories(),
         "items": items,
         "parts": db_parts(),
+        "locations": db_locations(),
         "can_edit": STORAGE_MODE == "local",
         "auth": True,
         "user": current_person(),
@@ -1198,6 +1217,51 @@ def upload_image():
     normalized.save(output, format="JPEG", quality=88, optimize=True)
     (UPLOAD_DIR / secure_filename(filename)).write_bytes(output.getvalue())
     return jsonify(url=f"/uploads/{filename}")
+
+
+@app.post("/api/pcb-step")
+def upload_pcb_step():
+    # Modelos STEP das PCBs passam do limite geral de 5 MB; o nginx aceita até 50 MB.
+    request.max_content_length = MAX_STEP_SIZE
+    step = request.files.get("step")
+    if step is None or Path(step.filename or "").suffix.lower() not in {".step", ".stp"}:
+        return erro("Seleciona um ficheiro STEP (.step ou .stp)")
+    data = step.read()
+    if not data.lstrip().startswith(b"ISO-10303-21"):
+        return erro("O ficheiro enviado não é um STEP válido")
+    stem = uuid4().hex
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    (UPLOAD_DIR / f"{stem}.step").write_bytes(data)
+    start_step_mesh(stem)
+    return jsonify(url=f"/uploads/{stem}.step")
+
+
+def start_step_mesh(stem):
+    # Ler um STEP de placa demora ~1,5 min e ~600 MB: o Node converte-o uma vez numa malha leve, à parte do pedido.
+    # O ficheiro .part marca a conversão em curso (vale entre workers); passados 10 min conta como abandonada.
+    part = UPLOAD_DIR / f"{stem}.mesh.part"
+    if part.exists() and time.time() - part.stat().st_mtime < 600:
+        return
+    node = shutil.which("node")
+    if node is None:
+        (UPLOAD_DIR / f"{stem}.mesh.error").write_text("Node não está instalado no servidor")
+        return
+    part.touch()
+    subprocess.Popen([node, str(BASE_DIR.parent / "scripts" / "step-mesh.cjs"), str(UPLOAD_DIR / f"{stem}.step"), str(UPLOAD_DIR / f"{stem}.mesh")],
+                     cwd=BASE_DIR.parent, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+@app.get("/api/pcb-step/<stem>/mesh")
+def pcb_step_mesh(stem):
+    # Malha 3D do STEP para o visualizador: 202 enquanto converte (STEPs antigos começam a converter aqui).
+    if not re.fullmatch(r"[0-9a-f]{32}", stem) or not (UPLOAD_DIR / f"{stem}.step").exists():
+        return erro("Modelo STEP não encontrado", 404)
+    if (UPLOAD_DIR / f"{stem}.mesh").exists():
+        return send_from_directory(UPLOAD_DIR, f"{stem}.mesh", mimetype="application/octet-stream")
+    if (UPLOAD_DIR / f"{stem}.mesh.error").exists():
+        return erro("Não foi possível converter este STEP para 3D. Descarrega-o e abre-o num programa de CAD.", 422)
+    start_step_mesh(stem)
+    return jsonify(pending=True), 202
 
 
 @app.get("/uploads/<path:filename>")
@@ -1443,6 +1507,52 @@ def mudar_localizacao():
         if not changed:
             return erro("Item não encontrado", 404)
         return jsonify(msg=f"{changed} componente(s) {'em ' + location if location else 'sem localização'}")
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.patch("/api/locations")
+def editar_localizacao():
+    # Muda o nome (em todos os componentes que la estao) e/ou a foto de uma localizacao.
+    if STORAGE_MODE != "local":
+        return erro("A edição está disponível no modo local")
+    data = request.get_json(silent=True) or {}
+    old, new, image = data.get("name"), data.get("newName", data.get("name")), data.get("image")
+    if not all(isinstance(value, str) for value in (old, new)) or not old.strip() or not new.strip() or (image is not None and not isinstance(image, str)):
+        return erro("Indica a localização e o novo nome")
+    old, new = old.strip(), new.strip()
+    if len(new) > 255:
+        return erro("Localização demasiado longa")
+    try:
+        init_db()
+        with EXCEL_LOCK, db_connection() as connection:
+            saved = {row["name"]: row["image"] for row in connection.execute("SELECT name, image FROM locations WHERE name IN (?, ?)", (old, new))}
+            # Juntar numa localizacao que ja existe mantem a foto dela se esta nao tiver uma.
+            image = image if image is not None else saved.get(old) or saved.get(new, "")
+            connection.execute("DELETE FROM locations WHERE name IN (?, ?)", (old, new))
+            connection.execute("INSERT INTO locations (name, image) VALUES (?, ?)", (new, image_path(image)))
+            connection.execute("UPDATE items SET location = ? WHERE location = ?", (new, old))
+        return jsonify(msg=f"Localização {new} guardada")
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.delete("/api/locations")
+def apagar_localizacao():
+    # So apaga caixas vazias: os componentes nunca ficam sem sitio por engano.
+    if STORAGE_MODE != "local":
+        return erro("A edição está disponível no modo local")
+    name = (request.get_json(silent=True) or {}).get("name")
+    if not isinstance(name, str) or not name.strip():
+        return erro("Indica a localização")
+    name = name.strip()
+    try:
+        init_db()
+        with EXCEL_LOCK, db_connection() as connection:
+            if connection.execute("SELECT 1 FROM items WHERE location = ? LIMIT 1", (name,)).fetchone():
+                return erro(f"{name} ainda tem componentes. Move-os antes de apagar.", 409)
+            connection.execute("DELETE FROM locations WHERE name = ?", (name,))
+        return jsonify(msg=f"Localização {name} apagada")
     except Exception as exc:
         return erro(str(exc), 500)
 
@@ -1757,8 +1867,8 @@ def edit_distance_at_most_one(a, b):
 def match_label_text(text, parts):
     # Procura no texto lido um P/N do catalogo (com tolerancia a erros e a leituras parciais) e a quantidade.
     tokens = [token for token in re.split(r"[\s:;,|]+", text) if token]
-    joined = (tokens[i] + tokens[i + 1] if i + 1 < len(tokens) else "" for i in range(len(tokens)))
-    candidates = {ocr_key(candidate) for candidate in [*tokens, *joined]}
+    # P/N impressos em grupos (Würth: "150 060 GS5 504 0") chegam partidos: junta ate 5 pedacos seguidos.
+    candidates = {ocr_key("".join(tokens[i:i + size])) for size in range(1, 6) for i in range(len(tokens) - size + 1)}
     candidates = [c for c in candidates if len(c) >= 8 and re.search(r"\d", c) and re.search(r"[A-Z]", c)]
     best = None
     for part in parts:

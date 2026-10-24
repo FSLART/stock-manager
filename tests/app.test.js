@@ -118,13 +118,15 @@ it('combines property and stock filters and clears them together with search', a
 it('selects a range with shift-click and moves the selection to one location', async () => {
   fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), items: [
     ...data.items, { id: 3, cat: 'R&D', props: { valor: '1k' }, qty: 5, image: '', location: 'Gaveta A' },
-  ] }) })
+  ], locations: { 'Caixa vazia': '' } }) })
   wrapper = mount(App)
   await flushPromises()
   const boxes = () => wrapper.findAll('tbody .select-cell input')
   await boxes()[0].trigger('click')
   await boxes()[2].trigger('click', { shiftKey: true })
   expect(wrapper.find('.selection-bar strong').text()).toBe('3 selecionados')
+  // Uma caixa criada na página Localizações aparece na lista mesmo sem componentes.
+  expect(wrapper.findAll('#stock-locations option').map(option => option.attributes('value'))).toEqual(['Caixa vazia', 'Gaveta A'])
   await wrapper.find('.selection-bar input').setValue('Caixa 1')
   await wrapper.find('.selection-bar').trigger('submit')
   await flushPromises()
@@ -136,6 +138,21 @@ it('selects a range with shift-click and moves the selection to one location', a
   expect(wrapper.findAll('tbody .row')).toHaveLength(1)
   await wrapper.find('thead .select-cell input').trigger('change')
   expect(wrapper.find('.selection-bar strong').text()).toBe('1 selecionado')
+})
+
+it('syncs every selected P/N once with the parts APIs', async () => {
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), categories: [{ name: 'CIs', props: ['P/N'], image: false }], items: [
+    { id: 1, cat: 'CIs', props: { 'P/N': 'NE555' }, qty: 1, image: '' }, { id: 2, cat: 'CIs', props: { 'P/N': 'ne555' }, qty: 1, image: '' },
+    { id: 3, cat: 'CIs', props: { 'P/N': 'LM358' }, qty: 1, image: '' }, { id: 4, cat: 'CIs', props: { 'P/N': '-' }, qty: 1, image: '' },
+  ] }) })
+  wrapper = mount(App)
+  await flushPromises()
+  await wrapper.find('thead .select-cell input').trigger('change')
+  const button = wrapper.findAll('.selection-bar button').find(entry => entry.text().startsWith('Sincronizar'))
+  expect(button.text()).toBe('Sincronizar com APIs (2)')
+  await button.trigger('click')
+  await flushPromises()
+  expect(fetch.mock.calls.map(([url]) => url).filter(url => url.startsWith('/api/parts/lookup'))).toEqual(['/api/parts/lookup?mpn=ne555', '/api/parts/lookup?mpn=LM358'])
 })
 
 it('sorts quantities numerically in both directions', async () => {
@@ -572,4 +589,84 @@ it('completes a scanned label with the Mouser/DigiKey lookup: category, descript
   expect(form.text()).toContain('Current Sense Amplifiers')
   expect(form.find('a[href="https://example.com/mcp6c02.pdf"]').exists()).toBe(true)
   expect(form.find('input[type=number]').element.value).toBe('3')
+})
+
+it('syncs an edited component with the Mouser/DigiKey APIs, keeping typed values and saving no extra price', async () => {
+  const stock = {
+    ...structuredClone(data),
+    categories: [...data.categories, { name: 'CIs', props: ['P/N', 'Fabricante', 'Encapsulamento'], image: true }],
+    items: [...data.items, { id: 3, cat: 'CIs', props: { 'P/N': 'NE555P', Fabricante: 'TI', Encapsulamento: '' }, qty: 2, image: '' }],
+  }
+  const part = { mpn: 'NE555P', manufacturer: 'Texas Instruments', description: 'Timer', category: 'CIs', props: { Encapsulamento: 'DIP-8' }, price: 0.4, datasheet: '', source: 'Mouser API 2026-10-24' }
+  fetch.mockImplementation(async url => ({ ok: true, json: async () => url.startsWith('/api/parts/lookup') ? { part, image: 'https://example.com/ne555.jpg' } : structuredClone(stock) }))
+  wrapper = mount(App)
+  await flushPromises()
+  await wrapper.findAll('tbody tr').find(tr => tr.text().includes('NE555P')).find('button[aria-label="Editar componente"]').trigger('click')
+  const form = wrapper.find('dialog form')
+  await form.find('.sync-part').trigger('click')
+  await flushPromises()
+  expect(fetch).toHaveBeenCalledWith('/api/parts/lookup?mpn=NE555P', expect.objectContaining({ method: 'GET' }))
+  expect(form.findAll('.fields input').map(input => input.element.value)).toEqual(['NE555P', 'TI', 'DIP-8'])
+  expect(form.find('input[type=number][step=any]').element.value).toBe('0.4')
+  expect(form.find('input[type=url]').element.value).toBe('https://example.com/ne555.jpg')
+  expect(form.text()).toContain('Timer')
+  expect(form.text()).toContain('Sincronizado com a Mouser/DigiKey')
+})
+
+it('shows how much of a scanned P/N is already in stock, per location', async () => {
+  const items = [{ id: 1, cat: 'CIs', props: { 'P/N': 'MCP6C02T-100E/CHY' }, qty: 5, location: 'A1' }, { id: 2, cat: 'CIs', props: { 'P/N': 'mcp6c02t-100e/chy' }, qty: 2, location: 'B3' }]
+  const scanner = mount(LabelScanner, { props: { items, action: 'Adicionar' } })
+  scanner.vm.label = { mpn: 'MCP6C02T-100E/CHY', qty: 1 }
+  await flushPromises()
+  expect(scanner.find('.label-data').text()).toContain('7 un. · 5 em A1 · 2 em B3')
+  scanner.vm.label = { mpn: 'OTHER', qty: 1 }
+  await flushPromises()
+  expect(scanner.find('.label-data').text()).toContain('Não existe em stock')
+  scanner.unmount()
+})
+
+it('opens the stock filtered by the location in a QR link, and renames a location from its page', async () => {
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), items: [
+    { ...data.items[0], location: 'Caixa 1' }, data.items[1],
+  ], locations: { 'Caixa 1': '/uploads/a.jpg' } }) })
+  window.history.replaceState(null, '', '/#/stock?location=Caixa%201')
+  wrapper = mount(App)
+  await flushPromises()
+  expect(wrapper.find('.sub').text()).toBe('1 referência · 3 unidades')
+  window.history.replaceState(null, '', '/#/locations')
+  window.dispatchEvent(new HashChangeEvent('hashchange'))
+  await flushPromises()
+  expect(wrapper.find('.location-card img').attributes('src')).toBe('/uploads/a.jpg')
+  await wrapper.findAll('.location-card button').find(button => button.text() === 'Editar').trigger('click')
+  await wrapper.find('.location-form input').setValue('Caixa A')
+  await wrapper.find('.location-form').trigger('submit')
+  await flushPromises()
+  const request = fetch.mock.calls.find(([url]) => url === '/api/locations')
+  expect(JSON.parse(request[1].body)).toEqual({ name: 'Caixa 1', newName: 'Caixa A' })
+  await wrapper.find('.location-new input').setValue('Caixa 9')
+  await wrapper.find('.location-new').trigger('submit')
+  await flushPromises()
+  expect(JSON.parse(fetch.mock.calls.filter(([url]) => url === '/api/locations').at(-1)[1].body)).toEqual({ name: 'Caixa 9', newName: 'Caixa 9' })
+})
+
+it('removes a photo and deletes only empty boxes', async () => {
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), items: [{ ...data.items[0], location: 'Caixa 1' }],
+    locations: { 'Caixa 1': '/uploads/a.jpg', Vazia: '' } }) })
+  window.history.replaceState(null, '', '/#/locations')
+  vi.stubGlobal('confirm', () => true)
+  wrapper = mount(App)
+  await flushPromises()
+  const card = name => wrapper.findAll('.location-card').find(card => card.find('strong').text() === name)
+  const button = (name, text) => card(name).findAll('button').find(button => button.text() === text)
+  expect(button('Caixa 1', 'Apagar').attributes('disabled')).toBeDefined()
+  await button('Vazia', 'Apagar').trigger('click')
+  await flushPromises()
+  const deleted = fetch.mock.calls.find(([url, options]) => url === '/api/locations' && options.method === 'DELETE')
+  expect(JSON.parse(deleted[1].body)).toEqual({ name: 'Vazia' })
+  await button('Caixa 1', 'Editar').trigger('click')
+  await wrapper.find('.location-check input').setValue(true)
+  await wrapper.find('.location-form').trigger('submit')
+  await flushPromises()
+  const edited = fetch.mock.calls.find(([url, options]) => url === '/api/locations' && options.method === 'PATCH')
+  expect(JSON.parse(edited[1].body)).toEqual({ name: 'Caixa 1', newName: 'Caixa 1', image: '' })
 })

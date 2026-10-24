@@ -21,6 +21,8 @@ const routes = {
   step: p => [`/api/items/${p.id}/step`, 'POST'],
   editItem: p => [`/api/items/${p.id}`, 'PATCH'],
   setLocation: () => ['/api/items/location', 'POST'],
+  editLocation: () => ['/api/locations', 'PATCH'],
+  deleteLocation: () => ['/api/locations', 'DELETE'],
   editCategory: p => [`/api/categories/${encodeURIComponent(p.originalName)}`, 'PATCH'],
   savePart: () => ['/api/parts', 'POST'],
   lookupPart: p => [`/api/parts/lookup?mpn=${encodeURIComponent(p.mpn)}`, 'GET'],
@@ -149,8 +151,21 @@ export function createApi({ onUnauthorized } = {}) {
     return data.url
   }
 
+  // Modelos STEP de PCB ficam em backend/uploads; o projeto guarda só o link.
+  async function uploadStep(file) {
+    if (appsScript) throw new Error('Os ficheiros STEP só podem ser guardados no servidor stocklart.pt')
+    const body = new FormData()
+    body.append('step', file)
+    const response = await fetch('/api/pcb-step', { method: 'POST', body })
+    const data = await response.json().catch(() => ({}))
+    if (data.login) onUnauthorized?.()
+    if (response.status === 413) throw new Error('O ficheiro STEP passa do limite de 40 MB')
+    if (!response.ok) throw new Error(data.error || 'Não foi possível enviar o ficheiro STEP')
+    return data.url
+  }
+
   // direct não usa a fila offline: login, histórico e pessoas precisam do servidor.
-  return { request, direct, load, syncPending, uploadImage, importInventory: items => direct('importItems', { items }) }
+  return { request, direct, load, syncPending, uploadImage, uploadStep, importInventory: items => direct('importItems', { items }) }
 }
 
 async function jpegBase64(file) {
