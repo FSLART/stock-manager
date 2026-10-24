@@ -182,7 +182,7 @@ it('edits category and field names while sending the original field identity', a
   await form.trigger('submit')
   await flushPromises()
   const request = fetch.mock.calls.find(([url, options]) => url === '/api/categories/LEDs' && options.method === 'PATCH')
-  expect(JSON.parse(request[1].body)).toEqual({ originalName: 'LEDs', name: 'Luzes', fields: [{ source: 'cor', name: 'tonalidade' }], image: true })
+  expect(JSON.parse(request[1].body)).toEqual({ originalName: 'LEDs', name: 'Luzes', fields: [{ source: 'cor', name: 'tonalidade' }], image: true, section: 'Componentes eletrónicos' })
 })
 
 it('creates a category with one input per property, like the edit form', async () => {
@@ -197,7 +197,7 @@ it('creates a category with one input per property, like the edit form', async (
   await form.trigger('submit')
   await flushPromises()
   const request = fetch.mock.calls.find(([url, options]) => url === '/api/categories' && options.method === 'POST')
-  expect(JSON.parse(request[1].body)).toEqual({ name: 'Díodos', props: ['tipo', 'tensão'], image: false })
+  expect(JSON.parse(request[1].body)).toEqual({ name: 'Díodos', props: ['tipo', 'tensão'], image: false, section: 'Componentes eletrónicos' })
 })
 
 it('reorders category properties and sends them in the new order', async () => {

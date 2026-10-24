@@ -35,7 +35,7 @@ provide('movementFilter', ref(''))
 function guard(fn) {
   return (...args) => !auth.enabled || auth.user ? fn(...args) : loginDialog.value.open().then(ok => ok && fn(...args))
 }
-const categories = ref([]), items = ref([]), parts = ref([]), current = ref(null), query = ref('')
+const categories = ref([]), items = ref([]), parts = ref([]), current = ref(null), section = ref(null), query = ref('')
 const busy = ref(false), loading = ref(true), toastMessage = ref(''), toastUndo = ref(null), formError = ref('')
 const movement = ref(null), categoryForm = ref(null), partsCatalog = ref(null), labelScanner = ref(null)
 const csvImport = ref(null), csvError = ref('')
@@ -45,7 +45,10 @@ let timer, toastTimer, refreshing = false, disposed = false
 const normalize = value => String(value).toLowerCase().replace(/\s+/g, '')
 const propertyFilters = ref({}), filterSearch = ref({}), stockFilter = ref(''), imageFilter = ref(''), locationFilter = ref('')
 const filtersOpen = ref(false), sortKey = ref(''), sortDirection = ref(1)
-const scopedItems = computed(() => items.value.filter(item => !current.value || item.cat === current.value))
+const sectionOf = computed(() => Object.fromEntries(categories.value.map(c => [c.name, c.section])))
+const inScope = item => current.value ? item.cat === current.value : !section.value || sectionOf.value[item.cat] === section.value
+const sections = computed(() => [...new Set(categories.value.map(c => c.section))].map(name => ({ name, categories: categories.value.filter(c => c.section === name) })))
+const scopedItems = computed(() => items.value.filter(inScope))
 const propertyKeys = computed(() => [...new Set([
   ...scopedItems.value.flatMap(item => Object.keys(item.props)),
 ])])
@@ -61,9 +64,10 @@ const columns = computed(() => [
   { key: 'location', label: 'Localização' }, { key: 'price', label: 'Preço un.' }, { key: 'qty', label: 'Quantidade' }, { key: 'value', label: 'Valor' },
 ])
 const activeFilters = computed(() => Object.values(propertyFilters.value).reduce((sum, values) => sum + values.length, 0) + Number(Boolean(stockFilter.value)) + Number(Boolean(imageFilter.value)) + Number(locationFilter.value !== ''))
-watch(current, () => { propertyFilters.value = {}; filterSearch.value = {} })
+watch([current, section], () => { propertyFilters.value = {}; filterSearch.value = {} })
 function clearFilters() {
   current.value = null
+  section.value = null
   query.value = ''
   propertyFilters.value = {}
   filterSearch.value = {}
@@ -85,7 +89,7 @@ const NUMERIC = new Set(['qty', 'price', 'value'])
 const sortValue = (item, key) => key === 'component' ? componentValue(item) : key === 'desc' ? describe(item) : key.startsWith('prop:') ? item.props[key.slice(5)] ?? ''
   : key === 'price' ? priceOf.value(item)?.price ?? -1 : key === 'value' ? item.qty * (priceOf.value(item)?.price ?? 0) : item[key] ?? ''
 const shown = computed(() => items.value.filter(item =>
-  (!current.value || item.cat === current.value) &&
+  inScope(item) &&
   normalize(item.cat + Object.values(item.props).join('') + (item.location || '')).includes(normalize(query.value)) &&
   // null é "Sem localização"; '' é todas.
   (locationFilter.value === '' || (item.location || '') === (locationFilter.value ?? '')) &&
@@ -104,6 +108,7 @@ const estimate = computed(() => {
   return { value: priced.reduce((sum, [item, { price }]) => sum + item.qty * price, 0), missing: shown.value.length - priced.length }
 })
 const total = name => items.value.filter(item => !name || item.cat === name).reduce((sum, item) => sum + item.qty, 0)
+const sectionTotal = name => items.value.filter(item => sectionOf.value[item.cat] === name).reduce((sum, item) => sum + item.qty, 0)
 const color = name => `hsl(${[...name].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7)} 65% 48%)`
 const locked = computed(() => busy.value || queues.size > 0)
 const locations = computed(() => [...new Set(items.value.map(item => item.location).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true })))
@@ -161,6 +166,7 @@ async function load() {
   for (const id of selected.value) if (!ids.has(id)) selected.value.delete(id)
   Object.assign(auth, { enabled: Boolean(data.auth), user: data.user || null, notion: Boolean(data.notion_login) })
   if (current.value && !categories.value.some(c => c.name === current.value)) current.value = null
+  if (section.value && !categories.value.some(c => c.section === section.value)) section.value = null
 }
 async function act(action, payload, success) {
   if (busy.value || queues.size) return
@@ -285,7 +291,7 @@ function deleteFromForm(name) {
 }
 function openCategory(category) {
   categoryError.value = ''
-  categoryForm.value.open(category)
+  categoryForm.value.open(category, section.value || sectionOf.value[current.value])
 }
 async function submitCategory(payload) {
   if (busy.value || queues.size) return
@@ -295,6 +301,7 @@ async function submitCategory(payload) {
     const result = await api.request(payload.originalName ? 'editCategory' : 'newCategory', payload)
     categoryForm.value.close()
     current.value = payload.name
+    section.value = null
     toast(result.msg)
     if (!result.queued) await load()
   } catch (error) { categoryError.value = error.message }
@@ -344,13 +351,16 @@ onUnmounted(() => {
     <div class="sidebar-inner">
     <div class="sidebar-heading"><h2>Categorias</h2><button class="new-category" aria-label="Nova categoria" :disabled="locked" @click="guarded.openCategory()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nova</button></div>
     <nav class="category-nav" aria-label="Categorias" tabindex="-1">
-      <div class="cat-row"><button :aria-current="!current" @click="current = null">Tudo <span class="n">{{ total() }}</span></button></div>
-      <div v-for="category in categories" :key="category.name" class="cat-row">
-        <button :aria-current="current === category.name" @click="current = category.name"><span><i class="dot" :style="{ background: color(category.name) }"></i>{{ category.name }}</span><span class="n">{{ total(category.name) }}</span></button>
+      <div class="cat-row"><button :aria-current="!current && !section" @click="current = null; section = null">Tudo <span class="n">{{ total() }}</span></button></div>
+      <template v-for="group in sections" :key="group.name">
+      <div class="cat-section"><button :aria-current="!current && section === group.name" @click="current = null; section = group.name">{{ group.name }} <span class="n">{{ sectionTotal(group.name) }}</span></button></div>
+      <div v-for="category in group.categories" :key="category.name" class="cat-row">
+        <button :aria-current="current === category.name" @click="current = category.name; section = null"><span><i class="dot" :style="{ background: color(category.name) }"></i>{{ category.name }}</span><span class="n">{{ total(category.name) }}</span></button>
         <!-- Um só botão discreto por categoria; apagar fica dentro do formulário de edição. -->
         <button v-if="canEdit" class="cat-edit" :aria-label="`Editar categoria ${category.name}`" title="Editar categoria" :disabled="locked" @click="guarded.openCategory(category)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg></button>
         <button v-else class="cat-del" :aria-label="`Apagar categoria ${category.name}`" title="Apagar categoria" :disabled="locked" @click="guarded.deleteCategory(category)">✕</button>
       </div>
+      </template>
     </nav>
     <button v-if="parts.length" type="button" class="catalog-btn" @click="partsCatalog.open()">Catálogo de peças <span class="n">{{ parts.length }}</span></button>
     </div>
@@ -389,7 +399,7 @@ onUnmounted(() => {
         <p v-if="!facets.length" class="filter-no-values">As propriedades das categorias aparecem aqui como filtros.</p>
       </div>
     </section>
-    <div class="heading"><h1>{{ current || 'Tudo em stock' }}</h1><span class="sub">{{ shown.length }} {{ shown.length === 1 ? 'referência' : 'referências' }} · {{ units }} {{ units === 1 ? 'unidade' : 'unidades' }}<template v-if="estimate.value"> · <span class="estimate" :title="`Estimativa: preço do catálogo pelo P/N; sem P/N, mediana de peças da mesma categoria e tamanho.${estimate.missing ? ` ${estimate.missing} sem preço.` : ''}`">≈ {{ euros(estimate.value) }}</span></template></span></div>
+    <div class="heading"><h1>{{ current || section || 'Tudo em stock' }}</h1><span class="sub">{{ shown.length }} {{ shown.length === 1 ? 'referência' : 'referências' }} · {{ units }} {{ units === 1 ? 'unidade' : 'unidades' }}<template v-if="estimate.value"> · <span class="estimate" :title="`Estimativa: preço do catálogo pelo P/N; sem P/N, mediana de peças da mesma categoria e tamanho.${estimate.missing ? ` ${estimate.missing} sem preço.` : ''}`">≈ {{ euros(estimate.value) }}</span></template></span></div>
     <form v-if="canEdit && selected.size" class="selection-bar" aria-label="Componentes selecionados" @submit.prevent="guarded.setLocation(locationName)">
       <strong>{{ selected.size }} {{ selected.size === 1 ? 'selecionado' : 'selecionados' }}</strong>
       <input v-model="locationName" list="stock-locations" aria-label="Nova localização" placeholder="Caixa 1, Gaveta A…" maxlength="255" autocomplete="off">

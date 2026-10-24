@@ -134,7 +134,8 @@ def init_mysql_schema(connection):
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
             name VARCHAR(255) COLLATE utf8mb4_0900_as_ci UNIQUE NOT NULL,
             props LONGTEXT NOT NULL,
-            image_enabled INTEGER NOT NULL DEFAULT 0
+            image_enabled INTEGER NOT NULL DEFAULT 0,
+            section VARCHAR(64) NOT NULL DEFAULT 'Componentes eletrónicos'
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
         """CREATE TABLE IF NOT EXISTS items (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -193,6 +194,9 @@ def init_mysql_schema(connection):
         connection.execute("ALTER TABLE people ADD COLUMN avatar VARCHAR(1000) NOT NULL DEFAULT ''")
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'items' AND COLUMN_NAME = 'location'").fetchone():
         connection.execute("ALTER TABLE items ADD COLUMN location VARCHAR(255) NOT NULL DEFAULT ''")
+    if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'categories' AND COLUMN_NAME = 'section'").fetchone():
+        connection.execute("ALTER TABLE categories ADD COLUMN section VARCHAR(64) NOT NULL DEFAULT 'Componentes eletrónicos'")
+        split_sections(connection)
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'parts' AND COLUMN_NAME = 'datasheet'").fetchone():
         connection.execute("ALTER TABLE parts ADD COLUMN datasheet VARCHAR(1000) NOT NULL DEFAULT ''")
 
@@ -260,6 +264,7 @@ EXCEL_COLUMN_WIDTHS = {
 # Dados iniciais usados apenas na primeira criacao da base de dados.
 # Cada chave e uma categoria e cada lista define os campos que o frontend deve
 # pedir para um componente dessa categoria.
+SECTIONS = ("Componentes eletrónicos", "Harness", "Não consumíveis")
 CATEGORIAS_INICIAIS = {
     "Resistências": ["valor (Ω)", "tolerância (%)", "potência (W)", "encapsulamento"],
     "Condensadores": ["capacidade (µF)", "tensão (V)", "tipo", "encapsulamento"],
@@ -389,7 +394,8 @@ def init_sqlite_schema(connection):
             id INTEGER PRIMARY KEY,
             name TEXT UNIQUE NOT NULL COLLATE NOCASE,
             props TEXT NOT NULL,
-            image_enabled INTEGER NOT NULL DEFAULT 0
+            image_enabled INTEGER NOT NULL DEFAULT 0,
+            section TEXT NOT NULL DEFAULT 'Componentes eletrónicos'
         );
         CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY,
@@ -446,6 +452,9 @@ def init_sqlite_schema(connection):
         connection.execute(
             "ALTER TABLE categories ADD COLUMN image_enabled INTEGER NOT NULL DEFAULT 0"
         )
+    if "section" not in category_columns:
+        connection.execute("ALTER TABLE categories ADD COLUMN section TEXT NOT NULL DEFAULT 'Componentes eletrónicos'")
+        split_sections(connection)
     item_columns = {
         row["name"] for row in connection.execute("PRAGMA table_info(items)")
     }
@@ -457,6 +466,20 @@ def init_sqlite_schema(connection):
         connection.execute("ALTER TABLE people ADD COLUMN avatar TEXT NOT NULL DEFAULT ''")
     if "datasheet" not in {row["name"] for row in connection.execute("PRAGMA table_info(parts)")}:
         connection.execute("ALTER TABLE parts ADD COLUMN datasheet TEXT NOT NULL DEFAULT ''")
+
+
+def split_sections(connection):
+    # Corre uma vez, quando a coluna section aparece: crimps e conectores passam para Harness,
+    # e Harness e Não consumíveis recebem uma categoria inicial cada para não ficarem vazias.
+    connection.execute("UPDATE categories SET section = 'Harness' WHERE LOWER(name) IN ('crimps', 'conectores')")
+    existing = {row["name"].casefold() for row in connection.execute("SELECT name FROM categories")}
+    for name, props, section in (
+        ("Cabos", ["P/N", "Fabricante", "AWG", "Cor", "Tipo"], "Harness"),
+        ("Ferramentas e equipamentos", ["Tipo", "Fabricante", "Modelo"], "Não consumíveis"),
+    ):
+        if name.casefold() not in existing:
+            connection.execute("INSERT INTO categories (name, props, image_enabled, section) VALUES (?, ?, 1, ?)",
+                               (name, json.dumps(props, ensure_ascii=False), section))
 
 
 def seed_categories(connection):
@@ -523,13 +546,14 @@ def db_categories():
     init_db()
     with db_connection() as connection:
         rows = connection.execute(
-            "SELECT name, props, image_enabled FROM categories ORDER BY id"
+            "SELECT name, props, image_enabled, section FROM categories ORDER BY id"
         ).fetchall()
     return [
         {
             "name": row["name"],
             "props": json.loads(row["props"]),
             "image": bool(row["image_enabled"]),
+            "section": row["section"],
         }
         for row in rows
     ]
@@ -1602,6 +1626,9 @@ def editar_categoria(original_name):
     names = [field["name"].strip() for field in fields]
     if len(set(names)) != len(names):
         return erro("Os nomes das propriedades não podem repetir-se")
+    section = data.get("section", SECTIONS[0])
+    if section not in SECTIONS:
+        return erro("Secção desconhecida")
     try:
         init_db()
         with EXCEL_LOCK, db_connection() as connection:
@@ -1621,8 +1648,8 @@ def editar_categoria(original_name):
                     return erro("Esta alteração criaria componentes duplicados. Mantém uma propriedade que os distinga.", 409)
                 keys.add(key)
                 updates.append((json.dumps(props, ensure_ascii=False), key, item["id"]))
-            connection.execute("UPDATE categories SET name = ?, props = ?, image_enabled = ? WHERE id = ?",
-                               (name, json.dumps(names, ensure_ascii=False), int(bool(data.get("image"))), category["id"]))
+            connection.execute("UPDATE categories SET name = ?, props = ?, image_enabled = ?, section = ? WHERE id = ?",
+                               (name, json.dumps(names, ensure_ascii=False), int(bool(data.get("image"))), section, category["id"]))
             # Temporary keys let fields be reordered without transient uniqueness collisions.
             for _, _, item_id in updates:
                 connection.execute("UPDATE items SET `key` = ? WHERE id = ?", (uuid4().hex, item_id))
@@ -1643,16 +1670,19 @@ def nova_categoria():
     name = str(data.get("name", "")).strip()
     props = list(dict.fromkeys(str(prop).strip() for prop in data.get("props", []) if str(prop).strip()))
     image_enabled = bool(data.get("image"))
+    section = data.get("section", SECTIONS[0])
     if not name or not props:
         return erro("Indica o nome e pelo menos uma propriedade")
+    if section not in SECTIONS:
+        return erro("Secção desconhecida")
     try:
         init_db()
         if any(category["name"].casefold() == name.casefold() for category in db_categories()):
             return erro("Essa categoria já existe")
         with db_connection() as connection:
             connection.execute(
-                "INSERT INTO categories (name, props, image_enabled) VALUES (?, ?, ?)",
-                (name, json.dumps(props, ensure_ascii=False), int(image_enabled)),
+                "INSERT INTO categories (name, props, image_enabled, section) VALUES (?, ?, ?, ?)",
+                (name, json.dumps(props, ensure_ascii=False), int(image_enabled), section),
             )
         return jsonify(msg="Categoria pronta para receber o primeiro item")
     except Exception as exc:

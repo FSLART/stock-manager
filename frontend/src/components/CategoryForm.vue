@@ -3,13 +3,14 @@ import { computed, ref } from 'vue'
 const props = defineProps({ categories: Array, busy: Boolean, error: String })
 const emit = defineEmits(['submit', 'delete'])
 const dialog = ref(null)
-const name = ref(''), image = ref(false)
+const SECTIONS = ['Componentes eletrónicos', 'Harness', 'Não consumíveis']
+const name = ref(''), image = ref(false), section = ref(SECTIONS[0])
 const originalName = ref(null), fields = ref([]), originalFields = ref([])
-function open(category) {
+function open(category, defaultSection) {
   originalName.value = category?.name || null
   originalFields.value = [...(category?.props || [])]
   fields.value = category ? category.props.map(p => ({ source: p, name: p })) : [{ source: null, name: '' }]
-  name.value = ''; image.value = false
+  name.value = ''; image.value = false; section.value = category?.section || defaultSection || SECTIONS[0]
   if (category) { name.value = category.name; image.value = category.image }
   dialog.value.showModal()
 }
@@ -21,9 +22,9 @@ function submit() {
   if (originalName.value) {
     const removed = originalFields.value.filter(p => !fields.value.some(f => f.source === p))
     if (removed.length && !confirm(`Remover as propriedades ${removed.join(', ')} e os seus valores de todos os componentes desta categoria?`)) return
-    emit('submit', { originalName: originalName.value, name: name.value.trim(), fields: fields.value, image: image.value })
+    emit('submit', { originalName: originalName.value, name: name.value.trim(), fields: fields.value, image: image.value, section: section.value })
   } else {
-    emit('submit', { name: name.value.trim(), props: fields.value.map(f => f.name), image: image.value })
+    emit('submit', { name: name.value.trim(), props: fields.value.map(f => f.name), image: image.value, section: section.value })
   }
 }
 defineExpose({ open, close: () => dialog.value.close() })
@@ -34,6 +35,7 @@ defineExpose({ open, close: () => dialog.value.close() })
     <form @submit.prevent="submit">
       <h2 id="category-title">{{ originalName ? 'Editar categoria' : 'Nova categoria' }}</h2>
       <label>Nome <input v-model="name" placeholder="Ex.: Díodos" required></label>
+      <label>Secção <select v-model="section"><option v-for="option in SECTIONS" :key="option">{{ option }}</option></select></label>
       <div v-for="(field, index) in fields" :key="index" class="property-editor">
         <label>Propriedade <input v-model="field.name" list="known-properties" autocomplete="off" required></label>
         <button type="button" class="move" :disabled="index === 0" aria-label="Subir propriedade" @click="fields.splice(index - 1, 0, ...fields.splice(index, 1))">↑</button>
