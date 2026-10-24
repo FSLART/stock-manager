@@ -2300,10 +2300,12 @@ def notion_callback():
     return redirect(next_page)
 
 
-def name_key(name):
-    # Primeiro e ultimo nome, sem acentos: "Rita Faria" no Notion encontra "Rita Sofia Pinto Faria" na base.
-    words = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().casefold().split()
-    return (words[0], words[-1]) if words else None
+def same_person(a, b):
+    # Mesmo primeiro nome e o nome mais curto (2+ palavras, sem acentos) aparece por ordem no mais longo:
+    # "Rita Faria" e "Rita Sofia Faria Lemos" sim; "Nuno Matos" e "Hugo Nuno ... Matos" nao.
+    short, long = sorted((unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().casefold().split() for name in (a, b)), key=len)
+    rest = iter(long)
+    return len(short) >= 2 and short[0] == long[0] and all(word in rest for word in short)
 
 
 def notion_members(token):
@@ -2333,7 +2335,7 @@ def notion_member(token, name):
             rows = json.loads(MEMBERS_PATH.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return None
-    matches = [tags for title, tags in rows if name_key(title) == name_key(name)]
+    matches = [tags for title, tags in rows if same_person(title, name)]
     if len(matches) != 1:
         return None
     tags = matches[0]

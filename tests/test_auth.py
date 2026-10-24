@@ -93,6 +93,15 @@ class AuthTest(unittest.TestCase):
         self.notion_login(self.client, 'notion-rui', name='Rui Costa', members=None)
         self.assertEqual(self.user(self.client)['department'], 'Electronics')
 
+    def test_same_person_matches_short_names_in_order(self):
+        same = self.module.same_person
+        self.assertTrue(same('Rita Faria', 'Rita Sofia Faria Lemos'))
+        self.assertTrue(same('Tomas Andre Vale Rocha', 'Tomas Rocha'))
+        self.assertTrue(same('Ines Goncalves Prata', 'Inês Gonçalves Prata (iprata)'))
+        self.assertFalse(same('Nuno', 'Nuno Alves'))
+        self.assertFalse(same('Nuno Matos', 'Hugo Nuno da Cunha Matos Leal dos Reis'))
+        self.assertFalse(same('Faria Rita', 'Rita Sofia Faria Lemos'))
+
     def test_admin_sets_departments_and_notion_stops_overwriting(self):
         led = {'cat': 'LEDs', 'props': {'cor': 'azul', 'tamanho (mm)': '5', 'tensão direta (V)': '3'}, 'qty': 1, 'mode': 'in'}
         self.notion_login(self.client, 'notion-ana')
