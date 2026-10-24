@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, provide, reactive, ref, shallowReactive, watch } from 'vue'
-import { createApi, readStored } from './api.js'
+import { createApi, readStored, writeStored } from './api.js'
 import { componentValue, describe } from './stockText.js'
 import { euros, priceEstimator } from './prices.js'
 import InventoryCsvImport from './components/InventoryCsvImport.vue'
@@ -47,7 +47,20 @@ const propertyFilters = ref({}), filterSearch = ref({}), stockFilter = ref(''), 
 const filtersOpen = ref(false), sortKey = ref(''), sortDirection = ref(1)
 const sectionOf = computed(() => Object.fromEntries(categories.value.map(c => [c.name, c.section])))
 const inScope = item => current.value ? item.cat === current.value : !section.value || sectionOf.value[item.cat] === section.value
-const sections = computed(() => [...new Set(categories.value.map(c => c.section))].map(name => ({ name, categories: categories.value.filter(c => c.section === name) })))
+// Secções dobradas e categorias sem referências ficam escondidas; a categoria aberta mostra-se sempre.
+const folded = ref(new Set(readStored('stocklart-folded-sections', []))), showEmpty = ref(readStored('stocklart-show-empty', false) === true)
+const filled = computed(() => new Set(items.value.map(item => item.cat)))
+const emptyCount = computed(() => categories.value.filter(c => !filled.value.has(c.name)).length)
+const sections = computed(() => [...new Set(categories.value.map(c => c.section))].map(name => {
+  const all = categories.value.filter(c => c.section === name)
+  const open = !folded.value.has(name) || all.some(c => c.name === current.value)
+  return { name, open, categories: open ? all.filter(c => showEmpty.value || filled.value.has(c.name) || c.name === current.value) : [] }
+}))
+function fold(name) {
+  folded.value = new Set(folded.value.has(name) ? [...folded.value].filter(entry => entry !== name) : [...folded.value, name])
+  writeStored('stocklart-folded-sections', [...folded.value])
+}
+watch(showEmpty, value => writeStored('stocklart-show-empty', value))
 const scopedItems = computed(() => items.value.filter(inScope))
 const propertyKeys = computed(() => [...new Set([
   ...scopedItems.value.flatMap(item => Object.keys(item.props)),
@@ -353,7 +366,7 @@ onUnmounted(() => {
     <nav class="category-nav" aria-label="Categorias" tabindex="-1">
       <div class="cat-row"><button :aria-current="!current && !section" @click="current = null; section = null">Tudo <span class="n">{{ total() }}</span></button></div>
       <template v-for="group in sections" :key="group.name">
-      <div class="cat-section"><button :aria-current="!current && section === group.name" @click="current = null; section = group.name">{{ group.name }} <span class="n">{{ sectionTotal(group.name) }}</span></button></div>
+      <div class="cat-section"><button class="fold" :aria-expanded="group.open" :aria-label="`${group.open ? 'Dobrar' : 'Abrir'} ${group.name}`" @click="fold(group.name)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button><button :aria-current="!current && section === group.name" @click="current = null; section = group.name">{{ group.name }} <span class="n">{{ sectionTotal(group.name) }}</span></button></div>
       <div v-for="category in group.categories" :key="category.name" class="cat-row">
         <button :aria-current="current === category.name" @click="current = category.name; section = null"><span><i class="dot" :style="{ background: color(category.name) }"></i>{{ category.name }}</span><span class="n">{{ total(category.name) }}</span></button>
         <!-- Um só botão discreto por categoria; apagar fica dentro do formulário de edição. -->
@@ -361,6 +374,7 @@ onUnmounted(() => {
         <button v-else class="cat-del" :aria-label="`Apagar categoria ${category.name}`" title="Apagar categoria" :disabled="locked" @click="guarded.deleteCategory(category)">✕</button>
       </div>
       </template>
+      <label v-if="emptyCount" class="show-empty"><input v-model="showEmpty" type="checkbox"> Mostrar vazias ({{ emptyCount }})</label>
     </nav>
     <button v-if="parts.length" type="button" class="catalog-btn" @click="partsCatalog.open()">Catálogo de peças <span class="n">{{ parts.length }}</span></button>
     </div>

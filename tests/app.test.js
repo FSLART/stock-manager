@@ -35,6 +35,24 @@ it('renders safe text, filters search and categories, and reports totals', async
   expect(wrapper.find('.sub').text()).toBe('1 referência · 3 unidades')
 })
 
+it('folds sidebar sections and hides empty categories until asked', async () => {
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), categories: [
+    { ...data.categories[0], section: 'Componentes eletrónicos' }, { ...data.categories[1], section: 'Harness' },
+    { name: 'Vazia', props: ['x'], image: false, section: 'Harness' },
+  ] }) })
+  wrapper = mount(App)
+  await flushPromises()
+  const names = () => wrapper.findAll('nav .cat-row > button:first-child').map(button => button.text().replace(/\d+$/, '').trim())
+  expect(names()).toEqual(['Tudo', 'LEDs', 'R&D'])
+  await wrapper.find('nav .show-empty input').setValue(true)
+  expect(names()).toEqual(['Tudo', 'LEDs', 'R&D', 'Vazia'])
+  await wrapper.find('button[aria-label="Dobrar Harness"]').trigger('click')
+  expect(names()).toEqual(['Tudo', 'LEDs'])
+  expect(JSON.parse(localStorage.getItem('stocklart-folded-sections'))).toEqual(['Harness'])
+  await wrapper.find('button[aria-label="Abrir Harness"]').trigger('click')
+  expect(names()).toEqual(['Tudo', 'LEDs', 'R&D', 'Vazia'])
+})
+
 it('clamps a decrement at zero and sends only the actual stock change', async () => {
   vi.useFakeTimers()
   wrapper = mount(App)
