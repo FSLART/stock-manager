@@ -10,7 +10,6 @@ const dialog = ref(null)
 const fileInput = ref(null)
 const category = ref('')
 const values = ref({})
-const mode = ref('in')
 const qty = ref(1)
 const editing = ref(null), removeImage = ref(false), imageUrl = ref(''), partQuery = ref(''), unitPrice = ref(''), savedPrice = ref(null)
 const selected = computed(() => props.categories.find(c => c.name === category.value))
@@ -33,9 +32,7 @@ function clearImage() {
   imageUrl.value = ''
   if (fileInput.value) fileInput.value.value = ''
 }
-const hint = computed(() => mode.value === 'in'
-  ? 'Se já existir um item com as mesmas propriedades, a quantidade é somada.'
-  : 'Preenche as propriedades do item de onde queres retirar.')
+const hint = 'Se já existir um item com as mesmas propriedades, a quantidade é somada.'
 function resetFields() {
   values.value = {}
   categoryQuery.value = category.value
@@ -49,7 +46,6 @@ function open(current, label = null) {
   partQuery.value = label?.mpn || ''
   removeImage.value = false
   category.value = props.categories.some(c => c.name === current) ? current : props.categories[0]?.name || ''
-  mode.value = 'in'
   qty.value = label?.qty || 1
   resetFields()
   if (label) pickPart(label)
@@ -162,7 +158,7 @@ function submit() {
   const payload = {
     cat: category.value,
     props: Object.fromEntries((selected.value?.props || []).map(p => [p, (values.value[p] || '').trim()])),
-    qty: Number(qty.value), mode: mode.value, file: fileInput.value?.files[0], imageUrl: imageUrl.value.trim(),
+    qty: Number(qty.value), mode: 'in', file: fileInput.value?.files[0], imageUrl: imageUrl.value.trim(),
   }
   if (editing.value) {
     payload.id = editing.value.id
@@ -186,9 +182,6 @@ defineExpose({ open, edit, fill, close: () => dialog.value.close() })
   <dialog ref="dialog" aria-labelledby="movement-title" @paste="takeImage" @dragover.prevent @drop="takeImage">
     <form @submit.prevent="submit">
       <h2 id="movement-title">{{ editing ? 'Editar componente' : 'Movimento de stock' }}</h2>
-      <div v-if="!editing" class="seg" role="group" aria-label="Tipo de movimento">
-        <button v-for="m in ['in', 'out']" :key="m" type="button" :aria-pressed="mode === m" @click="mode = m; emit('clear-error')">{{ m === 'in' ? 'Entrada' : 'Saída' }}</button>
-      </div>
       <label v-if="!editing && parts.length">Peça do catálogo
         <input v-model="partQuery" list="catalog-parts" placeholder="P/N ou descrição" autocomplete="off" @input="pickPart()">
         <datalist id="catalog-parts"><option v-for="part in parts" :key="part.mpn" :value="part.mpn">{{ part.manufacturer }} · {{ part.description }}</option></datalist>
@@ -221,7 +214,7 @@ defineExpose({ open, edit, fill, close: () => dialog.value.close() })
       </label>
       <label>Quantidade <input v-model.number="qty" type="number" :min="editing ? 0 : 1" step="1" required></label>
       <p class="hint" :class="{ error: error || syncFailed && syncNote }" role="status">{{ error || syncNote || (editing ? 'A quantidade indicada substitui o stock atual. Sem nova imagem, a existente é mantida.' : hint) }}</p>
-      <div class="actions"><button type="button" class="text-button sync-part" :disabled="busy || syncing || !canPrice || !api" :title="canPrice ? '' : 'Preenche o P/N para sincronizar'" @click="syncPart">{{ syncing ? 'A sincronizar…' : 'Sincronizar com APIs' }}</button><button type="button" class="ghost" :disabled="busy" @click="dialog.close()">Cancelar</button><button class="primary" :disabled="busy || !selected">{{ editing ? 'Guardar alterações' : mode === 'in' ? 'Adicionar ao stock' : 'Retirar do stock' }}</button></div>
+      <div class="actions"><button type="button" class="text-button sync-part" :disabled="busy || syncing || !canPrice || !api" :title="canPrice ? '' : 'Preenche o P/N para sincronizar'" @click="syncPart">{{ syncing ? 'A sincronizar…' : 'Sincronizar com APIs' }}</button><button type="button" class="ghost" :disabled="busy" @click="dialog.close()">Cancelar</button><button class="primary" :disabled="busy || !selected">{{ editing ? 'Guardar alterações' : 'Adicionar ao stock' }}</button></div>
     </form>
   </dialog>
 </template>
