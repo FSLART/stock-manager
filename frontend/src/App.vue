@@ -36,7 +36,7 @@ provide('movementFilter', ref(''))
 function guard(fn) {
   return (...args) => !auth.enabled || auth.user ? fn(...args) : loginDialog.value.open().then(ok => ok && fn(...args))
 }
-const categories = ref([]), items = ref([]), parts = ref([]), locationImages = ref({}), current = ref(null), section = ref(null), query = ref('')
+const categories = ref([]), items = ref([]), parts = ref([]), locationImages = ref({}), locationCodes = ref({}), current = ref(null), section = ref(null), query = ref('')
 const busy = ref(false), loading = ref(true), toastMessage = ref(''), toastUndo = ref(null), formError = ref('')
 const movement = ref(null), categoryForm = ref(null), partsCatalog = ref(null), labelScanner = ref(null)
 const csvImport = ref(null), csvError = ref('')
@@ -176,11 +176,20 @@ const pages = { home: HomePage, 'analog-simulation': AnalogSimulationPage, movem
 const routeKeys = { '/': 'home', '/stock': 'stock', '/analog-simulation': 'analog-simulation', '/movements': 'movements', '/pcbs': 'pcbs', '/settings': 'settings', '/locations': 'locations' }
 const page = ref('home')
 // #/stock?location=Caixa%201 (o QR de cada caixa) abre o inventário só com essa localização.
+// Antes de os dados chegarem o código ainda não tem nome: load() volta a tentar.
+let pendingBox = null
+function openBox() {
+  const name = Object.keys(locationCodes.value).find(entry => locationCodes.value[entry] === pendingBox)
+  if (name !== undefined) { locationFilter.value = name; pendingBox = null }
+}
 function readRoute() {
   const [path, search] = window.location.hash.slice(1).split('?')
   page.value = routeKeys[path] || 'home'
   const location = new URLSearchParams(search).get('location')
   if (location !== null) { clearFilters(); locationFilter.value = location }
+  // #/stock?box=K7Q2MX vem do QR impresso: o código fica fixo mesmo que a caixa mude de nome.
+  pendingBox = new URLSearchParams(search).get('box')?.toUpperCase() || null
+  if (pendingBox) { clearFilters(); openBox() }
 }
 readRoute()
 const navigation = { push(path) { window.location.hash = path; readRoute() } }
@@ -192,6 +201,7 @@ provide('inventory', reactive({
   categoryCount: computed(() => categories.value.length),
   items: computed(() => items.value),
   locations: computed(() => locationImages.value),
+  codes: computed(() => locationCodes.value),
   canEdit: computed(() => canEdit.value),
   editLocation: guard(async ({ file, ...payload }, done) => {
     if (file) {
@@ -219,6 +229,8 @@ async function load() {
   items.value = data.items
   parts.value = data.parts || []
   locationImages.value = data.locations || {}
+  locationCodes.value = data.location_codes || {}
+  if (pendingBox) openBox()
   canEdit.value = Boolean(data.can_edit)
   const ids = new Set(data.items.map(item => item.id))
   for (const id of selected.value) if (!ids.has(id)) selected.value.delete(id)

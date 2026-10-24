@@ -3,6 +3,9 @@ import { mount, flushPromises } from '@vue/test-utils'
 import App from '../frontend/src/App.vue'
 import LabelScanner from '../frontend/src/components/LabelScanner.vue'
 
+// O WASM do zxing não carrega no jsdom; o SVG falso guarda o texto do QR para os testes o lerem.
+vi.mock('zxing-wasm/writer', () => ({ writeBarcode: async text => ({ svg: `<svg width="1" height="1"><title>${text}</title></svg>` }) }))
+
 const data = {
   can_edit: true,
   categories: [{ name: 'LEDs', props: ['cor'], image: true }, { name: 'R&D', props: ['valor'], image: false }],
@@ -160,6 +163,17 @@ it('syncs every selected P/N once with the parts APIs', async () => {
   const edits = fetch.mock.calls.filter(([url]) => url.startsWith('/api/items/')).map(([url, options]) => [url, JSON.parse(options.body)])
   expect(edits).toEqual([['/api/items/1', { id: 1, props: { 'P/N': 'NE555' }, qty: 1, image: '/static/uploads/new.jpg' }],
     ['/api/items/2', { id: 2, props: { 'P/N': 'ne555' }, qty: 2, image: '/static/uploads/new.jpg' }]])
+})
+
+it('opens the stock filtered by the box whose code is in the QR link', async () => {
+  window.history.replaceState(null, '', '/#/stock?box=k7q2mx')
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), items: [
+    { ...data.items[0], location: 'Gaveta A' }, data.items[1],
+  ], location_codes: { 'Gaveta A': 'K7Q2MX' } }) })
+  wrapper = mount(App)
+  await flushPromises()
+  expect(wrapper.find('select[aria-label="Filtrar localização"]').element.value).toBe('Gaveta A')
+  expect(wrapper.findAll('tbody .row')).toHaveLength(1)
 })
 
 it('sorts quantities numerically in both directions', async () => {
@@ -671,9 +685,26 @@ it('removes a photo and deletes only empty boxes', async () => {
   const deleted = fetch.mock.calls.find(([url, options]) => url === '/api/locations' && options.method === 'DELETE')
   expect(JSON.parse(deleted[1].body)).toEqual({ name: 'Vazia' })
   await button('Caixa 1', 'Editar').trigger('click')
-  await wrapper.find('.location-check input').setValue(true)
+  await wrapper.find('.location-form .location-check input').setValue(true)
   await wrapper.find('.location-form').trigger('submit')
   await flushPromises()
   const edited = fetch.mock.calls.find(([url, options]) => url === '/api/locations' && options.method === 'PATCH')
   expect(JSON.parse(edited[1].body)).toEqual({ name: 'Caixa 1', newName: 'Caixa 1', image: '' })
+})
+
+it('prints one QR label per selected box with its fixed code', async () => {
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), items: [{ ...data.items[0], location: 'Caixa 1' }],
+    locations: { 'Caixa 1': '', Vazia: '' }, location_codes: { 'Caixa 1': 'K7Q2MX', Vazia: 'ABC234' } }) })
+  window.history.replaceState(null, '', '/#/locations')
+  let printed
+  vi.stubGlobal('print', () => { printed = [...document.querySelectorAll('.qr-label')].map(label => [label.querySelector('title').textContent.split('#')[1], label.querySelector('strong').textContent, label.querySelector('small').textContent]) })
+  wrapper = mount(App, { attachTo: document.body })
+  await flushPromises()
+  const print = () => wrapper.find('.location-print button')
+  expect(print().text()).toBe('Imprimir QR (0)')
+  await wrapper.find('.location-print input').setValue(true)
+  expect(print().text()).toBe('Imprimir QR (2)')
+  await print().trigger('click')
+  await vi.waitFor(() => expect(printed).toEqual([['/stock?box=K7Q2MX', 'K7Q2MX', 'Caixa 1'], ['/stock?box=ABC234', 'ABC234', 'Vazia']]))
+  expect(document.querySelector('.qr-labels')).toBeNull()
 })

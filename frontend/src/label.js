@@ -6,6 +6,23 @@ const FIELDS = { '1P': 'mpn', Q: 'qty', '1V': 'manufacturer', K: 'order', '1K': 
 // As etiquetas de fábrica da TE usam identificadores próprios de duas letras: PN é o código TE (o P/N da Mouser/DigiKey), QT a quantidade.
 const TE_FIELDS = { PN: 'mpn', QT: 'qty', PO: 'order' }
 
+const partKey = text => String(text).toUpperCase().replace(/[^A-Z0-9]/g, '')
+// Peça do catálogo para um P/N lido. Algumas etiquetas Mouser estragam o P/N no código 2D
+// (GS1002FL_R1_00001 chega como GS1002FLR1␀001): sem P/N igual, aceita a única peça cujo P/N, só com letras
+// e números, tem o mesmo início e contém o lido pela mesma ordem, com no máximo 4 caracteres a mais.
+export function findPart(mpn, parts) {
+  const exact = parts.find(part => part.mpn.toUpperCase() === String(mpn).trim().toUpperCase())
+  if (exact) return exact
+  const wanted = partKey(mpn)
+  if (wanted.length < 8) return null
+  const inOrder = key => { let i = 0; for (const char of key) if (char === wanted[i]) i++; return i === wanted.length }
+  const loose = parts.filter(part => {
+    const key = partKey(part.mpn)
+    return key.startsWith(wanted.slice(0, 8)) && key.length - wanted.length <= 4 && key.length >= wanted.length && inOrder(key)
+  })
+  return loose.length === 1 ? loose[0] : null
+}
+
 export function parseLabel(text) {
   // Alguns leitores devolvem os separadores como símbolos visíveis (␝, ␞, ␠); repõe os caracteres originais.
   const plain = String(text).replace(/[␀-␠]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x2400))
@@ -17,7 +34,8 @@ export function parseLabel(text) {
   for (const field of fields) {
     const [, id, value] = field.match(te ? /^([A-Z]{2})(.+)$/ : /^(\d{0,2}[A-Z])(.+)$/) || []
     const name = (te ? TE_FIELDS : FIELDS)[id]
-    if (name && !(name in label)) label[name] = value.trim()
+    // Bytes de controlo dentro de um valor (a Mouser chega a pôr um NUL no P/N) não fazem parte dele.
+    if (name && !(name in label)) label[name] = value.replace(/[\x00-\x1f]/g, '').trim()
   }
   if (!label.mpn) return null
   if (te) label.manufacturer = 'TE Connectivity'

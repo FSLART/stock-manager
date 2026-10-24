@@ -6,6 +6,7 @@ import csv
 import ipaddress
 import json
 import re
+import secrets
 import subprocess
 import tempfile
 from io import BytesIO
@@ -189,7 +190,8 @@ def init_mysql_schema(connection):
         # Foto de cada caixa/gaveta; o nome e o mesmo texto guardado em items.location.
         """CREATE TABLE IF NOT EXISTS locations (
             name VARCHAR(255) PRIMARY KEY,
-            image VARCHAR(1000) NOT NULL DEFAULT ''
+            image VARCHAR(1000) NOT NULL DEFAULT '',
+            code VARCHAR(16) NOT NULL DEFAULT ''
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
     ):
         if mariadb:
@@ -205,6 +207,8 @@ def init_mysql_schema(connection):
         split_sections(connection)
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'parts' AND COLUMN_NAME = 'datasheet'").fetchone():
         connection.execute("ALTER TABLE parts ADD COLUMN datasheet VARCHAR(1000) NOT NULL DEFAULT ''")
+    if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'locations' AND COLUMN_NAME = 'code'").fetchone():
+        connection.execute("ALTER TABLE locations ADD COLUMN code VARCHAR(16) NOT NULL DEFAULT ''")
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", BASE_DIR / "uploads"))
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
@@ -452,7 +456,8 @@ def init_sqlite_schema(connection):
         );
         CREATE TABLE IF NOT EXISTS locations (
             name TEXT PRIMARY KEY,
-            image TEXT NOT NULL DEFAULT ''
+            image TEXT NOT NULL DEFAULT '',
+            code TEXT NOT NULL DEFAULT ''
         );
         """
     )
@@ -477,6 +482,8 @@ def init_sqlite_schema(connection):
         connection.execute("ALTER TABLE people ADD COLUMN avatar TEXT NOT NULL DEFAULT ''")
     if "datasheet" not in {row["name"] for row in connection.execute("PRAGMA table_info(parts)")}:
         connection.execute("ALTER TABLE parts ADD COLUMN datasheet TEXT NOT NULL DEFAULT ''")
+    if "code" not in {row["name"] for row in connection.execute("PRAGMA table_info(locations)")}:
+        connection.execute("ALTER TABLE locations ADD COLUMN code TEXT NOT NULL DEFAULT ''")
 
 
 def split_sections(connection):
@@ -577,11 +584,29 @@ def db_parts():
     return [{**dict(row), "props": json.loads(row["props"])} for row in rows]
 
 
+# Sem 0/O nem 1/I, para o codigo se ler bem na etiqueta.
+LOCATION_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
 def db_locations():
+    # Cada caixa tem um codigo fixo para o QR: muda-se o nome e as etiquetas ja coladas continuam a funcionar.
+    # As caixas que so existem em items.location ganham aqui a sua linha e o seu codigo.
     init_db()
-    with db_connection() as connection:
-        rows = connection.execute("SELECT name, image FROM locations").fetchall()
-    return {row["name"]: image_path(row["image"]) for row in rows}
+    with EXCEL_LOCK, db_connection() as connection:
+        rows = {row["name"]: dict(row) for row in connection.execute("SELECT name, image, code FROM locations")}
+        taken = {row["code"] for row in rows.values()}
+        names = [row["location"] for row in connection.execute("SELECT DISTINCT location FROM items WHERE location <> ''")]
+        for name in [name for name in names if name not in rows] + [name for name, row in rows.items() if not row["code"]]:
+            code = ""
+            while not code or code in taken:
+                code = "".join(secrets.choice(LOCATION_CODE_CHARS) for _ in range(6))
+            taken.add(code)
+            if name in rows:
+                connection.execute("UPDATE locations SET code = ? WHERE name = ?", (code, name))
+            else:
+                connection.execute("INSERT INTO locations (name, image, code) VALUES (?, '', ?)", (name, code))
+            rows[name] = {"name": name, "image": rows.get(name, {}).get("image", ""), "code": code}
+    return rows.values()
 
 
 def save_parts(parts):
@@ -1129,11 +1154,13 @@ def save_items(items, movements=()):
 def data_from_items(items):
     # Junta configuracao das categorias e lista de itens numa unica resposta JSON.
     # auth/user dizem ao frontend que as alteracoes pedem login e quem esta com sessao.
+    locations = db_locations()
     return {
         "categories": db_categories(),
         "items": items,
         "parts": db_parts(),
-        "locations": db_locations(),
+        "locations": {row["name"]: image_path(row["image"]) for row in locations},
+        "location_codes": {row["name"]: row["code"] for row in locations},
         "can_edit": STORAGE_MODE == "local",
         "auth": True,
         "user": current_person(),
@@ -1526,11 +1553,13 @@ def editar_localizacao():
     try:
         init_db()
         with EXCEL_LOCK, db_connection() as connection:
-            saved = {row["name"]: row["image"] for row in connection.execute("SELECT name, image FROM locations WHERE name IN (?, ?)", (old, new))}
+            saved = {row["name"]: row for row in connection.execute("SELECT name, image, code FROM locations WHERE name IN (?, ?)", (old, new))}
             # Juntar numa localizacao que ja existe mantem a foto dela se esta nao tiver uma.
-            image = image if image is not None else saved.get(old) or saved.get(new, "")
+            image = image if image is not None else (saved[old]["image"] if old in saved else "") or (saved[new]["image"] if new in saved else "")
+            # O codigo do QR segue a caixa: ao juntar fica o da caixa de destino, cujas etiquetas ja estao coladas.
+            code = saved[new]["code"] if new in saved else saved[old]["code"] if old in saved else ""
             connection.execute("DELETE FROM locations WHERE name IN (?, ?)", (old, new))
-            connection.execute("INSERT INTO locations (name, image) VALUES (?, ?)", (new, image_path(image)))
+            connection.execute("INSERT INTO locations (name, image, code) VALUES (?, ?, ?)", (new, image_path(image), code))
             connection.execute("UPDATE items SET location = ? WHERE location = ?", (new, old))
         return jsonify(msg=f"Localização {new} guardada")
     except Exception as exc:

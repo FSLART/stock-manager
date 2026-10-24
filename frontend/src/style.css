@@ -1599,15 +1599,20 @@ div.location-image{background:var(--bg);border:1px dashed var(--line-strong)}
 .location-new input{flex:1 1 220px}
 .location-new input:focus,.location-form input:focus{border-color:var(--accent);outline:0}
 .location-new .primary{min-height:44px}
+.location-print{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
 .location-check{flex-direction:row;align-items:center;gap:8px}
 .location-check input{accent-color:var(--accent)}
 .location-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
-.qr-label{display:none}
-/* Imprimir QR: só a etiqueta (código + nome) sai no papel. */
+.qr-labels{display:none}
+/* Imprimir QR: uma página de 55 x 50 mm por caixa (rolo de etiquetas de 55 mm; o @page vem do LocationsPage), sem
+   páginas em branco. O código vai grande; o nome, por baixo, fica numa linha para a etiqueta nunca passar de página. */
 @media print{
-  body *{visibility:hidden}
-  .qr-label,.qr-label *{visibility:visible}
-  .qr-label{display:flex;position:absolute;top:0;left:0;flex-direction:column;align-items:center;gap:4mm;padding:8mm;color:#000;background:#fff;font:600 16pt sans-serif}
-  .qr-label svg{display:block;width:60mm;height:60mm}
-  .qr-label strong{max-width:60mm;font-size:22pt;line-height:1.15;text-align:center;overflow-wrap:anywhere}
+  body:has(> .qr-labels){margin:0;background:#fff}
+  body:has(> .qr-labels) > :not(.qr-labels){display:none !important}
+  .qr-labels{display:block}
+  .qr-label{display:flex;box-sizing:border-box;width:55mm;height:50mm;overflow:hidden;flex-direction:column;align-items:center;justify-content:center;gap:1mm;padding:2mm 3mm;color:#000;background:#fff;font:700 13pt/1.1 sans-serif;break-inside:avoid;break-after:page}
+  .qr-label:last-child{break-after:auto}
+  .qr-label svg{display:block;width:34mm;height:34mm}
+  .qr-label strong{letter-spacing:.08em}
+  .qr-label small{max-width:49mm;font:600 8pt/1.1 sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }

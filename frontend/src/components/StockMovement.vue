@@ -2,6 +2,7 @@
 import { computed, inject, onUnmounted, ref, watch } from 'vue'
 import { isBrand, isPartNumber, partNumberOf } from '../stockText.js'
 import { euros, priceEstimator } from '../prices.js'
+import { findPart } from '../label.js'
 const props = defineProps({ categories: Array, items: Array, parts: { type: Array, default: () => [] }, busy: Boolean, error: String })
 const emit = defineEmits(['submit', 'clear-error', 'part'])
 const api = inject('api', null)
@@ -76,7 +77,7 @@ function edit(item) {
 // Resultado da Mouser/DigiKey para a etiqueta lida, já no catálogo: preenche de novo se o formulário continua nessa
 // peça e propõe a imagem, exceto se o item em stock já tiver uma.
 function fill(label, image) {
-  const mpn = label.mpn.toUpperCase()
+  const mpn = (findPart(label.mpn, props.parts)?.mpn ?? label.mpn).toUpperCase()
   if (!dialog.value.open || editing.value || partQuery.value.trim().toUpperCase() !== mpn) return
   pickPart(label)
   const stocked = props.items.find(item => partNumberOf(item).toUpperCase() === mpn)
@@ -118,8 +119,10 @@ function fillFromPartNumber(value) {
 // existente, para a entrada somar a quantidade em vez de criar um item quase igual.
 // Uma etiqueta lida também procura o P/N no stock, e sem catálogo preenche só o P/N e o fabricante.
 function pickPart(label = null) {
+  const part = findPart(partQuery.value, props.parts)
+  // Um P/N estragado na etiqueta é trocado pelo do catálogo.
+  if (part) partQuery.value = part.mpn
   const mpn = partQuery.value.trim().toUpperCase()
-  const part = props.parts.find(p => p.mpn.toUpperCase() === mpn)
   if (!part && !label) return
   emit('clear-error')
   const stocked = props.items.find(item => partNumberOf(item).toUpperCase() === mpn)

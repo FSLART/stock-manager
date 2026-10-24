@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { parseLabel, sharpen } from '../frontend/src/label.js'
+import { findPart, parseLabel, sharpen } from '../frontend/src/label.js'
 
 it('reads the 2D code of a Mouser label', () => {
   expect(parseLabel('[)>\x1e06\x1dK39759441\x1d14K004\x1d1PMIC6270YM5-TR\x1dQ20\x1d11K091314939\x1d4LTH\x1d1VMicrochip\x1e\x04'))
@@ -34,4 +34,16 @@ it('reads the Data Matrix of a TE factory label, with its own two-letter fields'
 it('sharpens edges and leaves flat areas alone', () => {
   const data = new Uint8ClampedArray([100, 100, 100, 255, 100, 100, 100, 255, 200, 200, 200, 255, 200, 200, 200, 255])
   expect([...sharpen({ data, width: 4, height: 1 }, 1, 2).data.filter((_, i) => i % 4 === 0)]).toEqual([100, 33, 255, 200])
+})
+
+it('reads a Mouser label whose 2D code damages the part number and finds it in the catalog', () => {
+  // Bytes reais do código 2D da etiqueta Mouser do Panjit GS1002FL_R1_00001.
+  const label = parseLabel('[)>\x1e06\x1dK39963463\x1d14K015\x1d1PGS1002FLR1\x00001\x1dQ10\x1d11K091655874\x1d4LTW\x1d1VPanjit\x1e\x04')
+  expect(label).toMatchObject({ mpn: 'GS1002FLR1001', manufacturer: 'Panjit', qty: 10 })
+  const parts = [{ mpn: 'GS1002FL_R1_00001' }, { mpn: 'GS1004FL_R1_00001' }, { mpn: 'RC0603FR-0710KL' }]
+  expect(findPart(label.mpn, parts)?.mpn).toBe('GS1002FL_R1_00001')
+  expect(findPart('rc0603fr-0710kl', parts)?.mpn).toBe('RC0603FR-0710KL')
+  // Curto demais ou ambíguo: não adivinha.
+  expect(findPart('GS1002', parts)).toBeNull()
+  expect(findPart('GS100FLR1001', [{ mpn: 'GS1002FL_R1_00001' }, { mpn: 'GS1004FL_R1_00001' }])).toBeNull()
 })

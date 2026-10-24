@@ -11,9 +11,18 @@ const locations = computed(() => [...new Set([...inventory.items.map(item => ite
   .sort((a, b) => a.localeCompare(b, 'pt', { numeric: true }))
   .map(name => {
     const items = inventory.items.filter(item => item.location === name)
-    return { name, image: inventory.locations[name] || '', refs: items.length, units: items.reduce((sum, item) => sum + item.qty, 0) }
+    return { name, code: inventory.codes?.[name] || '', image: inventory.locations[name] || '', refs: items.length, units: items.reduce((sum, item) => sum + item.qty, 0) }
   }))
-const editing = ref(null), newName = ref(''), file = ref(null), removeImage = ref(false), label = ref(null), error = ref(''), created = ref('')
+const editing = ref(null), newName = ref(''), file = ref(null), removeImage = ref(false), labels = ref([]), error = ref(''), created = ref('')
+const picked = ref(new Set())
+const pickedBoxes = computed(() => locations.value.filter(box => picked.value.has(box.name)))
+const allPicked = computed(() => locations.value.length > 0 && pickedBoxes.value.length === locations.value.length)
+function toggle(name) {
+  const next = new Set(picked.value)
+  if (!next.delete(name)) next.add(name)
+  picked.value = next
+}
+function toggleAll() { picked.value = new Set(allPicked.value ? [] : locations.value.map(box => box.name)) }
 const stockPath = name => `/stock?location=${encodeURIComponent(name)}`
 function edit(location) { editing.value = location.name; newName.value = location.name; file.value = null; removeImage.value = false }
 function save() {
@@ -28,17 +37,26 @@ function create() {
 function remove(box) {
   if (confirm(`Apagar a localização "${box.name}"?`)) inventory.deleteLocation(box.name)
 }
-// O QR abre o inventário já filtrado por esta localização; a etiqueta impressa leva também o nome.
-async function print(name) {
+// O QR leva o código fixo da caixa (sem código, no Google Sheets, leva o nome) e abre o inventário filtrado por ela.
+// Várias caixas saem seguidas, uma etiqueta de 55 x 50 mm por caixa.
+async function print(boxes) {
   error.value = ''
   try {
-    const result = await writeBarcode(`${location.origin}${location.pathname}#${stockPath(name)}`, { format: 'QRCode' })
-    if (result.error) throw new Error(result.error)
-    // O zint dá width/height sem viewBox: trocá-los por um viewBox deixa o CSS escalar o código.
-    label.value = { name, svg: result.svg.replace(/<svg width="(\d+)" height="(\d+)"/, '<svg viewBox="0 0 $1 $2" shape-rendering="crispEdges"') }
+    labels.value = await Promise.all(boxes.map(async ({ name, code }) => {
+      const result = await writeBarcode(`${location.origin}${location.pathname}#${code ? `/stock?box=${code}` : stockPath(name)}`, { format: 'QRCode' })
+      if (result.error) throw new Error(result.error)
+      // O zint dá width/height sem viewBox: trocá-los por um viewBox deixa o CSS escalar o código.
+      return { name, code, svg: result.svg.replace(/<svg width="(\d+)" height="(\d+)"/, '<svg viewBox="0 0 $1 $2" shape-rendering="crispEdges"') }
+    }))
   } catch { error.value = 'Não foi possível gerar o código QR'; return }
   await nextTick()
+  // Papel de 55 x 50 mm só durante esta impressão (o Chrome ignora o tamanho de um @page com nome).
+  const page = document.createElement('style')
+  page.textContent = '@page{size:55mm 50mm;margin:0}'
+  document.head.append(page)
   window.print()
+  page.remove()
+  labels.value = []
 }
 </script>
 
@@ -58,6 +76,10 @@ async function print(name) {
         <input v-model="created" aria-label="Nome da nova caixa" placeholder="Caixa 1, Gaveta A…" maxlength="255" autocomplete="off">
         <button class="primary" :disabled="!created.trim()">Criar caixa</button>
       </form>
+      <div v-if="locations.length" class="location-print">
+        <label class="location-check"><input type="checkbox" :checked="allPicked" @change="toggleAll"> Selecionar todas</label>
+        <button class="primary" :disabled="!pickedBoxes.length" @click="print(pickedBoxes)">Imprimir QR ({{ pickedBoxes.length }})</button>
+      </div>
       <p v-if="error" class="upload-error" role="alert">{{ error }}</p>
       <div v-if="!locations.length" class="empty-workspace">Ainda não há localizações. Cria uma caixa acima, ou no inventário seleciona componentes e escolhe "Mover para aqui".</div>
       <ul v-else class="location-grid">
@@ -74,12 +96,13 @@ async function print(name) {
             </div>
           </form>
           <template v-else>
-            <strong>{{ box.name }}</strong>
+            <label class="location-check"><input type="checkbox" :checked="picked.has(box.name)" :aria-label="`Selecionar ${box.name} para imprimir`" @change="toggle(box.name)"><strong>{{ box.name }}</strong></label>
+            <span v-if="box.code" class="sub">Código {{ box.code }}</span>
             <span class="sub">{{ box.refs }} {{ box.refs === 1 ? 'referência' : 'referências' }} · {{ box.units }} un.</span>
             <div class="location-actions">
               <button class="text-button" @click="router.push(stockPath(box.name))">Ver no stock</button>
               <button v-if="inventory.canEdit" class="text-button" @click="edit(box)">Editar</button>
-              <button class="text-button" @click="print(box.name)">Imprimir QR</button>
+              <button class="text-button" @click="print([box])">Imprimir QR</button>
               <!-- Com componentes lá dentro não se apaga: o servidor também recusa. -->
               <button v-if="inventory.canEdit" class="text-button danger" :disabled="box.refs > 0" :title="box.refs ? 'Move os componentes antes de apagar' : ''" @click="remove(box)">Apagar</button>
             </div>
@@ -88,6 +111,9 @@ async function print(name) {
       </ul>
     </section>
     <!-- Só aparece na impressão. O SVG é gerado aqui pelo zxing, não vem de fora. -->
-    <div v-if="label" class="qr-label"><div v-html="label.svg"></div><strong>{{ label.name }}</strong></div>
+    <!-- Fica direto no body para a impressão poder esconder tudo o resto com display:none (sem páginas em branco). -->
+    <Teleport to="body"><div v-if="labels.length" class="qr-labels">
+      <div v-for="label in labels" :key="label.name" class="qr-label"><div v-html="label.svg"></div><strong>{{ label.code || label.name }}</strong><small v-if="label.code">{{ label.name }}</small></div>
+    </div></Teleport>
   </WorkspacePage>
 </template>

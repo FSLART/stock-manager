@@ -71,6 +71,19 @@ class EditingTest(unittest.TestCase):
         self.assertEqual(self.client.delete('/api/locations', json={'name': 'Caixa B'}).status_code, 200)
         self.assertEqual(self.client.get('/api/data').get_json()['locations'], {'Caixa A': ''})
 
+    def test_location_code_is_assigned_once_and_survives_rename(self):
+        self.client.post('/api/items/location', json={'ids': [1], 'location': 'Caixa 1'})
+        self.client.post('/api/items/location', json={'ids': [2], 'location': 'Caixa 2'})
+        codes = self.client.get('/api/data').get_json()['location_codes']
+        self.assertRegex(codes['Caixa 1'], r'^[A-HJ-NP-Z2-9]{6}$')
+        self.assertNotEqual(codes['Caixa 1'], codes['Caixa 2'])
+        self.assertEqual(self.client.get('/api/data').get_json()['location_codes'], codes)
+        self.client.patch('/api/locations', json={'name': 'Caixa 1', 'newName': 'Gaveta A'})
+        self.assertEqual(self.client.get('/api/data').get_json()['location_codes'], {'Gaveta A': codes['Caixa 1'], 'Caixa 2': codes['Caixa 2']})
+        # Juntar numa caixa que já existe fica com o código dela: as etiquetas coladas nessa continuam certas.
+        self.client.patch('/api/locations', json={'name': 'Gaveta A', 'newName': 'Caixa 2'})
+        self.assertEqual(self.client.get('/api/data').get_json()['location_codes'], {'Caixa 2': codes['Caixa 2']})
+
     def test_category_rename_and_field_rename_preserve_values_and_ids(self):
         response = self.client.patch('/api/categories/Test', json={
             'name': 'Renamed', 'image': True,
