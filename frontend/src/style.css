@@ -1189,6 +1189,14 @@ a.notion-login{display:inline-flex;align-items:center;text-decoration:none}
 .toggle-chip:hover{border-color:var(--accent);color:var(--accent)}
 .toggle-chip[aria-pressed=true]{border-color:var(--accent);background:var(--accent);color:var(--on-accent)}
 @media(max-width:560px){.toggle-chip{min-height:44px}}
+.people-filters{display:grid;gap:14px;margin:18px 0 6px}
+.people-filters>*{min-width:0}
+.people-admin .search{min-width:0}
+.people-admin .search input{padding:11px 14px 11px 42px;border-radius:12px;background:var(--bg);font-size:15px}
+.people-admin .search svg{left:14px;width:18px}
+.toggle-chips.compact .toggle-chip{min-height:30px;padding:4px 11px;font-size:12px}
+.chip-count{margin-left:6px;font-weight:500;opacity:.65}
+@media(max-width:560px){.toggle-chips.compact{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}.toggle-chips.compact .toggle-chip{flex:none;min-height:40px}}
 @media(max-width:1000px){.home-nav .main-menu{order:2}}
 @media(min-width:561px){.people-admin .people-actions{flex-wrap:nowrap}}
 @media(max-width:560px){.people-admin .setting-row{flex-wrap:wrap;gap:12px}.people-admin .people-actions{justify-content:flex-start;width:100%}}

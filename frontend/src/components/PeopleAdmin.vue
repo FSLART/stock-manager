@@ -1,5 +1,5 @@
 <script setup>
-import { inject, onMounted, ref } from 'vue'
+import { computed, inject, onMounted, ref } from 'vue'
 
 const api = inject('api')
 const auth = inject('auth')
@@ -10,6 +10,18 @@ const busy = ref(false), error = ref(''), message = ref('')
 
 async function load() { ({ people: people.value, roles: roles.value, departments: departments.value } = await api.direct('people')) }
 const departmentsOf = person => person.department ? person.department.split(', ') : []
+// Pesquisa (nome, cargo, departamento; sem acentos) e filtros por departamento e cargo, tudo no browser.
+const query = ref(''), departmentFilter = ref(''), roleFilter = ref('')
+const plain = text => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+const inDepartment = (person, department) => department === 'none' ? !person.department : departmentsOf(person).includes(department)
+const hasRole = (person, role) => role === 'admin' ? person.admin : person.role === role
+const shown = computed(() => {
+  const words = plain(query.value).split(/\s+/).filter(Boolean)
+  return people.value.filter(person => (!departmentFilter.value || inDepartment(person, departmentFilter.value))
+    && (!roleFilter.value || hasRole(person, roleFilter.value))
+    && words.every(word => plain(`${person.name} ${person.role} ${person.department}`).includes(word)))
+})
+const countWhere = test => people.value.filter(test).length
 function toggleDepartment(person, department) {
   const current = departmentsOf(person)
   run('editPerson', { id: person.id, departments: current.includes(department) ? current.filter(name => name !== department) : [...current, department] })
@@ -37,7 +49,7 @@ onMounted(() => load().catch(cause => { error.value = cause.message }))
 
 <template>
   <article class="workspace-card people-admin">
-    <div class="card-heading"><h2>Pessoas</h2><span class="status-pill">{{ people.length }} pessoa(s)</span></div>
+    <div class="card-heading"><h2>Pessoas</h2><span class="status-pill">{{ shown.length === people.length ? `${people.length} pessoa(s)` : `${shown.length} de ${people.length}` }}</span></div>
     <p class="card-muted">Quem entra com Notion no workspace LART é adicionado automaticamente. O cargo e o departamento vêm da base Members Filtered do Notion a cada login; se os mudares aqui, o Notion deixa de os mudar para essa pessoa. Só Electronics altera o stock eletrónico.</p>
     <!-- PIN:
     <form class="people-form" @submit.prevent="add">
@@ -47,9 +59,36 @@ onMounted(() => load().catch(cause => { error.value = cause.message }))
       <button class="text-button" :disabled="busy">Adicionar</button>
     </form>
     -->
+    <div class="people-filters">
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input v-model="query" type="search" aria-label="Pesquisar pessoas" placeholder="Nome, cargo ou departamento" autocomplete="off">
+      </div>
+      <div>
+        <p id="people-department-filter" class="editor-label">Departamento</p>
+        <div class="toggle-chips compact" role="group" aria-labelledby="people-department-filter">
+          <button type="button" class="toggle-chip" :aria-pressed="!departmentFilter" @click="departmentFilter = ''">Todos</button>
+          <button v-for="department in [...departments, 'none']" :key="department" type="button" class="toggle-chip" :aria-pressed="departmentFilter === department"
+                  @click="departmentFilter = departmentFilter === department ? '' : department">
+            {{ department === 'none' ? 'Sem departamento' : department }}<span class="chip-count">{{ countWhere(person => inDepartment(person, department)) }}</span>
+          </button>
+        </div>
+      </div>
+      <div>
+        <p id="people-role-filter" class="editor-label">Cargo</p>
+        <div class="toggle-chips compact" role="group" aria-labelledby="people-role-filter">
+          <button type="button" class="toggle-chip" :aria-pressed="!roleFilter" @click="roleFilter = ''">Todos</button>
+          <button v-for="role in [...roles, 'admin']" :key="role" type="button" class="toggle-chip" :aria-pressed="roleFilter === role"
+                  @click="roleFilter = roleFilter === role ? '' : role">
+            {{ role === 'admin' ? 'Admin' : role }}<span class="chip-count">{{ countWhere(person => hasRole(person, role)) }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
     <p v-if="error" class="upload-error" role="alert">{{ error }}</p>
     <p v-else-if="message" class="card-muted" role="status">{{ message }}</p>
-    <template v-for="person in people" :key="person.id">
+    <p v-if="people.length && !shown.length" class="empty-workspace">Ninguém corresponde à pesquisa ou aos filtros.</p>
+    <template v-for="person in shown" :key="person.id">
     <div class="setting-row">
       <span>
         <strong>{{ person.name }}</strong>
