@@ -78,7 +78,7 @@ async function print(boxes) {
       </form>
       <div v-if="locations.length" class="location-print">
         <label class="location-check"><input type="checkbox" :checked="allPicked" @change="toggleAll"> Selecionar todas</label>
-        <button class="primary" :disabled="!pickedBoxes.length" @click="print(pickedBoxes)">Imprimir QR ({{ pickedBoxes.length }})</button>
+        <button class="text-button" :disabled="!pickedBoxes.length" @click="print(pickedBoxes)">Imprimir QR ({{ pickedBoxes.length }})</button>
       </div>
       <p v-if="error" class="upload-error" role="alert">{{ error }}</p>
       <div v-if="!locations.length" class="empty-workspace">Ainda não há localizações. Cria uma caixa acima, ou no inventário seleciona componentes e escolhe "Mover para aqui".</div>

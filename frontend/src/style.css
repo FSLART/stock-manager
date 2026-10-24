@@ -1599,7 +1599,7 @@ div.location-image{background:var(--bg);border:1px dashed var(--line-strong)}
 .location-new input{flex:1 1 220px}
 .location-new input:focus,.location-form input:focus{border-color:var(--accent);outline:0}
 .location-new .primary{min-height:44px}
-.location-print{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.location-print{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:14px 0 12px}
 .location-check{flex-direction:row;align-items:center;gap:8px}
 .location-check input{accent-color:var(--accent)}
 .location-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
