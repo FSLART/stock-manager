@@ -3,12 +3,21 @@ import { computed, onUnmounted, ref } from 'vue'
 import { readBarcodesFromImageData } from 'zxing-wasm/reader'
 import { parseLabel, sharpen } from '../label.js'
 import { partNumberOf } from '../stockText.js'
+import { readStored, writeStored } from '../api.js'
 const props = defineProps({ action: String, items: { type: Array, default: null } })
 const emit = defineEmits(['use'])
 const dialog = ref(null), video = ref(null), overlay = ref(null)
 const label = ref(null), status = ref(''), camera = ref(false), paused = ref(false), reading = ref(false), photo = ref(''), focus = ref(null)
 const FORMATS = ['DataMatrix', 'PDF417']
 let stream = null, liveTimer = null, liveTick = 0
+// Há webcams que já mandam a imagem espelhada: o texto fica ao contrário e o OCR não o lê. Fica guardado neste navegador.
+const mirrored = ref(readStored('stocklart-scanner-mirrored', false) === true)
+function toggleMirror() { mirrored.value = !mirrored.value; writeStored('stocklart-scanner-mirrored', mirrored.value) }
+// Desenha a imagem no canvas, desvirada se for o vídeo de uma câmara espelhada.
+function drawFrame(context, image, width, height) {
+  if (mirrored.value && image === video.value) { context.translate(width, 0); context.scale(-1, 1) }
+  context.drawImage(image, 0, 0, width, height)
+}
 // Itens em stock com o P/N lido (pode estar em várias localizações). Sem items (BOM) não se mostra.
 const stocked = computed(() => props.items && label.value ? props.items.filter(item => partNumberOf(item).toUpperCase() === label.value.mpn.toUpperCase()) : null)
 
@@ -60,7 +69,7 @@ async function pixels(source, zoom = 1) {
   canvas.width = Math.round(width * scale)
   canvas.height = Math.round(height * scale)
   const context = canvas.getContext('2d', { willReadFrequently: true })
-  context.drawImage(image, 0, 0, canvas.width, canvas.height)
+  drawFrame(context, image, canvas.width, canvas.height)
   return context.getImageData(0, 0, canvas.width, canvas.height)
 }
 // Contorna cada código encontrado: verde com o P/N se é uma etiqueta, laranja se é outro código.
@@ -126,7 +135,7 @@ async function readText(source) {
     const canvas = document.createElement('canvas')
     canvas.width = source.videoWidth || source.width
     canvas.height = source.videoHeight || source.height
-    canvas.getContext('2d').drawImage(source, 0, 0)
+    drawFrame(canvas.getContext('2d'), source, canvas.width, canvas.height)
     canvas.toBlob(done, 'image/jpeg', 0.92)
   })
   const body = new FormData()
@@ -206,11 +215,12 @@ defineExpose({ open })
       <h2 id="scanner-title">Ler etiqueta</h2>
       <div v-show="camera || photo" class="scanner-view">
         <img v-if="photo" :src="photo" alt="Fotografia da etiqueta">
-        <video v-show="!photo" ref="video" autoplay playsinline muted></video>
+        <video v-show="!photo" ref="video" :class="{ mirrored }" autoplay playsinline muted></video>
         <canvas ref="overlay" aria-hidden="true"></canvas>
       </div>
       <div v-if="camera" class="actions">
         <button type="button" class="ghost" @click="togglePause">{{ paused ? 'Retomar' : 'Pausar' }}</button>
+        <button type="button" class="ghost" :aria-pressed="mirrored" @click="toggleMirror">Espelhar</button>
         <button type="button" class="primary" :disabled="reading" @click="readFrame">Ler etiqueta</button>
       </div>
       <label v-if="camera && focus">Foco (perto ↔ longe)

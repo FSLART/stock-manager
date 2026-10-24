@@ -708,3 +708,47 @@ it('prints one QR label per selected box with its fixed code', async () => {
   await vi.waitFor(() => expect(printed).toEqual([['/stock?box=K7Q2MX', 'K7Q2MX', 'Caixa 1'], ['/stock?box=ABC234', 'ABC234', 'Vazia']]))
   expect(document.querySelector('.qr-labels')).toBeNull()
 })
+
+it('replaces the BOM of a saved PCB project and keeps its name and STEP', async () => {
+  const step = { name: 'placa.step', url: '/uploads/placa.step' }
+  localStorage.setItem('stocklart-pcb-projects', JSON.stringify([{ id: 'p1', name: 'Placa', fileName: 'v1.csv', step, items: [{ reference: 'R1', value: '10k', description: '—', footprint: '—', partNumber: '—', quantity: 1 }] }]))
+  window.history.replaceState(null, '', '/#/pcbs')
+  vi.stubGlobal('confirm', () => true)
+  wrapper = mount(App)
+  await flushPromises()
+  await wrapper.find('.saved-project-open').trigger('click')
+  const input = wrapper.find('input[aria-label="Substituir ficheiro BOM"]')
+  Object.defineProperty(input.element, 'files', { value: [{ name: 'v2.csv', text: async () => 'Reference,Value,Qty\nC1,100nF,3' }] })
+  await input.trigger('change')
+  await flushPromises()
+  const [saved] = JSON.parse(localStorage.getItem('stocklart-pcb-projects'))
+  expect(saved).toMatchObject({ name: 'Placa', fileName: 'v2.csv', step, items: [{ reference: 'C1', value: '100nF', quantity: 3 }] })
+  expect(wrapper.find('.pcb-project-detail').text()).toContain('v2.csv')
+})
+
+it('flips a mirrored webcam and remembers it', async () => {
+  const scanner = mount(LabelScanner, { props: { action: 'Adicionar' } })
+  scanner.vm.camera = true
+  await flushPromises()
+  const mirror = () => scanner.findAll('button').find(button => button.text() === 'Espelhar')
+  await mirror().trigger('click')
+  expect(scanner.find('video').classes()).toContain('mirrored')
+  expect(mirror().attributes('aria-pressed')).toBe('true')
+  expect(JSON.parse(localStorage.getItem('stocklart-scanner-mirrored'))).toBe(true)
+  scanner.unmount()
+})
+
+it('takes a location photo with the phone camera and previews it before saving', async () => {
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), locations: { 'Caixa 1': '/uploads/a.jpg' } }) })
+  window.history.replaceState(null, '', '/#/locations')
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:nova', revokeObjectURL: () => {} }))
+  wrapper = mount(App)
+  await flushPromises()
+  await wrapper.findAll('.location-card button').find(button => button.text() === 'Editar').trigger('click')
+  const camera = wrapper.find('.location-form input[capture=environment]')
+  expect(camera.attributes('accept')).toBe('image/*')
+  Object.defineProperty(camera.element, 'files', { value: [new File(['x'], 'foto.jpg', { type: 'image/jpeg' })] })
+  await camera.trigger('change')
+  expect(wrapper.find('.location-card img').attributes('src')).toBe('blob:nova')
+  expect(wrapper.find('.location-form .location-check input').attributes('disabled')).toBeDefined()
+})

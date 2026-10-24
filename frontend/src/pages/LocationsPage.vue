@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onUnmounted, ref } from 'vue'
 import { writeBarcode } from 'zxing-wasm/writer'
 import WorkspacePage from '../components/WorkspacePage.vue'
 import { useInventoryContext } from '../composables/useInventoryContext.js'
@@ -24,7 +24,15 @@ function toggle(name) {
 }
 function toggleAll() { picked.value = new Set(allPicked.value ? [] : locations.value.map(box => box.name)) }
 const stockPath = name => `/stock?location=${encodeURIComponent(name)}`
-function edit(location) { editing.value = location.name; newName.value = location.name; file.value = null; removeImage.value = false }
+function edit(location) { editing.value = location.name; newName.value = location.name; pickPhoto(null); removeImage.value = false }
+// A foto tirada ou escolhida aparece logo no cartão, antes de guardar.
+const preview = ref('')
+function pickPhoto(chosen) {
+  if (preview.value) URL.revokeObjectURL(preview.value)
+  file.value = chosen
+  preview.value = chosen ? URL.createObjectURL(chosen) : ''
+}
+onUnmounted(() => pickPhoto(null))
 function save() {
   inventory.editLocation({ name: editing.value, newName: newName.value, file: file.value, ...(removeImage.value && { image: '' }) }, () => { editing.value = null })
 }
@@ -84,11 +92,16 @@ async function print(boxes) {
       <div v-if="!locations.length" class="empty-workspace">Ainda não há localizações. Cria uma caixa acima, ou no inventário seleciona componentes e escolhe "Mover para aqui".</div>
       <ul v-else class="location-grid">
         <li v-for="box in locations" :key="box.name" class="location-card">
-          <img v-if="box.image" :src="box.image" :alt="`Foto de ${box.name}`" class="location-image">
+          <img v-if="editing === box.name && preview" :src="preview" :alt="`Nova foto de ${box.name}`" class="location-image">
+          <img v-else-if="box.image" :src="box.image" :alt="`Foto de ${box.name}`" class="location-image">
           <div v-else class="location-image" aria-hidden="true">▦</div>
           <form v-if="editing === box.name" class="location-form" @submit.prevent="save">
             <label>Nome<input v-model="newName" required maxlength="255" autocomplete="off"></label>
-            <label>Foto<input type="file" accept="image/*" @change="file = $event.target.files[0] || null"></label>
+            <div class="location-actions" role="group" aria-label="Foto">
+              <!-- capture abre a câmara traseira no telemóvel; no computador escolhe um ficheiro. -->
+              <label class="text-button">Tirar foto<input type="file" class="sr-only" accept="image/*" capture="environment" @change="pickPhoto($event.target.files[0] || null)"></label>
+              <label class="text-button">Escolher foto<input type="file" class="sr-only" accept="image/*" @change="pickPhoto($event.target.files[0] || null)"></label>
+            </div>
             <label v-if="box.image" class="location-check"><input v-model="removeImage" type="checkbox" :disabled="Boolean(file)"> Remover foto</label>
             <div class="location-actions">
               <button class="primary" :disabled="!newName.trim()">Guardar</button>

@@ -19,7 +19,7 @@ const selectedProject = ref(null)
 const labelScanner = ref(null), projectDetail = ref(null)
 const api = inject('api')
 const inventory = useInventoryContext()
-const stepBusy = ref(false), stepError = ref('')
+const stepBusy = ref(false), stepError = ref(''), bomError = ref('')
 // Placas a produzir por projeto; 0 deixa o projeto fora da lista de produção.
 const boardCounts = reactive({})
 
@@ -106,6 +106,26 @@ function addLabel({ mpn, manufacturer, qty }) {
 
 function updateProject(updated) {
   if (saveProjects(projects.value.map(entry => entry.id === updated.id ? updated : entry))) selectedProject.value = updated
+}
+
+// Uma nova versão do BOM substitui as linhas do projeto aberto; nome e STEP ficam.
+async function replaceBom(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  bomError.value = ''
+  if (!file) return
+  if (!/\.(csv|bom|txt)$/i.test(file.name)) {
+    bomError.value = 'Seleciona um ficheiro BOM em formato CSV, BOM ou TXT.'
+    return
+  }
+  try {
+    const items = parseBom(await file.text())
+    if (!items.length) throw new Error('O BOM não contém componentes.')
+    if (!confirm(`Substituir o BOM de ${selectedProject.value.name} por ${file.name}?`)) return
+    updateProject({ ...selectedProject.value, fileName: file.name, items, updatedAt: new Date().toISOString() })
+  } catch (error) {
+    bomError.value = error.message || 'Não foi possível ler o ficheiro BOM.'
+  }
 }
 
 async function attachStep(event) {
@@ -232,10 +252,15 @@ function removeProject(projectId) {
           <h2>{{ selectedProject.name }}</h2>
         </div>
         <span class="pcb-detail-actions">
+          <label class="text-button">
+            Substituir BOM
+            <input type="file" class="sr-only" accept=".csv,.bom,.txt,text/csv,text/plain" aria-label="Substituir ficheiro BOM" @change="replaceBom" />
+          </label>
           <button class="text-button" type="button" @click="labelScanner.open()">Ler etiqueta</button>
           <button class="text-button" type="button" @click="selectedProject = null">Fechar</button>
         </span>
       </div>
+      <div v-if="bomError" class="upload-error" role="alert">{{ bomError }}</div>
       <div class="pcb-detail-grid">
         <div class="pcb-step-panel">
           <StepViewer v-if="selectedProject.step" :url="selectedProject.step.url" />
