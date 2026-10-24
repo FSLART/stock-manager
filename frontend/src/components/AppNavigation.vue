@@ -88,7 +88,7 @@ const links = [
         <div v-if="menuOpen" id="user-menu" class="user-menu" role="region" aria-label="A tua sessão">
           <div class="user-menu-head">
             <UserAvatar :name="auth.user.name" :src="auth.user.avatar" :size="48" />
-            <div><strong>{{ auth.user.name }}</strong><span>{{ auth.user.admin ? 'Admin · ' : '' }}Conta Notion da LART</span></div>
+            <div><strong>{{ auth.user.name }}</strong><span>{{ [auth.user.admin && 'Admin', auth.user.role, auth.user.department].filter(Boolean).join(' · ') || 'Conta Notion da LART' }}</span></div>
           </div>
           <div class="user-menu-stats" aria-live="polite">
             <template v-if="mine"><span><b>{{ mine.today }}</b> hoje</span><span><b>{{ mine.total }}</b> no total</span></template>

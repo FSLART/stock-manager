@@ -31,15 +31,19 @@ class AuthTest(unittest.TestCase):
                 (2, 'Rui', generate_password_hash('9999'), 'notion-rui', 0),
             ])
 
-    def notion_login(self, client, notion_id, workspace='other-workspace', name='X', avatar='https://img/rui.png'):
+    def notion_login(self, client, notion_id, workspace='other-workspace', name='X', avatar='https://img/rui.png', members=()):
         client.get('/api/auth/notion')
         with client.session_transaction() as session:
             state = session['notion_state']
         body = io.BytesIO(json.dumps({'access_token': 't', 'workspace_id': workspace,
                                       'owner': {'type': 'user', 'user': {'id': notion_id, 'name': name, 'avatar_url': avatar}}}).encode())
-        with patch.object(self.module.urllib.request, 'urlopen', return_value=body) as urlopen:
+        # Segundo pedido: a base Members Filtered, com (nome, departamentos) por linha.
+        rows = io.BytesIO(json.dumps({'has_more': False, 'results': [
+            {'properties': {'Name': {'title': [{'plain_text': title}]}, 'Department': {'multi_select': [{'name': tag} for tag in tags]}}}
+            for title, tags in members]}).encode())
+        with patch.object(self.module.urllib.request, 'urlopen', side_effect=[body, rows]) as urlopen:
             response = client.get(f'/api/auth/notion/callback?code=c&state={state}')
-        self.assertEqual(urlopen.call_args.args[0].get_header('Authorization'), 'Basic Y2lkOnNlY3JldA==')
+        self.assertEqual(urlopen.call_args_list[0].args[0].get_header('Authorization'), 'Basic Y2lkOnNlY3JldA==')
         return response
 
     def user(self, client):
@@ -61,6 +65,28 @@ class AuthTest(unittest.TestCase):
         self.assertEqual([(m['person'], m['type'], m['delta'], m['before'], m['after']) for m in movements],
                          [('Ana', 'delete', 0, 0, 0), ('Ana', 'out', -4, 4, 0), ('Ana', 'in', 4, 0, 4)])
         self.assertEqual(movements[-1]['props']['cor'], 'azul')
+
+    def test_only_electronics_change_electronic_stock(self):
+        led = {'cat': 'LEDs', 'props': {'cor': 'azul', 'tamanho (mm)': '5', 'tensão direta (V)': '3'}, 'qty': 1, 'mode': 'in'}
+        cable = {'cat': 'Fios', 'props': {'cor': 'preto'}, 'qty': 1, 'mode': 'in'}
+        self.notion_login(self.client, 'notion-ana')
+        self.assertEqual(self.client.post('/api/categories', json={'name': 'Fios', 'props': ['cor'], 'section': 'Harness'}).status_code, 200)
+        self.assertEqual(self.client.post('/api/move', json=led).status_code, 200)
+        self.notion_login(self.client, 'notion-rui')
+        self.assertEqual(self.client.post('/api/move', json=led).status_code, 403)
+        self.assertEqual(self.client.post('/api/items/1/step', json={'delta': -1}).status_code, 403)
+        self.assertEqual(self.client.delete('/api/categories/LEDs').status_code, 403)
+        self.assertEqual(self.client.post('/api/categories', json={'name': 'Novos', 'props': ['x']}).status_code, 403)
+        self.assertEqual(self.client.post('/api/move', json=cable).status_code, 200)
+        # Nao encontrado (ou ambiguo) no Notion: fica como estava.
+        self.notion_login(self.client, 'notion-rui', name='Rui Costa', members=[('Rui Sá Costa', ['Electronics']), ('Rui Lopes Costa', ['Board'])])
+        self.assertEqual(self.client.post('/api/move', json=led).status_code, 403)
+        self.notion_login(self.client, 'notion-rui', name='Rui Costa', members=[('Ana Lima', ['Board']), ('Rúi Pedro  Costa', ['Electronics', 'Leaders'])])
+        self.assertEqual((self.user(self.client)['role'], self.user(self.client)['department']), ('Department Leader', 'Electronics'))
+        self.assertEqual(self.client.post('/api/move', json=led).status_code, 200)
+        self.notion_login(self.client, 'notion-rui', name='Rui Costa', members=[('Rui Costa', ['Powertrain', 'Board'])])
+        self.assertEqual((self.user(self.client)['role'], self.user(self.client)['department']), ('Board', 'Powertrain'))
+        self.assertEqual(self.client.post('/api/move', json=led).status_code, 403)
 
     def test_pin_login_is_disabled(self):
         self.assertEqual(self.client.post('/api/auth/login', json={'person_id': 1, 'pin': 'AB12'}).status_code, 404)
@@ -93,7 +119,8 @@ class AuthTest(unittest.TestCase):
         # Conta desconhecida do LART entra como pessoa normal; nome repetido ganha sufixo.
         newcomer = self.module.app.test_client()
         self.assertEqual(self.notion_login(newcomer, 'notion-new-1234', workspace=LART.replace('-', ''), name='Rui').status_code, 302)
-        self.assertEqual(self.user(newcomer), {'id': 3, 'name': 'Rui (1234)', 'admin': False, 'notion': True, 'avatar': 'https://img/rui.png'})
+        self.assertEqual(self.user(newcomer), {'id': 3, 'name': 'Rui (1234)', 'admin': False, 'notion': True, 'avatar': 'https://img/rui.png',
+                                               'role': 'Member', 'department': ''})
         again = self.module.app.test_client()
         self.notion_login(again, 'notion-new-1234', avatar='javascript:alert(1)')
         self.assertEqual((self.user(again)['id'], self.user(again)['avatar']), (3, ''))

@@ -20,6 +20,7 @@ import sqlite3
 import sys
 # Permite executar o verificador do Excel sem bloquear os pedidos web.
 import threading
+import unicodedata
 # Faz a thread esperar alguns segundos entre duas verificacoes do Excel.
 import time
 # Permite criar funcoes que funcionam com o bloco "with".
@@ -161,7 +162,9 @@ def init_mysql_schema(connection):
             pin_hash VARCHAR(255) NOT NULL DEFAULT '',
             notion_id VARCHAR(64) UNIQUE NULL,
             is_admin INTEGER NOT NULL DEFAULT 0,
-            avatar VARCHAR(1000) NOT NULL DEFAULT ''
+            avatar VARCHAR(1000) NOT NULL DEFAULT '',
+            role VARCHAR(64) NOT NULL DEFAULT 'Member',
+            department VARCHAR(64) NOT NULL DEFAULT ''
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
         """CREATE TABLE IF NOT EXISTS movements (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -202,6 +205,9 @@ def init_mysql_schema(connection):
     # Bases criadas antes da foto do Notion: acrescenta a coluna uma vez.
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'people' AND COLUMN_NAME = 'avatar'").fetchone():
         connection.execute("ALTER TABLE people ADD COLUMN avatar VARCHAR(1000) NOT NULL DEFAULT ''")
+    if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'people' AND COLUMN_NAME = 'role'").fetchone():
+        connection.execute("ALTER TABLE people ADD COLUMN role VARCHAR(64) NOT NULL DEFAULT 'Member'")
+        connection.execute("ALTER TABLE people ADD COLUMN department VARCHAR(64) NOT NULL DEFAULT ''")
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'items' AND COLUMN_NAME = 'location'").fetchone():
         connection.execute("ALTER TABLE items ADD COLUMN location VARCHAR(255) NOT NULL DEFAULT ''")
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'categories' AND COLUMN_NAME = 'section'").fetchone():
@@ -229,6 +235,9 @@ NOTION_CLIENT_ID = os.getenv("NOTION_CLIENT_ID", "").strip()
 NOTION_CLIENT_SECRET = os.getenv("NOTION_CLIENT_SECRET", "").strip()
 # Quem entra com Notion por este workspace e ainda nao esta na lista e adicionado automaticamente.
 NOTION_WORKSPACE_ID = os.getenv("NOTION_WORKSPACE_ID", "").strip().replace("-", "").lower()
+# Cargo e departamento vem da base Members Filtered; sem NOTION_TOKEN usa o token do proprio login.
+NOTION_TOKEN = os.getenv("NOTION_TOKEN", "").strip()
+NOTION_MEMBERS_DB = os.getenv("NOTION_MEMBERS_DB", "3d5ce47890c280f8a695ccf113fd66c3").strip()
 # PIN: PIN_RE = re.compile(r"[A-Za-z0-9]{4}")
 # PIN: shortcut: tentativas falhadas em memoria, so valem com 1 worker; passar para a BD se houver mais.
 # PIN: LOGIN_ATTEMPTS = {}
@@ -281,6 +290,8 @@ EXCEL_COLUMN_WIDTHS = {
 # Cada chave e uma categoria e cada lista define os campos que o frontend deve
 # pedir para um componente dessa categoria.
 SECTIONS = ("Componentes eletrónicos", "Harness", "Não consumíveis")
+# Departamentos da LART como estao na base Members Filtered do Notion (Board e Leaders dao o cargo).
+DEPARTMENTS = ("Aerodynamics", "Autonomous Driving", "Chassis and Structures", "Communication and Logistics", "Dynamics", "Electronics", "Powertrain")
 CATEGORIAS_INICIAIS = {
     "Resistências": ["valor (Ω)", "tolerância (%)", "potência (W)", "encapsulamento"],
     "Condensadores": ["capacidade (µF)", "tensão (V)", "tipo", "encapsulamento"],
@@ -300,8 +311,19 @@ def current_person():
         return None
     init_db()
     with db_connection() as connection:
-        row = connection.execute("SELECT id, name, is_admin, notion_id, avatar FROM people WHERE id = ?", (person_id,)).fetchone()
-    return {"id": row["id"], "name": row["name"], "admin": bool(row["is_admin"]), "notion": bool(row["notion_id"]), "avatar": row["avatar"]} if row else None
+        row = connection.execute("SELECT id, name, is_admin, notion_id, avatar, role, department FROM people WHERE id = ?", (person_id,)).fetchone()
+    return {"id": row["id"], "name": row["name"], "admin": bool(row["is_admin"]), "notion": bool(row["notion_id"]), "avatar": row["avatar"],
+            "role": row["role"], "department": row["department"]} if row else None
+
+
+def electronics_denied(cat_names, *sections):
+    # Stock eletrónico: so o departamento de Electronics (ou um admin) o altera. Categoria nova conta como eletrónica.
+    if g.person["admin"] or "Electronics" in g.person.get("department", "").split(", "):
+        return None
+    by_name = {category["name"].casefold(): category["section"] for category in db_categories()}
+    if SECTIONS[0] in {by_name.get(str(name).casefold(), SECTIONS[0]) for name in cat_names} | set(sections):
+        return erro("Só o departamento de Electronics pode alterar o stock eletrónico", 403)
+    return None
 
 
 def start_session(person_id):
@@ -433,7 +455,9 @@ def init_sqlite_schema(connection):
             pin_hash TEXT NOT NULL DEFAULT '',
             notion_id TEXT UNIQUE,
             is_admin INTEGER NOT NULL DEFAULT 0,
-            avatar TEXT NOT NULL DEFAULT ''
+            avatar TEXT NOT NULL DEFAULT '',
+            role TEXT NOT NULL DEFAULT 'Member',
+            department TEXT NOT NULL DEFAULT ''
         );
         -- Sem FK para items: save_items reescreve a tabela items a cada escrita.
         CREATE TABLE IF NOT EXISTS movements (
@@ -487,6 +511,9 @@ def init_sqlite_schema(connection):
         connection.execute("ALTER TABLE items ADD COLUMN location TEXT NOT NULL DEFAULT ''")
     if "avatar" not in {row["name"] for row in connection.execute("PRAGMA table_info(people)")}:
         connection.execute("ALTER TABLE people ADD COLUMN avatar TEXT NOT NULL DEFAULT ''")
+    if "role" not in {row["name"] for row in connection.execute("PRAGMA table_info(people)")}:
+        connection.execute("ALTER TABLE people ADD COLUMN role TEXT NOT NULL DEFAULT 'Member'")
+        connection.execute("ALTER TABLE people ADD COLUMN department TEXT NOT NULL DEFAULT ''")
     if "datasheet" not in {row["name"] for row in connection.execute("PRAGMA table_info(parts)")}:
         connection.execute("ALTER TABLE parts ADD COLUMN datasheet TEXT NOT NULL DEFAULT ''")
     if "code" not in {row["name"] for row in connection.execute("PRAGMA table_info(locations)")}:
@@ -1332,6 +1359,8 @@ def import_items():
     rows = data.get("items") if isinstance(data, dict) else None
     if not isinstance(rows, list) or not rows or len(rows) > 5000:
         return erro("Envia entre 1 e 5000 componentes para importar")
+    if (denied := electronics_denied(item.get("cat") for item in rows if isinstance(item, dict))):
+        return denied
     try:
         with EXCEL_LOCK:
             init_db()
@@ -1405,6 +1434,8 @@ def mover():
             return erro("Preenche a categoria e todas as propriedades")
         if not category_config:
             return erro("Categoria não encontrada", 404)
+        if (denied := electronics_denied([category])):
+            return denied
         if image and not category_config["image"]:
             return erro("Esta categoria não aceita imagens")
         key = "|".join(norm(props[name]) for name in props)
@@ -1463,6 +1494,8 @@ def consumir():
             movements.append({"type": "out", "item_id": item["id"], "cat": item["cat"], "props": item["props"],
                               "delta": -line["qty"], "before": item["qty"], "note": note.strip()})
             item["qty"] -= line["qty"]
+        if (denied := electronics_denied(movement["cat"] for movement in movements)):
+            return denied
         save_items(items, movements)
         return jsonify(msg=f"{sum(line['qty'] for line in lines)} unidade(s) retiradas para {note.strip()}")
     except Exception as exc:
@@ -1478,6 +1511,8 @@ def ajustar(item_id):
         item = next((current for current in items if current["id"] == item_id), None)
         if not item:
             return erro("Item não encontrado", 404)
+        if (denied := electronics_denied([item["cat"]])):
+            return denied
         before = item["qty"]
         item["qty"] = max(0, item["qty"] + delta)
         # max protege a regra de negocio: a quantidade minima possivel e zero.
@@ -1499,6 +1534,8 @@ def apagar(item_id):
         item = next((current for current in items if current["id"] == item_id), None)
         if not item:
             return erro("Item não encontrado", 404)
+        if (denied := electronics_denied([item["cat"]])):
+            return denied
         save_items([current for current in items if current["id"] != item_id],
                    [{"type": "delete", "item_id": item_id, "cat": item["cat"], "props": item["props"], "delta": -item["qty"], "before": item["qty"]}])
         return jsonify(ok=True)
@@ -1518,6 +1555,8 @@ def editar_item(item_id):
             if row is None:
                 return erro("Item não encontrado", 404)
             category = connection.execute("SELECT * FROM categories WHERE id = ?", (row["cat_id"],)).fetchone()
+            if (denied := electronics_denied([category["name"]])):
+                return denied
             raw_props = data.get("props")
             raw_qty = data.get("qty")
             if not isinstance(raw_props, dict) or isinstance(raw_qty, bool) or not re.fullmatch(r"\d+", str(raw_qty)):
@@ -1564,6 +1603,9 @@ def mudar_localizacao():
         init_db()
         with EXCEL_LOCK, db_connection() as connection:
             placeholders = ",".join("?" for _ in ids)
+            names = connection.execute(f"SELECT DISTINCT c.name FROM items i JOIN categories c ON c.id = i.cat_id WHERE i.id IN ({placeholders})", ids).fetchall()
+            if (denied := electronics_denied(row["name"] for row in names)):
+                return denied
             changed = connection.execute(f"SELECT COUNT(*) AS n FROM items WHERE id IN ({placeholders})", ids).fetchone()["n"]
             connection.execute(f"UPDATE items SET location = ? WHERE id IN ({placeholders})", (location, *ids))
         if not changed:
@@ -1847,6 +1889,8 @@ def editar_categoria(original_name):
     section = data.get("section", SECTIONS[0])
     if section not in SECTIONS:
         return erro("Secção desconhecida")
+    if (denied := electronics_denied([original_name], section)):
+        return denied
     try:
         init_db()
         with EXCEL_LOCK, db_connection() as connection:
@@ -1893,6 +1937,8 @@ def nova_categoria():
         return erro("Indica o nome e pelo menos uma propriedade")
     if section not in SECTIONS:
         return erro("Secção desconhecida")
+    if (denied := electronics_denied([], section)):
+        return denied
     try:
         init_db()
         if any(category["name"].casefold() == name.casefold() for category in db_categories()):
@@ -1911,6 +1957,8 @@ def nova_categoria():
 def apagar_categoria(name):
     # DELETE /api/categories/<name> remove a categoria e, pela chave estrangeira,
     # os componentes ligados a ela; depois atualiza tambem o Excel.
+    if (denied := electronics_denied([name])):
+        return denied
     try:
         init_db()
         with db_connection() as connection:
@@ -2212,6 +2260,10 @@ def notion_callback():
         notion_id = str(notion_user["id"])
     except (OSError, ValueError, KeyError, TypeError):
         return notion_page("O Notion não confirmou o login. Tenta outra vez.")
+    try:
+        member = notion_member(NOTION_TOKEN or token["access_token"], str(notion_user.get("name") or ""))
+    except (OSError, ValueError, KeyError, TypeError):
+        member = None  # sem acesso a base: fica o cargo que ja tinha
     from_workspace = bool(NOTION_WORKSPACE_ID) and str(token.get("workspace_id", "")).replace("-", "").lower() == NOTION_WORKSPACE_ID
     init_db()
     with db_connection() as connection:
@@ -2231,11 +2283,44 @@ def notion_callback():
             # Foto do perfil Notion para o menu da sessao; so URLs https, atualizada a cada login.
             avatar = str(notion_user.get("avatar_url") or "")
             connection.execute("UPDATE people SET avatar = ? WHERE id = ?", (avatar[:1000] if avatar.startswith("https://") else "", row["id"]))
+            if member:
+                connection.execute("UPDATE people SET role = ?, department = ? WHERE id = ?", (*member, row["id"]))
     if row is None:
         return notion_page("Esta conta Notion não está na lista do Stocklart. Entra outra vez e escolhe o workspace LART no ecrã do Notion.")
     next_page = session.get("notion_next", "/#/stock")
     start_session(row["id"])
     return redirect(next_page)
+
+
+def name_key(name):
+    # Primeiro e ultimo nome, sem acentos: "Rita Faria" no Notion encontra "Rita Sofia Pinto Faria" na base.
+    words = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().casefold().split()
+    return (words[0], words[-1]) if words else None
+
+
+def notion_member(token, name):
+    # (cargo, departamentos) da base Members Filtered, ou None se o nome nao aparece uma so vez.
+    matches, cursor = [], None
+    while True:
+        query = urllib.request.Request(
+            f"https://api.notion.com/v1/databases/{NOTION_MEMBERS_DB}/query",
+            data=json.dumps({"page_size": 100, **({"start_cursor": cursor} if cursor else {})}).encode(),
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"},
+        )
+        with urllib.request.urlopen(query, timeout=10) as response:
+            page = json.load(response)
+        for row in page["results"]:
+            title = "".join(part["plain_text"] for part in row["properties"]["Name"]["title"])
+            if name_key(title) == name_key(name):
+                matches.append([option["name"] for option in row["properties"]["Department"]["multi_select"]])
+        if not page.get("has_more"):
+            break
+        cursor = page["next_cursor"]
+    if len(matches) != 1:
+        return None
+    tags = matches[0]
+    role = "Board" if "Board" in tags else "Department Leader" if "Leaders" in tags else "Member"
+    return role, ", ".join(tag for tag in tags if tag in DEPARTMENTS)
 
 
 def require_admin():
@@ -2253,8 +2338,8 @@ def listar_pessoas():
     if (denied := require_admin()):
         return denied
     with db_connection() as connection:
-        rows = connection.execute("SELECT id, name, pin_hash, notion_id, is_admin FROM people ORDER BY name").fetchall()
-    return jsonify(people=[{"id": row["id"], "name": row["name"], "admin": bool(row["is_admin"]),
+        rows = connection.execute("SELECT id, name, pin_hash, notion_id, is_admin, role, department FROM people ORDER BY name").fetchall()
+    return jsonify(people=[{"id": row["id"], "name": row["name"], "admin": bool(row["is_admin"]), "role": row["role"], "department": row["department"],
                             "pin": bool(row["pin_hash"]), "notion": bool(row["notion_id"])} for row in rows])
 
 

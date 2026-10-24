@@ -33,7 +33,7 @@ onMounted(() => load().catch(cause => { error.value = cause.message }))
 <template>
   <article class="workspace-card people-admin">
     <div class="card-heading"><h2>Pessoas</h2><span class="status-pill">{{ people.length }} pessoa(s)</span></div>
-    <p class="card-muted">Quem entra com Notion no workspace LART é adicionado automaticamente. Aqui podes dar acesso de admin ou apagar pessoas.</p>
+    <p class="card-muted">Quem entra com Notion no workspace LART é adicionado automaticamente. O cargo e o departamento vêm da base Members Filtered do Notion a cada login (só Electronics altera o stock eletrónico). Aqui podes dar acesso de admin ou apagar pessoas.</p>
     <!-- PIN:
     <form class="people-form" @submit.prevent="add">
       <label class="project-name-field"><span>Nome</span><input v-model="name" required autocomplete="off"></label>
@@ -45,7 +45,7 @@ onMounted(() => load().catch(cause => { error.value = cause.message }))
     <p v-if="error" class="upload-error" role="alert">{{ error }}</p>
     <p v-else-if="message" class="card-muted" role="status">{{ message }}</p>
     <div v-for="person in people" :key="person.id" class="setting-row">
-      <span><strong>{{ person.name }}</strong><small>{{ [person.admin && 'admin', person.notion ? 'Notion ligado' : 'sem Notion'].filter(Boolean).join(' · ') }}</small></span>
+      <span><strong>{{ person.name }}</strong><small>{{ [person.admin && 'admin', person.role, person.department || 'sem departamento', person.notion ? 'Notion ligado' : 'sem Notion'].filter(Boolean).join(' · ') }}</small></span>
       <div class="people-actions">
         <!-- PIN: <button class="text-button" :disabled="busy" @click="resetPin(person)">Repor PIN</button> -->
         <button class="text-button" :disabled="busy || person.id === auth.user.id" @click="run('editPerson', { id: person.id, admin: !person.admin })">{{ person.admin ? 'Tirar admin' : 'Tornar admin' }}</button>
