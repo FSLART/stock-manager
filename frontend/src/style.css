@@ -1692,12 +1692,6 @@ div.location-image{background:var(--bg);border:1px dashed var(--line-strong)}
 .tutorial-figure .drawer-label{flex:none;border-radius:1mm;box-shadow:0 1mm 3mm #0008}
 .tutorial-figure figure{display:grid;justify-items:center;gap:8px;margin:0}
 .tutorial-figure figcaption{color:var(--muted);font-size:12px;font-weight:600}
-.tutorial-buttons{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;width:100%}
-.tutorial-buttons .primary{display:inline-flex;align-items:center;min-height:40px;padding:0 18px}
-.tutorial-icons{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;width:100%;color:var(--ink)}
-.tutorial-icons span{width:30px;height:30px}
-.tutorial-icons svg{display:block;width:100%;height:100%}
-.tutorial-arrow{color:var(--accent);font-size:28px;font-weight:800}
 .tutorial-phone{max-width:150px;padding:12px;border:2px solid var(--line-strong);border-radius:16px;font-size:13px;text-align:center}
 .tutorial-lines{margin:0;padding:10px 14px;border:1px solid var(--line);border-radius:9px;background:var(--panel);font:15px/1.5 var(--body)}
 .tutorial-stack{display:grid;gap:8px}
@@ -1708,3 +1702,20 @@ div.location-image{background:var(--bg);border:1px dashed var(--line-strong)}
 .tutorial-dot{width:10px;height:10px;padding:0;border:0;border-radius:50%;background:var(--line-strong)}
 .tutorial-dot[aria-current=step]{background:var(--accent)}
 @media(max-width:560px){.tutorial-dialog{padding:18px 16px}.tutorial-figure{padding:12px}.tutorial-dot{width:12px;height:12px}}
+/* Pedaço do formulário no tutorial, com setas amarelas a apontar o que se usa. */
+.tut-form{display:grid;gap:8px;justify-items:start;flex:1 1 250px;min-width:0;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.tut-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.tut-pair{align-items:end}
+.tut-pair > span{display:grid;gap:4px}
+.tut-label{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.tut-input{display:inline-block;min-width:96px;padding:8px 11px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font-size:14px}
+.tut-input.tut-small{min-width:56px}
+.tut-form .primary{display:inline-flex;align-items:center;min-height:40px;padding:0 18px}
+.tut-form .label-icon{width:36px;height:36px}
+.tut-form .label-icon svg{width:20px;height:20px}
+.tut-arrow{color:var(--accent);font-size:13px;font-weight:800;line-height:1.25}
+/* Uma seta ao lado de um campo nunca passa para a linha de baixo: é o texto dela que quebra, junto ao campo. */
+.tut-row:has(> .tut-arrow){flex-wrap:nowrap}
+.tut-row > :not(.tut-arrow){flex:none}
+.tut-row > .tut-arrow{flex:1 1 0;min-width:0}
+.tutorial-figure .tutorial-stack{justify-items:center}

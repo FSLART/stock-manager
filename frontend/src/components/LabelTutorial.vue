@@ -39,42 +39,85 @@ defineExpose({ open })
       <button type="button" class="del" aria-label="Fechar tutorial" @click="dialog.close()">×</button>
     </div>
     <h2 id="tutorial-title">{{ current.title }}</h2>
-    <!-- Imagens do passo: etiquetas de exemplo e cópias dos botões, só para ver (aria-hidden). -->
+    <!-- Imagem do passo: um pedaço do formulário, igual ao verdadeiro, com setas para o que se usa, e a etiqueta que dá.
+         É só para ver (aria-hidden); o texto por baixo diz o mesmo. -->
     <div class="tutorial-figure" aria-hidden="true">
       <template v-if="current.key === 'start'">
-        <div class="tutorial-buttons"><span class="text-button">+ Gaveta</span><span class="text-button">+ Parafuso</span><span class="text-button">+ Eletrónica</span></div>
-        <DrawerLabel :label="drawer" :code="code" /><DrawerLabel :label="screw('M3x10')" /><DrawerLabel :label="resistor" />
+        <div class="tut-form">
+          <div class="tut-row"><span class="text-button">← Todas as etiquetas</span></div>
+          <div class="tut-row"><span class="text-button">+ Gaveta</span><span class="text-button">+ Parafuso</span><span class="text-button">+ Eletrónica</span></div>
+          <b class="tut-arrow">↑ Carrega num destes para começar</b>
+        </div>
+        <div class="tutorial-stack"><DrawerLabel :label="drawer" :code="code" /><DrawerLabel :label="screw('M3x10')" /><DrawerLabel :label="resistor" /></div>
       </template>
       <template v-else-if="current.key === 'layout'">
-        <figure><DrawerLabel :label="drawer" :code="code" /><figcaption>Gaveta</figcaption></figure>
-        <figure><DrawerLabel :label="resistor" /><figcaption>Caixa</figcaption></figure>
+        <div class="tut-form">
+          <span class="tut-label">Formato</span>
+          <div class="tut-row"><span class="toggle-chip">Gaveta</span><span class="toggle-chip" aria-pressed="true">Caixa (ícones em cima)</span></div>
+          <b class="tut-arrow">↑ Escolhe o desenho da etiqueta</b>
+        </div>
+        <div class="tutorial-stack">
+          <figure><DrawerLabel :label="drawer" :code="code" /><figcaption>Gaveta</figcaption></figure>
+          <figure><DrawerLabel :label="resistor" /><figcaption>Caixa</figcaption></figure>
+        </div>
       </template>
       <template v-else-if="current.key === 'text'">
-        <figure><DrawerLabel :label="{ ...drawer, code: '' }" /><figcaption>Letra automática</figcaption></figure>
-        <figure><DrawerLabel :label="{ ...drawer, code: '', titleSize: 18, fieldSize: 9 }" /><figcaption>Título 18 pt, campos 9 pt</figcaption></figure>
+        <div class="tut-form">
+          <div class="tut-row tut-pair"><span><span class="tut-label">Título</span><span class="tut-input">Armário 1</span></span><span><span class="tut-label">Letra (pt)</span><span class="tut-input tut-small">18</span></span></div>
+          <b class="tut-arrow">↑ O título e o tamanho da letra</b>
+          <span class="tut-label">Campos</span>
+          <div class="tut-row"><span class="tut-input">Modelo</span><span class="tut-input">F1</span></div>
+          <div class="tut-row"><span class="tut-input">Posição</span><span class="tut-input">D20</span><b class="tut-arrow">← nome e valor</b></div>
+          <div class="tut-row"><span class="text-button">+ Campo</span><b class="tut-arrow">← até 4</b></div>
+        </div>
+        <DrawerLabel :label="{ ...drawer, code: '', titleSize: 18 }" />
       </template>
       <template v-else-if="current.key === 'screw'">
-        <DrawerLabel :label="screw('M3x10')" /><DrawerLabel :label="screw('M5x30')" />
-        <DrawerLabel :label="example({ title: 'M4x16', icon: 'drive-hex', screw: 'screw-socket' })" /><DrawerLabel :label="example({ title: 'M6x20', icon: 'drive-hex-head', screw: 'bolt' })" />
+        <div class="tut-form">
+          <span class="tut-label">Título</span>
+          <div class="tut-row"><span class="tut-input">M5x30</span><b class="tut-arrow">← o tamanho vem daqui</b></div>
+          <span class="tut-label">Desenho do parafuso</span>
+          <div class="tut-row"><span v-for="key in ['screw-socket', 'screw-countersunk', 'screw-button', 'bolt']" :key="key" class="label-icon" :aria-pressed="key === 'screw-countersunk'" v-html="ICONS[key].svg"></span></div>
+          <b class="tut-arrow">↑ Escolhe a cabeça</b>
+        </div>
+        <div class="tutorial-stack"><DrawerLabel :label="screw('M3x10')" /><DrawerLabel :label="screw('M5x30')" /></div>
       </template>
       <template v-else-if="current.key === 'icons'">
-        <div class="tutorial-icons"><span v-for="key in ['resistor', 'capacitor', 'chip', 'screw-countersunk', 'drive-torx', 'nut', 'washer', 'washer-split']" :key="key" v-html="ICONS[key].svg"></span></div>
-        <DrawerLabel :label="{ ...drawer, code: '', title: 'Porcas M3', icon: 'nut' }" /><DrawerLabel :label="example({ title: 'Anilhas M4', icon: 'washer' })" />
+        <div class="tut-form">
+          <span class="tut-label">Ícone</span>
+          <div class="tut-row"><span v-for="key in ['resistor', 'capacitor', 'drive-torx', 'nut', 'washer']" :key="key" class="label-icon" :aria-pressed="key === 'nut'" v-html="ICONS[key].svg"></span></div>
+          <b class="tut-arrow">↑ Carrega no ícone que queres</b>
+        </div>
+        <div class="tutorial-stack"><DrawerLabel :label="{ ...drawer, code: '', title: 'Porcas M3', icon: 'nut' }" /><DrawerLabel :label="example({ title: 'Porcas M3', icon: 'nut' })" /></div>
       </template>
       <template v-else-if="current.key === 'code'">
-        <DrawerLabel :label="drawer" :code="code" />
-        <span class="tutorial-arrow">→</span>
-        <span class="tutorial-phone">Abre o inventário em <b>Armário 1</b></span>
+        <div class="tut-form">
+          <span class="tut-label">Código</span>
+          <div class="tut-row"><span class="toggle-chip" aria-pressed="true">Data Matrix</span><span class="toggle-chip">QR</span><span class="toggle-chip">Sem código</span></div>
+          <span class="tut-label">Componente ligado</span>
+          <div class="tut-row"><span class="tut-input">Porcas · M3</span><b class="tut-arrow">← preenche a etiqueta</b></div>
+          <span class="tut-label">Localização ligada</span>
+          <div class="tut-row"><span class="tut-input">Armário 1</span><b class="tut-arrow">← o código abre esta gaveta</b></div>
+        </div>
+        <div class="tutorial-stack"><DrawerLabel :label="drawer" :code="code" /><span class="tutorial-phone">Ler o código abre o inventário em <b>Armário 1</b></span></div>
       </template>
       <template v-else-if="current.key === 'many'">
-        <pre class="tutorial-lines">M3x10
+        <div class="tut-form">
+          <span class="tut-label">Títulos, um por linha</span>
+          <div class="tut-row"><pre class="tutorial-lines">M3x10
 M4x16
-M5x20</pre>
-        <span class="tutorial-arrow">→</span>
+M5x20</pre><b class="tut-arrow">← um por linha</b></div>
+          <div class="tut-row"><span class="toggle-chip" aria-pressed="true">Várias de uma vez</span><b class="tut-arrow">← liga aqui</b></div>
+          <div class="tut-row"><span class="primary">Guardar 3</span></div>
+        </div>
         <div class="tutorial-stack"><DrawerLabel v-for="title in ['M3x10', 'M4x16', 'M5x20']" :key="title" :label="screw(title)" /></div>
       </template>
       <template v-else>
-        <div class="tutorial-buttons"><span class="primary">Guardar</span><span class="text-button">Imprimir</span><span class="text-button">Imprimir todas</span></div>
+        <div class="tut-form">
+          <div class="tut-row"><span class="primary">Guardar</span><b class="tut-arrow">← fica para toda a equipa</b></div>
+          <div class="tut-row"><span class="text-button">Imprimir</span><b class="tut-arrow">← só esta</b></div>
+          <div class="tut-row"><span class="text-button">Imprimir todas</span><b class="tut-arrow">← na lista, todas de uma vez</b></div>
+        </div>
         <div class="tutorial-stack"><DrawerLabel :label="screw('M3x10')" /><DrawerLabel :label="drawer" :code="code" /></div>
       </template>
     </div>
