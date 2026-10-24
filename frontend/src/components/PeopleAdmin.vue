@@ -9,8 +9,9 @@ const people = ref([]), roles = ref([]), departments = ref([]), editing = ref(nu
 const busy = ref(false), error = ref(''), message = ref('')
 
 async function load() { ({ people: people.value, roles: roles.value, departments: departments.value } = await api.direct('people')) }
+const departmentsOf = person => person.department ? person.department.split(', ') : []
 function toggleDepartment(person, department) {
-  const current = person.department ? person.department.split(', ') : []
+  const current = departmentsOf(person)
   run('editPerson', { id: person.id, departments: current.includes(department) ? current.filter(name => name !== department) : [...current, department] })
 }
 async function run(action, payload, after) {
@@ -50,26 +51,37 @@ onMounted(() => load().catch(cause => { error.value = cause.message }))
     <p v-else-if="message" class="card-muted" role="status">{{ message }}</p>
     <template v-for="person in people" :key="person.id">
     <div class="setting-row">
-      <span><strong>{{ person.name }}</strong><small>{{ [person.admin && 'admin', person.role, person.department || 'sem departamento', person.manual && 'editado à mão', person.notion ? 'Notion ligado' : 'sem Notion'].filter(Boolean).join(' · ') }}</small></span>
+      <span>
+        <strong>{{ person.name }}</strong>
+        <span class="person-tags">
+          <span class="person-tag role">{{ person.role }}</span>
+          <span v-for="department in departmentsOf(person)" :key="department" class="person-tag">{{ department }}</span>
+          <span v-if="!person.department" class="person-tag empty">Sem departamento</span>
+        </span>
+        <small>{{ [person.admin && 'Admin', person.manual ? 'Editado à mão' : 'Do Notion', person.notion ? 'Notion ligado' : 'Sem Notion'].filter(Boolean).join(' · ') }}</small>
+      </span>
       <div class="people-actions">
-        <button class="text-button" :aria-expanded="editing === person.id" @click="editing = editing === person.id ? null : person.id">Departamento</button>
+        <button class="text-button" :aria-expanded="editing === person.id" @click="editing = editing === person.id ? null : person.id">{{ editing === person.id ? 'Fechar' : 'Editar cargo' }}</button>
         <!-- PIN: <button class="text-button" :disabled="busy" @click="resetPin(person)">Repor PIN</button> -->
         <button class="text-button" :disabled="busy || person.id === auth.user.id" @click="run('editPerson', { id: person.id, admin: !person.admin })">{{ person.admin ? 'Tirar admin' : 'Tornar admin' }}</button>
         <button class="text-button danger" :disabled="busy || person.id === auth.user.id" @click="remove(person)">Apagar</button>
       </div>
     </div>
-    <div v-if="editing === person.id" class="people-roles">
-      <label>Cargo
-        <select :value="person.role" :disabled="busy" @change="run('editPerson', { id: person.id, role: $event.target.value })">
-          <option v-for="role in roles" :key="role">{{ role }}</option>
-        </select>
-      </label>
-      <fieldset>
-        <legend>Departamentos</legend>
-        <label v-for="department in departments" :key="department" class="check">
-          <input type="checkbox" :checked="person.department.split(', ').includes(department)" :disabled="busy" @change="toggleDepartment(person, department)"> {{ department }}
-        </label>
-      </fieldset>
+    <div v-if="editing === person.id" class="people-editor">
+      <div>
+        <p :id="`role-${person.id}`" class="editor-label">Cargo</p>
+        <div class="toggle-chips" role="group" :aria-labelledby="`role-${person.id}`">
+          <button v-for="role in roles" :key="role" type="button" class="toggle-chip" :aria-pressed="person.role === role" :disabled="busy"
+                  @click="person.role !== role && run('editPerson', { id: person.id, role })">{{ role }}</button>
+        </div>
+      </div>
+      <div>
+        <p :id="`departments-${person.id}`" class="editor-label">Departamentos <span>Electronics pode alterar o stock eletrónico</span></p>
+        <div class="toggle-chips" role="group" :aria-labelledby="`departments-${person.id}`">
+          <button v-for="department in departments" :key="department" type="button" class="toggle-chip" :aria-pressed="departmentsOf(person).includes(department)" :disabled="busy"
+                  @click="toggleDepartment(person, department)">{{ department }}</button>
+        </div>
+      </div>
     </div>
     </template>
   </article>

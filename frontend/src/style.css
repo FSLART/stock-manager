@@ -1177,11 +1177,21 @@ a.notion-login{display:inline-flex;align-items:center;text-decoration:none}
 .people-form{flex-direction:row;flex-wrap:wrap;align-items:flex-end;gap:12px;padding:0}
 .people-form .project-name-field{flex:1 1 160px}
 .people-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
-.people-roles{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px 24px;padding:4px 0 16px}
-.people-roles fieldset{display:flex;flex-wrap:wrap;gap:6px 16px;border:0;margin:0;padding:0}
-.people-roles legend{padding:0 0 6px;font-weight:600}
+.people-admin .person-tags{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0}
+.people-admin .person-tag{display:inline-flex;padding:2px 9px;border:1px solid var(--line-strong);border-radius:999px;color:var(--ink);font-size:12px;font-weight:600}
+.people-admin .person-tag.role{border-color:transparent;background:var(--bg);color:var(--muted)}
+.people-admin .person-tag.empty{border-style:dashed;color:var(--muted);font-weight:500}
+.people-editor{display:grid;gap:16px;margin:0 0 18px;padding:16px 18px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+.editor-label{margin:0 0 8px;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.editor-label span{margin-left:8px;font-weight:500;letter-spacing:0;text-transform:none}
+.toggle-chips{display:flex;flex-wrap:wrap;gap:8px}
+.toggle-chip{min-height:34px;padding:6px 13px;border:1px solid var(--line-strong);border-radius:999px;background:transparent;color:var(--ink);font-size:13px;font-weight:600}
+.toggle-chip:hover{border-color:var(--accent);color:var(--accent)}
+.toggle-chip[aria-pressed=true]{border-color:var(--accent);background:var(--accent);color:var(--on-accent)}
+@media(max-width:560px){.toggle-chip{min-height:44px}}
 @media(max-width:1000px){.home-nav .main-menu{order:2}}
-@media(max-width:560px){.people-admin .setting-row{flex-wrap:wrap}}
+@media(min-width:561px){.people-admin .people-actions{flex-wrap:nowrap}}
+@media(max-width:560px){.people-admin .setting-row{flex-wrap:wrap;gap:12px}.people-admin .people-actions{justify-content:flex-start;width:100%}}
 
 /* Inventário: ações sempre visíveis, vista "Tudo" com Descrição, cartões no telemóvel. */
 .stock-content{color-scheme:dark}
