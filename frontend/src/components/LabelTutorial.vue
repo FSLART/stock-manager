@@ -1,11 +1,12 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { writeBarcode } from 'zxing-wasm/writer'
 import DrawerLabel from './DrawerLabel.vue'
+import TutorialDialog from './TutorialDialog.vue'
 import { ICONS } from '../labelIcons.js'
 // Tutorial das etiquetas, um passo de cada vez. As imagens são etiquetas de exemplo desenhadas pelo mesmo componente
 // da impressão, para nunca ficarem diferentes do que sai na impressora.
-const dialog = ref(null), step = ref(0), code = ref('')
+const shell = ref(null), code = ref('')
 const example = extra => ({ title: '', fields: [], code: '', location: '', width: 55, height: 12, icon: '', item: null, layout: 'bin', screw: '', titleSize: null, fieldSize: null, ...extra })
 const drawer = example({ layout: 'drawer', title: 'Armário 1', height: 25, code: 'DataMatrix', fields: [{ name: 'Modelo', value: 'F1' }, { name: 'Posição', value: 'D20' }] })
 const screw = title => example({ title, icon: 'drive-phillips', screw: 'screw-countersunk' })
@@ -20,11 +21,9 @@ const steps = [
   { key: 'many', title: 'Várias de uma vez', text: 'Numa etiqueta nova carrega em Várias de uma vez e escreve um título por linha. Sai uma etiqueta por linha, iguais em tudo o resto. Ótimo para parafusos de vários tamanhos.' },
   { key: 'print', title: 'Guardar e imprimir', text: 'Guardar volta à lista e a etiqueta fica para toda a equipa. Imprimir abre a impressão e cada etiqueta sai no seu tamanho. Usa o Chrome ou o Brave e escolhe a impressora de etiquetas.' },
 ]
-const current = computed(() => steps[step.value])
 
 async function open() {
-  step.value = 0
-  dialog.value.showModal()
+  shell.value.open()
   if (code.value) return
   const result = await writeBarcode('https://stocklart.pt/#/stock', { format: 'DataMatrix' }).catch(() => null)
   code.value = result?.svg?.replace(/<svg width="(\d+)" height="(\d+)"/, '<svg viewBox="0 0 $1 $2" shape-rendering="crispEdges"') || ''
@@ -33,16 +32,10 @@ defineExpose({ open })
 </script>
 
 <template>
-  <dialog ref="dialog" class="tutorial-dialog" aria-labelledby="tutorial-title">
-    <div class="tutorial-head">
-      <p class="eyebrow">Passo {{ step + 1 }} de {{ steps.length }}</p>
-      <button type="button" class="del" aria-label="Fechar tutorial" @click="dialog.close()">×</button>
-    </div>
-    <h2 id="tutorial-title">{{ current.title }}</h2>
-    <!-- Imagem do passo: um pedaço do formulário, igual ao verdadeiro, com setas para o que se usa, e a etiqueta que dá.
-         É só para ver (aria-hidden); o texto por baixo diz o mesmo. -->
-    <div class="tutorial-figure" aria-hidden="true">
-      <template v-if="current.key === 'start'">
+  <!-- Cada imagem é um pedaço do formulário, igual ao verdadeiro, com setas para o que se usa, e a etiqueta que dá. -->
+  <TutorialDialog ref="shell" :steps="steps">
+    <template #default="{ step: key }">
+      <template v-if="key === 'start'">
         <div class="tut-form">
           <div class="tut-row"><span class="text-button">← Todas as etiquetas</span></div>
           <div class="tut-row"><span class="text-button">+ Gaveta</span><span class="text-button">+ Parafuso</span><span class="text-button">+ Eletrónica</span></div>
@@ -50,7 +43,7 @@ defineExpose({ open })
         </div>
         <div class="tutorial-stack"><DrawerLabel :label="drawer" :code="code" /><DrawerLabel :label="screw('M3x10')" /><DrawerLabel :label="resistor" /></div>
       </template>
-      <template v-else-if="current.key === 'layout'">
+      <template v-else-if="key === 'layout'">
         <div class="tut-form">
           <span class="tut-label">Formato</span>
           <div class="tut-row"><span class="toggle-chip">Gaveta</span><span class="toggle-chip" aria-pressed="true">Caixa (ícones em cima)</span></div>
@@ -61,7 +54,7 @@ defineExpose({ open })
           <figure><DrawerLabel :label="resistor" /><figcaption>Caixa</figcaption></figure>
         </div>
       </template>
-      <template v-else-if="current.key === 'text'">
+      <template v-else-if="key === 'text'">
         <div class="tut-form">
           <div class="tut-row tut-pair"><span><span class="tut-label">Título</span><span class="tut-input">Armário 1</span></span><span><span class="tut-label">Letra (pt)</span><span class="tut-input tut-small">18</span></span></div>
           <b class="tut-arrow">↑ O título e o tamanho da letra</b>
@@ -72,7 +65,7 @@ defineExpose({ open })
         </div>
         <DrawerLabel :label="{ ...drawer, code: '', titleSize: 18 }" />
       </template>
-      <template v-else-if="current.key === 'screw'">
+      <template v-else-if="key === 'screw'">
         <div class="tut-form">
           <span class="tut-label">Título</span>
           <div class="tut-row"><span class="tut-input">M5x30</span><b class="tut-arrow">← o tamanho vem daqui</b></div>
@@ -82,7 +75,7 @@ defineExpose({ open })
         </div>
         <div class="tutorial-stack"><DrawerLabel :label="screw('M3x10')" /><DrawerLabel :label="screw('M5x30')" /></div>
       </template>
-      <template v-else-if="current.key === 'icons'">
+      <template v-else-if="key === 'icons'">
         <div class="tut-form">
           <span class="tut-label">Ícone</span>
           <div class="tut-row"><span v-for="key in ['resistor', 'capacitor', 'drive-torx', 'nut', 'washer']" :key="key" class="label-icon" :aria-pressed="key === 'nut'" v-html="ICONS[key].svg"></span></div>
@@ -90,7 +83,7 @@ defineExpose({ open })
         </div>
         <div class="tutorial-stack"><DrawerLabel :label="{ ...drawer, code: '', title: 'Porcas M3', icon: 'nut' }" /><DrawerLabel :label="example({ title: 'Porcas M3', icon: 'nut' })" /></div>
       </template>
-      <template v-else-if="current.key === 'code'">
+      <template v-else-if="key === 'code'">
         <div class="tut-form">
           <span class="tut-label">Código</span>
           <div class="tut-row"><span class="toggle-chip" aria-pressed="true">Data Matrix</span><span class="toggle-chip">QR</span><span class="toggle-chip">Sem código</span></div>
@@ -101,7 +94,7 @@ defineExpose({ open })
         </div>
         <div class="tutorial-stack"><DrawerLabel :label="drawer" :code="code" /><span class="tutorial-phone">Ler o código abre o inventário em <b>Armário 1</b></span></div>
       </template>
-      <template v-else-if="current.key === 'many'">
+      <template v-else-if="key === 'many'">
         <div class="tut-form">
           <span class="tut-label">Títulos, um por linha</span>
           <div class="tut-row"><pre class="tutorial-lines">M3x10
@@ -120,15 +113,6 @@ M5x20</pre><b class="tut-arrow">← um por linha</b></div>
         </div>
         <div class="tutorial-stack"><DrawerLabel :label="screw('M3x10')" /><DrawerLabel :label="drawer" :code="code" /></div>
       </template>
-    </div>
-    <p class="tutorial-text">{{ current.text }}</p>
-    <div class="tutorial-nav">
-      <button type="button" class="text-button" :disabled="step === 0" @click="step--">Anterior</button>
-      <div class="tutorial-dots">
-        <button v-for="(item, index) in steps" :key="item.key" type="button" class="tutorial-dot" :aria-current="index === step ? 'step' : undefined" :aria-label="`Passo ${index + 1}: ${item.title}`" @click="step = index"></button>
-      </div>
-      <button v-if="step < steps.length - 1" type="button" class="primary" autofocus @click="step++">Seguinte</button>
-      <button v-else type="button" class="primary" @click="dialog.close()">Concluir</button>
-    </div>
-  </dialog>
+    </template>
+  </TutorialDialog>
 </template>

@@ -10,6 +10,7 @@ import StockMovement from './components/StockMovement.vue'
 import CategoryForm from './components/CategoryForm.vue'
 import PartsCatalog from './components/PartsCatalog.vue'
 import LabelScanner from './components/LabelScanner.vue'
+import InventoryTutorial from './components/InventoryTutorial.vue'
 import AppNavigation from './components/AppNavigation.vue'
 import LoginDialog from './components/LoginDialog.vue'
 import HomePage from './pages/HomePage.vue'
@@ -42,7 +43,7 @@ function guard(fn) {
 const categories = ref([]), items = ref([]), parts = ref([]), locationImages = ref({}), locationCodes = ref({}), labels = ref([]), current = ref(null), section = ref(null), query = ref('')
 const busy = ref(false), loading = ref(true), toastMessage = ref(''), toastUndo = ref(null), formError = ref('')
 const movement = ref(null), categoryForm = ref(null), partsCatalog = ref(null), labelScanner = ref(null)
-const csvImport = ref(null), csvError = ref('')
+const csvImport = ref(null), csvError = ref(''), inventoryTutorial = ref(null)
 const canEdit = ref(false), categoryError = ref('')
 const queues = shallowReactive(new Map())
 let timer, toastTimer, refreshing = false, disposed = false
@@ -476,6 +477,7 @@ onUnmounted(() => {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input v-model="query" type="search" aria-label="Pesquisar componentes" placeholder="Pesquisar componentes…" autocomplete="off">
       </div>
+      <button class="text-button tutorial-button" @click="inventoryTutorial.open()"><span aria-hidden="true">?</span> Tutorial</button>
       <button v-if="canEdit" class="text-button import-csv-button" aria-label="Importar CSV" :disabled="locked || !categories.length" @click="guarded.importCsv()">Importar CSV</button>
       <button class="text-button" :disabled="locked || !categories.length" @click="guarded.scanLabel()">Ler etiqueta</button>
       <button class="primary" :disabled="locked || !categories.length" @click="guarded.openMovement()">Adicionar</button>
@@ -548,6 +550,7 @@ onUnmounted(() => {
   <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
   <LoginDialog ref="loginDialog" @login="user => { auth.user = user; toast(`Sessão iniciada: ${user.name}`) }" />
   <PartsCatalog v-if="parts.length" ref="partsCatalog" :parts="parts" :items="items" :categories="categories" :busy="busy" :error="partError" @save="guarded.savePart" @clear-error="partError = ''" />
+  <InventoryTutorial ref="inventoryTutorial" />
   <LabelScanner ref="labelScanner" :items="items" :parts="parts" action="Adicionar ao stock" @use="useLabel" />
   <div id="toast" role="status" :class="{ on: toastMessage }">{{ toastMessage }}<button v-if="toastUndo" class="toast-undo" @click="toastUndo()">Desfazer</button></div>
 </template>

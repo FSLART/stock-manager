@@ -823,8 +823,8 @@ it('explains how to make labels in an illustrated step-by-step tutorial', async 
   window.history.replaceState(null, '', '/#/labels')
   wrapper = mount(App, { attachTo: document.body })
   await flushPromises()
-  await wrapper.findAll('button').find(button => button.text().includes('Tutorial')).trigger('click')
-  const dialog = wrapper.find('.tutorial-dialog')
+  await wrapper.find('.label-heading-actions .tutorial-button').trigger('click')
+  const dialog = wrapper.findAll('.tutorial-dialog').find(found => found.element.open)
   expect(dialog.element.open).toBe(true)
   expect(dialog.find('.eyebrow').text()).toBe('Passo 1 de 8')
   expect(dialog.find('h2').text()).toBe('Começa por um modelo')
@@ -833,6 +833,17 @@ it('explains how to make labels in an illustrated step-by-step tutorial', async 
   expect(dialog.find('h2').text()).toBe('Guardar e imprimir')
   await dialog.findAll('button').find(button => button.text() === 'Concluir').trigger('click')
   expect(dialog.element.open).toBe(false)
+})
+
+it('explains the inventory in a step-by-step tutorial that reads a real label photo', async () => {
+  wrapper = mount(App, { attachTo: document.body })
+  await flushPromises()
+  await wrapper.find('.stock-content .tutorial-button').trigger('click')
+  const dialog = wrapper.findAll('.tutorial-dialog').find(found => found.element.open)
+  expect(dialog.find('.eyebrow').text()).toBe('Passo 1 de 7')
+  await dialog.findAll('.tutorial-dot')[2].trigger('click')
+  expect(dialog.find('h2').text()).toBe('Ler a etiqueta da encomenda')
+  expect(dialog.find('.tut-photo img').attributes('src')).toBe('/static/tutorial/mouser-label.webp')
 })
 
 it('replaces the BOM of a saved PCB project and keeps its name and STEP', async () => {

@@ -1721,3 +1721,16 @@ div.location-image{background:var(--bg);border:1px dashed var(--line-strong)}
 .tutorial-figure .tutorial-stack{justify-items:center}
 .label-select-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:16px 0 0}
 .label-card.picked{border-color:var(--accent)}
+/* Tutorial do inventário: foto da etiqueta com o código 2D destacado, dados lidos, botões de quantidade. */
+.tut-wide{min-width:150px}
+.tut-hot{border-color:var(--accent);color:var(--accent)}
+.tut-photo{position:relative;flex:1 1 240px;max-width:320px;overflow:hidden;border-radius:8px}
+.tut-photo img{display:block;width:100%}
+.tut-spot{position:absolute;left:72%;top:3%;width:19%;height:21%;border:3px solid var(--accent);border-radius:6px;box-shadow:0 0 0 999px #0006}
+.tut-photo-note{position:absolute;right:30%;top:8%;white-space:nowrap;padding:4px 8px;border-radius:6px;background:#000d;color:var(--accent);font-size:12px;font-weight:800}
+.tut-read{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0;font-size:13px}
+.tut-read dt{color:var(--muted)}
+.tut-read dd{margin:0;font-weight:700}
+.tut-key{display:inline-grid;place-items:center;min-width:34px;height:32px;padding:0 8px;border-radius:8px;background:var(--bg);font-weight:700}
+.tut-count{min-width:30px;text-align:center}
+.tut-check{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:5px;background:var(--accent);color:var(--on-accent);font-size:13px;font-weight:800}
