@@ -690,6 +690,16 @@ def label_from_json(data):
         raise ValueError("Código inválido")
     if not all(isinstance(size, (int, float)) and not isinstance(size, bool) for size in (width, height)) or not (20 <= width <= 150 and 10 <= height <= 100):
         raise ValueError("O tamanho vai de 20 x 10 a 150 x 100 mm")
+    item = data.get("item")
+    if item is not None and (not isinstance(item, int) or isinstance(item, bool)):
+        raise ValueError("Componente inválido")
+    layout = data.get("layout") or "drawer"
+    if layout not in {"drawer", "bin"}:
+        raise ValueError("Formato inválido")
+    # Tamanho da letra em pontos; vazio deixa a letra acompanhar a altura da etiqueta.
+    sizes = {key: data.get(key) if data.get(key) != "" else None for key in ("titleSize", "fieldSize")}
+    if not all(size is None or (isinstance(size, (int, float)) and not isinstance(size, bool) and 4 <= size <= 72) for size in sizes.values()):
+        raise ValueError("A letra vai de 4 a 72 pt")
     return {
         "title": text(data.get("title"), 40),
         "fields": [{"name": text(field.get("name"), 20), "value": text(field.get("value"), 30)} for field in fields],
@@ -697,6 +707,13 @@ def label_from_json(data):
         "location": text(data.get("location"), 255),
         "width": width,
         "height": height,
+        # O ícone e uma chave de labelIcons.js; o browser so desenha as que conhece.
+        "icon": text(data.get("icon"), 40),
+        "item": item,
+        "layout": layout,
+        # Cabeça do parafuso desenhado no formato caixa, uma chave de labelIcons.js.
+        "screw": text(data.get("screw"), 40),
+        **sizes,
     }
 
 

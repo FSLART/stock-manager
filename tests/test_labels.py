@@ -25,22 +25,25 @@ class LabelsTest(unittest.TestCase):
         return self.client.get('/api/data').get_json()['labels']
 
     def test_save_edit_and_delete_shared_labels(self):
-        label = {'title': ' Armário 1 ', 'fields': [{'name': 'Posição', 'value': 'D20', 'extra': 1}], 'code': 'DataMatrix', 'location': 'Caixa 1', 'width': 60, 'height': 25, 'html': '<b>'}
+        label = {'title': ' Armário 1 ', 'fields': [{'name': 'Posição', 'value': 'D20', 'extra': 1}], 'code': 'DataMatrix', 'location': 'Caixa 1', 'width': 60, 'height': 25, 'icon': 'nut', 'item': 3, 'html': '<b>'}
         response = self.client.post('/api/labels', json=label)
         self.assertEqual(response.status_code, 200, response.json)
         label_id = response.get_json()['id']
-        self.assertEqual(self.labels(), [{'id': label_id, 'title': 'Armário 1', 'fields': [{'name': 'Posição', 'value': 'D20'}], 'code': 'DataMatrix', 'location': 'Caixa 1', 'width': 60, 'height': 25}])
+        self.assertEqual(self.labels(), [{'id': label_id, 'title': 'Armário 1', 'fields': [{'name': 'Posição', 'value': 'D20'}], 'code': 'DataMatrix', 'location': 'Caixa 1', 'width': 60, 'height': 25, 'icon': 'nut', 'item': 3, 'layout': 'drawer', 'screw': '', 'titleSize': None, 'fieldSize': None}])
         # Guardar sem mudar nada e depois mudar o título substitui a mesma etiqueta.
         self.assertEqual(self.client.post('/api/labels', json={**label, 'id': label_id}).status_code, 200)
         self.assertEqual(self.client.post('/api/labels', json={**label, 'id': label_id, 'title': 'Armário 2'}).status_code, 200)
         self.assertEqual([entry['title'] for entry in self.labels()], ['Armário 2'])
+        screw = {**label, 'id': label_id, 'layout': 'bin', 'screw': 'screw-countersunk', 'titleSize': 14, 'fieldSize': ''}
+        self.assertEqual(self.client.post('/api/labels', json=screw).status_code, 200)
+        self.assertEqual({key: self.labels()[0][key] for key in ('layout', 'screw', 'titleSize', 'fieldSize')}, {'layout': 'bin', 'screw': 'screw-countersunk', 'titleSize': 14, 'fieldSize': None})
         self.assertEqual(self.client.post('/api/labels', json={**label, 'id': 999}).status_code, 404)
         self.assertEqual(self.client.delete(f'/api/labels/{label_id}').status_code, 200)
         self.assertEqual(self.labels(), [])
 
     def test_rejects_invalid_labels(self):
         base = {'title': 'A', 'fields': [], 'code': 'QRCode', 'location': '', 'width': 60, 'height': 25}
-        for change in [{'code': 'Aztec'}, {'width': 5}, {'height': '25'}, {'fields': [{}] * 5}, {'fields': ['x']}, {'id': 'x'}]:
+        for change in [{'code': 'Aztec'}, {'width': 5}, {'height': '25'}, {'fields': [{}] * 5}, {'fields': ['x']}, {'id': 'x'}, {'item': '3'}, {'layout': 'grid'}, {'titleSize': 2}, {'fieldSize': '12'}]:
             self.assertEqual(self.client.post('/api/labels', json={**base, **change}).status_code, 400, change)
         self.assertEqual(self.labels(), [])
 

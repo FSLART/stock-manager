@@ -15,19 +15,23 @@ const image = (svg, color) => `data:image/svg+xml;charset=utf-8,${encodeURICompo
   `<!-- Tabler Icons license (excludes original transistor symbol):\n${license}\n-->\n${svg.replace('currentColor', color)}`
 )}`
 const defaults = [
-  [/^(res|resistencia|resistor|resistance)/, image(resistor, '#93632c')],
-  [/(conector|connector|header|plug|socket)/, image(connector, '#486477')],
-  [/(condensador|capacitor)/, image(capacitor, '#2676ae')],
-  [/led|light.emitting/, image(led, '#bb8031')],
-  [/(diodo|diode)/, image(diode, '#65548b')],
-  [/(transistor|mosfet|bjt)/, image(transistor, '#475569')],
-  [/(potenciometro|potentiometer|trimmer)/, image(potentiometer, '#327e87')],
-  [/(indutor|inductor|coil)/, image(inductor, '#a66430')],
-  [/(cristal|cristais|crystal|oscillator|oscilador)/, image(crystal, '#58729c')],
+  [/^(res|resistencia|resistor|resistance)/, 'resistor', image(resistor, '#93632c')],
+  [/(conector|connector|header|plug|socket)/, 'connector', image(connector, '#486477')],
+  [/(condensador|capacitor)/, 'capacitor', image(capacitor, '#2676ae')],
+  [/led|light.emitting/, 'led', image(led, '#bb8031')],
+  [/(diodo|diode)/, 'diode', image(diode, '#65548b')],
+  [/(transistor|mosfet|bjt)/, 'transistor', image(transistor, '#475569')],
+  [/(potenciometro|potentiometer|trimmer)/, 'potentiometer', image(potentiometer, '#327e87')],
+  [/(indutor|inductor|coil)/, 'inductor', image(inductor, '#a66430')],
+  [/(cristal|cristais|crystal|oscillator|oscilador)/, 'crystal', image(crystal, '#58729c')],
 ]
 const fallback = image(generic, '#64748b')
 
-export function defaultImage(category) {
+const match = category => {
   const name = String(category || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
-  return defaults.find(([pattern]) => pattern.test(name))?.[1] || fallback
+  return defaults.find(([pattern]) => pattern.test(name))
 }
+export const defaultImage = category => match(category)?.[2] || fallback
+// O mesmo critério sugere o ícone das etiquetas (labelIcons.js).
+export const componentKind = category => match(category)?.[1] || ''
+

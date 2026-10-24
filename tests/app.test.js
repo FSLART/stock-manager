@@ -733,7 +733,7 @@ it('creates a drawer label, saves it on the server and prints it with its Data M
   fetch.mockImplementation(async (url, options) => {
     if (url === '/api/labels') labels.push({ ...JSON.parse(options.body), id: 8 })
     return { ok: true, json: async () => url === '/api/labels' ? { msg: 'Etiqueta guardada', id: 8 }
-      : { ...structuredClone(data), locations: { 'Caixa 1': '' }, location_codes: { 'Caixa 1': 'K7Q2MX' }, labels: structuredClone(labels) } }
+      : { ...structuredClone(data), items: [data.items[0], { ...data.items[1], location: 'Caixa 1' }], locations: { 'Caixa 1': '' }, location_codes: { 'Caixa 1': 'K7Q2MX' }, labels: structuredClone(labels) } }
   })
   window.history.replaceState(null, '', '/#/labels')
   vi.stubGlobal('confirm', () => true)
@@ -745,22 +745,37 @@ it('creates a drawer label, saves it on the server and prints it with its Data M
   // A primeira etiqueta da equipa abre logo; sem alterações não há nada para guardar.
   expect(wrapper.find('input[placeholder="Armário 1"]').element.value).toBe('Armário 2')
   expect(button('Guardar').attributes('disabled')).toBeDefined()
-  await button('Nova etiqueta').trigger('click')
+  await button('+ Gaveta').trigger('click')
   await wrapper.find('input[placeholder="Armário 1"]').setValue('Armário 1')
   await wrapper.find('input[aria-label="Valor do campo 2"]').setValue('D20')
   await flushPromises()
   expect(wrapper.find('.drawer-label-preview .drawer-label-text').text()).toBe('Armário 1ModeloPosiçãoD20')
   expect(wrapper.find('.drawer-label-preview title').text()).toBe('Armário 1\nPosição: D20')
-  // Ligada a uma caixa, o código abre-a no inventário pelo código fixo.
-  await wrapper.find('input[list="drawer-label-locations"]').setValue('Caixa 1')
+  // Ligar um componente preenche a etiqueta; sem localização própria, o código abre a gaveta do componente.
+  const linked = wrapper.find('input[list="drawer-label-items"]')
+  await linked.setValue('R&D · 10 Ω')
+  await linked.trigger('change')
+  expect(wrapper.find('input[placeholder="Armário 1"]').element.value).toBe('R&D')
+  expect(wrapper.find('.drawer-label-icon').attributes('title')).toBe('Circuito integrado')
+  await wrapper.find('.label-icon[aria-label="Porca sextavada"]').trigger('click')
+  expect(wrapper.find('.drawer-label-icon').attributes('title')).toBe('Porca sextavada')
   await button('Guardar').trigger('click')
   await flushPromises()
   const post = fetch.mock.calls.find(([url]) => url === '/api/labels')
   expect(post[1].method).toBe('POST')
-  expect(JSON.parse(post[1].body)).toEqual({ title: 'Armário 1', fields: [{ name: 'Modelo', value: '' }, { name: 'Posição', value: 'D20' }], code: 'DataMatrix', location: 'Caixa 1', width: 60, height: 25 })
+  expect(JSON.parse(post[1].body)).toEqual({ title: 'R&D', fields: [{ name: 'valor', value: '10 Ω' }], code: 'DataMatrix', location: '', width: 55, height: 25, icon: 'nut', item: 2, layout: 'drawer', screw: '', titleSize: null, fieldSize: null })
   await button('Imprimir').trigger('click')
-  await vi.waitFor(() => expect(printed).toEqual([[expect.stringMatching(/#\/stock\?box=K7Q2MX$/), 'Armário 1ModeloPosiçãoD20']]))
+  await vi.waitFor(() => expect(printed).toEqual([[expect.stringMatching(/#\/stock\?box=K7Q2MX$/), 'R&Dvalor10 Ω']]))
   expect(document.querySelector('.qr-labels')).toBeNull()
+  // O ponto de partida "Parafuso" é uma etiqueta de caixa com o desenho do parafuso, que cresce com o título.
+  await button('+ Parafuso').trigger('click')
+  const drawing = () => wrapper.find('.drawer-label-preview .bin-screw svg').attributes('viewBox')
+  expect(wrapper.find('.drawer-label-preview .drawer-label.bin strong').text()).toBe('M3x10')
+  const short = drawing()
+  await wrapper.find('input[placeholder="M3x10"]').setValue('M5x30')
+  expect(Number(drawing().split(' ')[2])).toBeGreaterThan(Number(short.split(' ')[2]))
+  await wrapper.find('input[aria-label="Letra do título (pt)"]').setValue(14)
+  expect(wrapper.find('.drawer-label-preview .drawer-label').attributes('style')).toContain('--title: 14pt')
   await wrapper.findAll('.drawer-label-bar .toggle-chip')[0].trigger('click')
   await button('Apagar').trigger('click')
   await flushPromises()

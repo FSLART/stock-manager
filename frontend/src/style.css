@@ -1633,11 +1633,40 @@ div.location-image{background:var(--bg);border:1px dashed var(--line-strong)}
 .drawer-label-code{flex:none;height:100%;aspect-ratio:1}
 .drawer-label-code svg{display:block;width:100%;height:100%}
 .drawer-label-text{display:flex;flex:1;flex-direction:column;justify-content:center;min-width:0;height:100%}
-.drawer-label-text strong{padding-bottom:calc(var(--h)*.04);border-bottom:calc(var(--h)*.025) solid #000;font-size:calc(var(--h)*.19);font-weight:800;line-height:1.1;letter-spacing:.02em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drawer-label-text strong{padding-bottom:calc(var(--h)*.04);border-bottom:calc(var(--h)*.025) solid #000;font-size:var(--title,calc(var(--h)*.17));font-weight:800;line-height:1.15;letter-spacing:.01em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .drawer-label-text dl{display:flex;gap:calc(var(--h)*.24);margin:calc(var(--h)*.07) 0 0}
 .drawer-label-text dl div{min-width:0}
-.drawer-label-text dt{color:#444;font-size:calc(var(--h)*.11);line-height:1.2;white-space:nowrap}
-.drawer-label-text dd{margin:0;font-size:calc(var(--h)*.2);font-weight:700;line-height:1.15;white-space:nowrap}
+.drawer-label-text dt{color:#444;font-size:calc(var(--value,calc(var(--h)*.2))*.55);line-height:1.2;white-space:nowrap}
+.drawer-label-text dd{margin:0;font-size:var(--value,calc(var(--h)*.2));font-weight:700;line-height:1.15;white-space:nowrap}
 @media(max-width:860px){.drawer-label-layout{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:560px){.drawer-label-preview{padding:16px}.drawer-label-preview .drawer-label{zoom:1.15}}
 @media print{.drawer-label{break-inside:avoid;break-after:page}.drawer-label:last-child{break-after:auto}}
+/* Ícone da etiqueta: antes do título, da altura das letras, para não tirar espaço aos campos. */
+.drawer-label-icon{display:inline-block;width:1em;height:1em;margin-right:.22em;vertical-align:-.12em}
+.drawer-label-icon svg{display:block;width:100%;height:100%;stroke-width:2.5}
+.label-icon-groups{display:grid;gap:10px;justify-items:start}
+.label-icon-group{margin:0 0 6px;color:var(--muted);font-size:12px;font-weight:600}
+.label-icons{display:flex;flex-wrap:wrap;gap:6px}
+.label-icon{display:grid;place-items:center;width:40px;height:40px;padding:0;border:1px solid var(--line-strong);border-radius:10px;background:transparent;color:var(--ink)}
+.label-icon:hover{border-color:var(--accent);color:var(--accent)}
+.label-icon[aria-pressed=true]{border-color:var(--accent);background:var(--accent);color:var(--on-accent)}
+.label-icon svg{width:22px;height:22px}
+@media(max-width:560px){.label-icon{width:44px;height:44px}}
+/* Formato caixa (Gridfinity): ícone e desenho do parafuso em cima, título centrado, valores dos campos numa linha. */
+.drawer-label.bin{padding:calc(var(--h)*.06) calc(var(--h)*.15)}
+.drawer-label.bin .drawer-label-text{align-items:center;justify-content:center;gap:calc(var(--h)*.04);text-align:center}
+.drawer-label.bin strong{max-width:100%;padding:0;border:0;font-size:var(--title,calc(var(--h)*.3));letter-spacing:0;text-transform:none}
+.drawer-label.bin small{max-width:100%;font-size:var(--value,calc(var(--h)*.15));font-weight:700;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bin-icons{display:flex;align-items:center;justify-content:center;gap:calc(var(--h)*.1);height:calc(var(--h)*.38);max-width:100%;min-width:0}
+.bin-icon{flex:none;height:100%;aspect-ratio:1}
+.bin-icon svg{display:block;width:100%;height:100%;stroke-width:2.5}
+.bin-screw{display:flex;height:100%;min-width:0}
+.bin-screw svg{display:block;width:auto;max-width:100%;height:100%}
+/* Com a linha dos valores, ícones e título encolhem para tudo caber na altura. */
+.drawer-label.bin:has(small) strong{font-size:var(--title,calc(var(--h)*.24))}
+.drawer-label.bin:has(small) .bin-icons{height:calc(var(--h)*.28)}
+.label-with-size{display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:12px;align-items:end}
+.label-fields-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.label-fields-head .editor-label{margin:0}
+.label-fields-head label{flex-direction:row;align-items:center;gap:8px}
+.label-fields-head input{width:96px}

@@ -1,13 +1,24 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
 import { writeBarcode } from 'zxing-wasm/writer'
+import DrawerLabel from '../components/DrawerLabel.vue'
 import WorkspacePage from '../components/WorkspacePage.vue'
+import { ICON_GROUPS, iconFor } from '../labelIcons.js'
 import { useInventoryContext } from '../composables/useInventoryContext.js'
 const inventory = useInventoryContext()
 
-// Etiquetas para gavetas: código 2D à esquerda, título grande e campos (Modelo, Posição…) à direita.
-// Ficam no servidor, partilhadas pela equipa. Edita-se uma cópia (label) e só "Guardar" a envia.
-const blank = () => ({ title: '', fields: [{ name: 'Modelo', value: '' }, { name: 'Posição', value: '' }], code: 'DataMatrix', location: '', width: 60, height: 25 })
+// Etiquetas em dois formatos: gaveta (código 2D à esquerda, título e campos à direita) e caixa (ícones em cima e texto
+// centrado, como as etiquetas Gridfinity). Ficam no servidor, partilhadas pela equipa. Edita-se uma cópia (label) e só "Guardar" a envia.
+const blank = (template = {}) => ({ title: '', fields: [{ name: 'Modelo', value: '' }, { name: 'Posição', value: '' }], code: 'DataMatrix', location: '', width: 55, height: 25,
+  icon: '', item: null, layout: 'drawer', screw: '', titleSize: null, fieldSize: null, ...template })
+// Pontos de partida para uma etiqueta nova; tudo se muda depois.
+const templates = [
+  ['Gaveta', {}],
+  ['Parafuso', { title: 'M3x10', fields: [], code: '', width: 55, height: 12, icon: 'drive-phillips', layout: 'bin', screw: 'screw-countersunk' }],
+  ['Eletrónica', { title: '10 kΩ', fields: [{ name: 'Encapsulamento', value: '0603' }, { name: 'Tolerância', value: '1%' }], code: '', width: 55, height: 15, icon: 'resistor', layout: 'bin' }],
+]
+const layouts = [['drawer', 'Gaveta'], ['bin', 'Caixa (ícones em cima)']]
+const screwHeads = ICON_GROUPS.find(([group]) => group === 'Parafusos (cabeça)')[1]
 const copy = entry => JSON.parse(JSON.stringify(entry))
 const labels = computed(() => inventory.labels)
 const label = ref(null)
@@ -24,6 +35,23 @@ watch(labels, list => {
 const locationNames = computed(() => [...new Set([...inventory.items.map(item => item.location), ...Object.keys(inventory.locations)].filter(Boolean))].sort())
 const formats = [['DataMatrix', 'Data Matrix'], ['QRCode', 'QR'], ['', 'Sem código']]
 
+// Ligar um componente preenche a etiqueta com a categoria, as propriedades e o ícone dele (tudo editável depois).
+const itemName = item => [item.cat, ...Object.values(item.props)].join(' · ')
+const linkedItem = computed(() => label.value?.item == null ? null : inventory.items.find(item => item.id === label.value.item))
+const itemQuery = ref('')
+watch(() => [label.value, label.value?.item], () => { itemQuery.value = linkedItem.value ? itemName(linkedItem.value) : '' }, { immediate: true })
+function pickItem() {
+  if (!itemQuery.value.trim()) { label.value.item = null; return }
+  const item = inventory.items.find(entry => itemName(entry) === itemQuery.value)
+  if (!item) return
+  Object.assign(label.value, {
+    item: item.id,
+    title: item.cat.slice(0, 40),
+    fields: Object.entries(item.props).slice(0, 4).map(([name, value]) => ({ name: name.slice(0, 20), value: String(value).slice(0, 30) })),
+    icon: iconFor(item.cat),
+  })
+}
+
 const discard = () => !dirty.value || confirm('Descartar as alterações por guardar?')
 function open(entry) { if (entry.id !== label.value?.id && discard()) select(entry) }
 function add(from) {
@@ -39,8 +67,11 @@ function remove() {
   if (confirm(`Apagar a etiqueta "${label.value.title || 'sem título'}" para toda a equipa?`)) inventory.deleteLabel(label.value.id)
 }
 
-// Ligada a uma localização, o código abre o inventário nessa caixa (como o QR das Localizações); senão leva o texto da etiqueta.
-function codeText({ title, fields, location: box }) {
+// O código abre no inventário a localização da etiqueta ou, sem ela, a do componente ligado (como o QR das Localizações).
+// Sem nenhuma leva o texto da etiqueta.
+const boxOf = entry => entry.location || inventory.items.find(item => item.id === entry.item)?.location || ''
+function codeText(entry) {
+  const { title, fields } = entry, box = boxOf(entry)
   if (!box) return [title, ...fields.filter(field => field.value).map(field => `${field.name}: ${field.value}`)].join('\n') || ' '
   const code = inventory.codes?.[box]
   return `${location.origin}${location.pathname}#${code ? `/stock?box=${code}` : `/stock?location=${encodeURIComponent(box)}`}`
@@ -72,7 +103,6 @@ async function print(entries) {
   page.remove()
   printing.value = []
 }
-const size = entry => ({ width: `${entry.width}mm`, height: `${entry.height}mm`, '--h': `${entry.height}mm` })
 </script>
 
 <template>
@@ -93,17 +123,39 @@ const size = entry => ({ width: `${entry.width}mm`, height: `${entry.height}mm`,
           <button v-if="label && label.id == null" type="button" class="toggle-chip" aria-pressed="true">{{ label.title || 'Nova etiqueta' }}</button>
         </div>
         <div class="location-actions">
-          <button class="text-button" @click="add()">Nova etiqueta</button>
+          <div class="location-actions" role="group" aria-label="Nova etiqueta">
+            <button v-for="[name, template] in templates" :key="name" class="text-button" @click="add(blank(template))">+ {{ name }}</button>
+          </div>
           <button class="text-button" :disabled="!labels.length" @click="print(labels)">Imprimir todas ({{ labels.length }})</button>
         </div>
       </div>
       <p v-if="error" class="upload-error" role="alert">{{ error }}</p>
-      <div v-if="!label" class="empty-workspace">Ainda não há etiquetas. Carrega em "Nova etiqueta" para criar a primeira.</div>
+      <div v-if="!label" class="empty-workspace">Ainda não há etiquetas. Escolhe um ponto de partida acima: gaveta, parafuso ou eletrónica.</div>
       <div v-else class="drawer-label-layout">
         <form class="people-editor drawer-label-editor" @submit.prevent>
-          <label>Título<input v-model="label.title" maxlength="40" placeholder="Armário 1" autocomplete="off"></label>
           <div>
-            <p class="editor-label">Campos</p>
+            <p id="drawer-label-layout" class="editor-label">Formato</p>
+            <div class="toggle-chips" role="group" aria-labelledby="drawer-label-layout">
+              <button v-for="[layout, name] in layouts" :key="layout" type="button" class="toggle-chip" :aria-pressed="(label.layout || 'drawer') === layout" @click="label.layout = layout">{{ name }}</button>
+            </div>
+          </div>
+          <!-- O tamanho da letra fica ao lado do que muda; vazio acompanha a altura da etiqueta. -->
+          <div class="label-with-size">
+            <label>Título<input v-model="label.title" maxlength="40" :placeholder="label.layout === 'bin' ? 'M3x10' : 'Armário 1'" autocomplete="off"></label>
+            <label>Letra (pt)<input v-model.number="label.titleSize" type="number" min="4" max="72" step="0.5" placeholder="Auto" aria-label="Letra do título (pt)"></label>
+          </div>
+          <div v-if="label.layout === 'bin'">
+            <p id="drawer-label-screw" class="editor-label">Desenho do parafuso <span>a rosca e o comprimento vêm do título, ex.: M4x16</span></p>
+            <div class="label-icons" role="group" aria-labelledby="drawer-label-screw">
+              <button type="button" class="toggle-chip" :aria-pressed="!label.screw" @click="label.screw = ''">Nenhum</button>
+              <button v-for="[key, name, svg] in screwHeads" :key="key" type="button" class="label-icon" :aria-pressed="label.screw === key" :aria-label="`Desenho: ${name}`" :title="name" @click="label.screw = key" v-html="svg"></button>
+            </div>
+          </div>
+          <div>
+            <div class="label-fields-head">
+              <p class="editor-label">Campos</p>
+              <label>Letra (pt)<input v-model.number="label.fieldSize" type="number" min="4" max="72" step="0.5" placeholder="Auto" aria-label="Letra dos campos (pt)"></label>
+            </div>
             <div v-for="(field, index) in label.fields" :key="index" class="drawer-label-field">
               <input v-model="field.name" :aria-label="`Nome do campo ${index + 1}`" placeholder="Posição" maxlength="20">
               <input v-model="field.value" :aria-label="`Valor do campo ${index + 1}`" placeholder="D20" maxlength="30">
@@ -117,8 +169,24 @@ const size = entry => ({ width: `${entry.width}mm`, height: `${entry.height}mm`,
               <button v-for="[format, name] in formats" :key="name" type="button" class="toggle-chip" :aria-pressed="label.code === format" @click="label.code = format">{{ name }}</button>
             </div>
           </div>
+          <label>Componente ligado<input v-model="itemQuery" list="drawer-label-items" placeholder="Procura no inventário" autocomplete="off" @change="pickItem"></label>
+          <datalist id="drawer-label-items"><option v-for="item in inventory.items" :key="item.id" :value="itemName(item)" /></datalist>
+          <p v-if="label.item != null && !linkedItem" class="hint">O componente ligado já não existe no inventário.</p>
           <label v-if="label.code">Localização ligada<input v-model="label.location" list="drawer-label-locations" placeholder="Nenhuma: o código leva o texto" autocomplete="off"></label>
+          <p v-if="label.code && !label.location && boxOf(label)" class="hint">Sem localização, o código abre a do componente: {{ boxOf(label) }}.</p>
           <datalist id="drawer-label-locations"><option v-for="name in locationNames" :key="name" :value="name" /></datalist>
+          <div>
+            <p id="drawer-label-icon" class="editor-label">Ícone</p>
+            <div class="label-icon-groups" role="group" aria-labelledby="drawer-label-icon">
+              <button type="button" class="toggle-chip" :aria-pressed="!label.icon" @click="label.icon = ''">Sem ícone</button>
+              <div v-for="[group, icons] in ICON_GROUPS" :key="group">
+                <p class="label-icon-group">{{ group }}</p>
+                <div class="label-icons">
+                  <button v-for="[key, name, svg] in icons" :key="key" type="button" class="label-icon" :aria-pressed="label.icon === key" :aria-label="name" :title="name" @click="label.icon = key" v-html="svg"></button>
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="drawer-label-size">
             <label>Largura (mm)<input v-model.number="label.width" type="number" min="20" max="150" required></label>
             <label>Altura (mm)<input v-model.number="label.height" type="number" min="10" max="100" required></label>
@@ -127,13 +195,7 @@ const size = entry => ({ width: `${entry.width}mm`, height: `${entry.height}mm`,
         <div class="drawer-label-side">
           <p class="editor-label">Pré-visualização</p>
           <div class="drawer-label-preview">
-            <div class="drawer-label" :style="size(label)">
-              <div v-if="label.code" class="drawer-label-code" v-html="previewSvg"></div>
-              <div class="drawer-label-text">
-                <strong>{{ label.title || 'Sem título' }}</strong>
-                <dl><div v-for="(field, index) in label.fields" :key="index"><dt>{{ field.name }}</dt><dd>{{ field.value }}</dd></div></dl>
-              </div>
-            </div>
+            <DrawerLabel :label="label" :code="previewSvg" />
           </div>
           <p v-if="dirty" class="hint" role="status">{{ label.id == null ? 'Etiqueta nova, ainda não guardada.' : 'Alterações por guardar.' }}</p>
           <div class="location-actions">
@@ -147,13 +209,7 @@ const size = entry => ({ width: `${entry.width}mm`, height: `${entry.height}mm`,
     </section>
     <!-- Só aparece na impressão, direto no body como os QR das Localizações. O SVG é gerado aqui pelo zxing. -->
     <Teleport to="body"><div v-if="printing.length" class="qr-labels">
-      <div v-for="entry in printing" :key="entry.id" class="drawer-label" :style="size(entry)">
-        <div v-if="entry.code" class="drawer-label-code" v-html="entry.svg"></div>
-        <div class="drawer-label-text">
-          <strong>{{ entry.title }}</strong>
-          <dl><div v-for="(field, index) in entry.fields" :key="index"><dt>{{ field.name }}</dt><dd>{{ field.value }}</dd></div></dl>
-        </div>
-      </div>
+      <DrawerLabel v-for="entry in printing" :key="entry.id" :label="entry" :code="entry.svg" />
     </div></Teleport>
   </WorkspacePage>
 </template>
