@@ -147,6 +147,7 @@ function toggleShown() {
 const selectedPartNumbers = computed(() => [...new Map(items.value.filter(item => selected.value.has(item.id))
   .map(partNumberOf).filter(mpn => mpn && mpn !== '-').map(mpn => [mpn.toUpperCase(), mpn])).values()])
 // Um pedido de cada vez, para não bater nos limites da Mouser/DigiKey; o servidor guarda cada peça no catálogo.
+// Como no formulário, a imagem da API vai para os selecionados com esse P/N que ainda não têm uma.
 async function syncSelected() {
   if (busy.value || queues.size) return
   busy.value = true
@@ -154,7 +155,14 @@ async function syncSelected() {
   try {
     for (const [index, mpn] of mpns.entries()) {
       toast(`A sincronizar ${index + 1}/${mpns.length}: ${mpn}`)
-      try { await api.direct('lookupPart', { mpn }) } catch (error) { failed.push(`${mpn} (${error.message})`) }
+      try {
+        const { image } = await api.direct('lookupPart', { mpn })
+        const missing = items.value.filter(item => selected.value.has(item.id) && !item.image && partNumberOf(item).toUpperCase() === mpn.toUpperCase()
+          && categories.value.find(category => category.name === item.cat)?.image)
+        if (!image || !missing.length) continue
+        const url = await api.uploadImage(image)
+        for (const { id, props, qty } of missing) await api.direct('editItem', { id, props, qty, image: url })
+      } catch (error) { failed.push(`${mpn} (${error.message})`) }
     }
     await load()
     toast(failed.length ? `Sem sincronizar: ${failed.join('; ')}` : `${mpns.length} P/N sincronizado(s) com a Mouser/DigiKey`, failed.length > 0)

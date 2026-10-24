@@ -141,10 +141,12 @@ it('selects a range with shift-click and moves the selection to one location', a
 })
 
 it('syncs every selected P/N once with the parts APIs', async () => {
-  fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), categories: [{ name: 'CIs', props: ['P/N'], image: false }], items: [
-    { id: 1, cat: 'CIs', props: { 'P/N': 'NE555' }, qty: 1, image: '' }, { id: 2, cat: 'CIs', props: { 'P/N': 'ne555' }, qty: 1, image: '' },
-    { id: 3, cat: 'CIs', props: { 'P/N': 'LM358' }, qty: 1, image: '' }, { id: 4, cat: 'CIs', props: { 'P/N': '-' }, qty: 1, image: '' },
-  ] }) })
+  const stock = { ...structuredClone(data), categories: [{ name: 'CIs', props: ['P/N'], image: true }], items: [
+    { id: 1, cat: 'CIs', props: { 'P/N': 'NE555' }, qty: 1, image: '' }, { id: 2, cat: 'CIs', props: { 'P/N': 'ne555' }, qty: 2, image: '' },
+    { id: 3, cat: 'CIs', props: { 'P/N': 'LM358' }, qty: 1, image: '/static/uploads/old.jpg' }, { id: 4, cat: 'CIs', props: { 'P/N': '-' }, qty: 1, image: '' },
+  ] }
+  fetch.mockImplementation(async url => ({ ok: true, json: async () => url.startsWith('/api/parts/lookup') ? { part: {}, image: 'https://api/x.jpg' }
+    : url === '/api/images' ? { url: '/static/uploads/new.jpg' } : structuredClone(stock) }))
   wrapper = mount(App)
   await flushPromises()
   await wrapper.find('thead .select-cell input').trigger('change')
@@ -153,6 +155,11 @@ it('syncs every selected P/N once with the parts APIs', async () => {
   await button.trigger('click')
   await flushPromises()
   expect(fetch.mock.calls.map(([url]) => url).filter(url => url.startsWith('/api/parts/lookup'))).toEqual(['/api/parts/lookup?mpn=ne555', '/api/parts/lookup?mpn=LM358'])
+  // A imagem é descarregada uma vez e vai só para os itens sem imagem (o LM358 já tem uma).
+  expect(fetch.mock.calls.filter(([url]) => url === '/api/images')).toHaveLength(1)
+  const edits = fetch.mock.calls.filter(([url]) => url.startsWith('/api/items/')).map(([url, options]) => [url, JSON.parse(options.body)])
+  expect(edits).toEqual([['/api/items/1', { id: 1, props: { 'P/N': 'NE555' }, qty: 1, image: '/static/uploads/new.jpg' }],
+    ['/api/items/2', { id: 2, props: { 'P/N': 'ne555' }, qty: 2, image: '/static/uploads/new.jpg' }]])
 })
 
 it('sorts quantities numerically in both directions', async () => {
