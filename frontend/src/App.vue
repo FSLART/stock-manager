@@ -1,7 +1,8 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, provide, reactive, ref, shallowReactive, watch } from 'vue'
 import { createApi, readStored, writeStored } from './api.js'
-import { componentValue, describe, partNumberOf } from './stockText.js'
+import { componentValue, describe, mainKey, partNumberOf } from './stockText.js'
+import { siValue } from './pcbStock.js'
 import { euros, priceEstimator } from './prices.js'
 import InventoryCsvImport from './components/InventoryCsvImport.vue'
 import StockItem from './components/StockItem.vue'
@@ -102,6 +103,10 @@ function sortBy(key) {
 const NUMERIC = new Set(['qty', 'price', 'value'])
 const sortValue = (item, key) => key === 'component' ? componentValue(item) : key === 'desc' ? describe(item) : key.startsWith('prop:') ? item.props[key.slice(5)] ?? ''
   : key === 'price' ? priceOf.value(item)?.price ?? -1 : key === 'value' ? item.qty * (priceOf.value(item)?.price ?? 0) : item[key] ?? ''
+// Resistências e condensadores ficam na caixa por encapsulamento e depois por valor: a lista segue a mesma ordem.
+const packageOf = item => String(Object.entries(item.props).find(([key]) => /^(encapsulamento|tamanho|footprint|package)/i.test(key.trim()))?.[1] ?? '')
+const valueOf = item => siValue(item.props[mainKey(item)], mainKey(item)) ?? Infinity
+const byBox = (a, b) => packageOf(a).localeCompare(packageOf(b), 'pt', { numeric: true }) || valueOf(a) - valueOf(b)
 const shown = computed(() => items.value.filter(item =>
   inScope(item) &&
   normalize(item.cat + Object.values(item.props).join('') + (item.location || '')).includes(normalize(query.value)) &&
@@ -111,7 +116,7 @@ const shown = computed(() => items.value.filter(item =>
   (!stockFilter.value || (stockFilter.value === 'empty' ? item.qty === 0 : stockFilter.value === 'low' ? item.qty > 0 && item.qty <= 5 : item.qty > 0)) &&
   (!imageFilter.value || Boolean(item.image) === (imageFilter.value === 'yes'))
 ).sort((a, b) => {
-  if (!sortKey.value) return 0
+  if (!sortKey.value) return /resist|condens|capacit/i.test(current.value ?? '') ? byBox(a, b) : 0
   const av = sortValue(a, sortKey.value), bv = sortValue(b, sortKey.value)
   return sortDirection.value * (NUMERIC.has(sortKey.value) ? av - bv : String(av).localeCompare(String(bv), 'pt', { numeric: true, sensitivity: 'base' }))
 }))
@@ -514,6 +519,6 @@ onUnmounted(() => {
   <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
   <LoginDialog ref="loginDialog" @login="user => { auth.user = user; toast(`Sessão iniciada: ${user.name}`) }" />
   <PartsCatalog v-if="parts.length" ref="partsCatalog" :parts="parts" :items="items" :categories="categories" :busy="busy" :error="partError" @save="guarded.savePart" @clear-error="partError = ''" />
-  <LabelScanner ref="labelScanner" :items="items" action="Adicionar ao stock" @use="useLabel" />
+  <LabelScanner ref="labelScanner" :items="items" :parts="parts" action="Adicionar ao stock" @use="useLabel" />
   <div id="toast" role="status" :class="{ on: toastMessage }">{{ toastMessage }}<button v-if="toastUndo" class="toast-undo" @click="toastUndo()">Desfazer</button></div>
 </template>
