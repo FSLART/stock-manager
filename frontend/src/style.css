@@ -1177,6 +1177,9 @@ a.notion-login{display:inline-flex;align-items:center;text-decoration:none}
 .people-form{flex-direction:row;flex-wrap:wrap;align-items:flex-end;gap:12px;padding:0}
 .people-form .project-name-field{flex:1 1 160px}
 .people-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.people-roles{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px 24px;padding:4px 0 16px}
+.people-roles fieldset{display:flex;flex-wrap:wrap;gap:6px 16px;border:0;margin:0;padding:0}
+.people-roles legend{padding:0 0 6px;font-weight:600}
 @media(max-width:1000px){.home-nav .main-menu{order:2}}
 @media(max-width:560px){.people-admin .setting-row{flex-wrap:wrap}}
 

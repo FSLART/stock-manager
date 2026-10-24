@@ -3,12 +3,16 @@ import { inject, onMounted, ref } from 'vue'
 
 const api = inject('api')
 const auth = inject('auth')
-const people = ref([])
+const people = ref([]), roles = ref([]), departments = ref([]), editing = ref(null)
 // PIN (desativado: as pessoas novas entram sozinhas pelo Notion). Descomentar os blocos PIN para voltar a ativar.
 // PIN: const name = ref(''), pin = ref(''), admin = ref(false)
 const busy = ref(false), error = ref(''), message = ref('')
 
-async function load() { people.value = (await api.direct('people')).people }
+async function load() { ({ people: people.value, roles: roles.value, departments: departments.value } = await api.direct('people')) }
+function toggleDepartment(person, department) {
+  const current = person.department ? person.department.split(', ') : []
+  run('editPerson', { id: person.id, departments: current.includes(department) ? current.filter(name => name !== department) : [...current, department] })
+}
 async function run(action, payload, after) {
   busy.value = true
   error.value = message.value = ''
@@ -33,7 +37,7 @@ onMounted(() => load().catch(cause => { error.value = cause.message }))
 <template>
   <article class="workspace-card people-admin">
     <div class="card-heading"><h2>Pessoas</h2><span class="status-pill">{{ people.length }} pessoa(s)</span></div>
-    <p class="card-muted">Quem entra com Notion no workspace LART é adicionado automaticamente. O cargo e o departamento vêm da base Members Filtered do Notion a cada login (só Electronics altera o stock eletrónico). Aqui podes dar acesso de admin ou apagar pessoas.</p>
+    <p class="card-muted">Quem entra com Notion no workspace LART é adicionado automaticamente. O cargo e o departamento vêm da base Members Filtered do Notion a cada login; se os mudares aqui, o Notion deixa de os mudar para essa pessoa. Só Electronics altera o stock eletrónico.</p>
     <!-- PIN:
     <form class="people-form" @submit.prevent="add">
       <label class="project-name-field"><span>Nome</span><input v-model="name" required autocomplete="off"></label>
@@ -44,13 +48,29 @@ onMounted(() => load().catch(cause => { error.value = cause.message }))
     -->
     <p v-if="error" class="upload-error" role="alert">{{ error }}</p>
     <p v-else-if="message" class="card-muted" role="status">{{ message }}</p>
-    <div v-for="person in people" :key="person.id" class="setting-row">
-      <span><strong>{{ person.name }}</strong><small>{{ [person.admin && 'admin', person.role, person.department || 'sem departamento', person.notion ? 'Notion ligado' : 'sem Notion'].filter(Boolean).join(' · ') }}</small></span>
+    <template v-for="person in people" :key="person.id">
+    <div class="setting-row">
+      <span><strong>{{ person.name }}</strong><small>{{ [person.admin && 'admin', person.role, person.department || 'sem departamento', person.manual && 'editado à mão', person.notion ? 'Notion ligado' : 'sem Notion'].filter(Boolean).join(' · ') }}</small></span>
       <div class="people-actions">
+        <button class="text-button" :aria-expanded="editing === person.id" @click="editing = editing === person.id ? null : person.id">Departamento</button>
         <!-- PIN: <button class="text-button" :disabled="busy" @click="resetPin(person)">Repor PIN</button> -->
         <button class="text-button" :disabled="busy || person.id === auth.user.id" @click="run('editPerson', { id: person.id, admin: !person.admin })">{{ person.admin ? 'Tirar admin' : 'Tornar admin' }}</button>
         <button class="text-button danger" :disabled="busy || person.id === auth.user.id" @click="remove(person)">Apagar</button>
       </div>
     </div>
+    <div v-if="editing === person.id" class="people-roles">
+      <label>Cargo
+        <select :value="person.role" :disabled="busy" @change="run('editPerson', { id: person.id, role: $event.target.value })">
+          <option v-for="role in roles" :key="role">{{ role }}</option>
+        </select>
+      </label>
+      <fieldset>
+        <legend>Departamentos</legend>
+        <label v-for="department in departments" :key="department" class="check">
+          <input type="checkbox" :checked="person.department.split(', ').includes(department)" :disabled="busy" @change="toggleDepartment(person, department)"> {{ department }}
+        </label>
+      </fieldset>
+    </div>
+    </template>
   </article>
 </template>

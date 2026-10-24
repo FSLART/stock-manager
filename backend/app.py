@@ -164,7 +164,8 @@ def init_mysql_schema(connection):
             is_admin INTEGER NOT NULL DEFAULT 0,
             avatar VARCHAR(1000) NOT NULL DEFAULT '',
             role VARCHAR(64) NOT NULL DEFAULT 'Member',
-            department VARCHAR(64) NOT NULL DEFAULT ''
+            department VARCHAR(255) NOT NULL DEFAULT '',
+            notion_sync INTEGER NOT NULL DEFAULT 1
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
         """CREATE TABLE IF NOT EXISTS movements (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -207,7 +208,10 @@ def init_mysql_schema(connection):
         connection.execute("ALTER TABLE people ADD COLUMN avatar VARCHAR(1000) NOT NULL DEFAULT ''")
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'people' AND COLUMN_NAME = 'role'").fetchone():
         connection.execute("ALTER TABLE people ADD COLUMN role VARCHAR(64) NOT NULL DEFAULT 'Member'")
-        connection.execute("ALTER TABLE people ADD COLUMN department VARCHAR(64) NOT NULL DEFAULT ''")
+        connection.execute("ALTER TABLE people ADD COLUMN department VARCHAR(255) NOT NULL DEFAULT ''")
+    if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'people' AND COLUMN_NAME = 'notion_sync'").fetchone():
+        connection.execute("ALTER TABLE people MODIFY department VARCHAR(255) NOT NULL DEFAULT ''")
+        connection.execute("ALTER TABLE people ADD COLUMN notion_sync INTEGER NOT NULL DEFAULT 1")
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'items' AND COLUMN_NAME = 'location'").fetchone():
         connection.execute("ALTER TABLE items ADD COLUMN location VARCHAR(255) NOT NULL DEFAULT ''")
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'categories' AND COLUMN_NAME = 'section'").fetchone():
@@ -293,6 +297,7 @@ EXCEL_COLUMN_WIDTHS = {
 # pedir para um componente dessa categoria.
 SECTIONS = ("Componentes eletrónicos", "Harness", "Não consumíveis")
 # Departamentos da LART como estao na base Members Filtered do Notion (Board e Leaders dao o cargo).
+ROLES = ("Board", "Department Leader", "Member")
 DEPARTMENTS = ("Aerodynamics", "Autonomous Driving", "Chassis and Structures", "Communication and Logistics", "Dynamics", "Electronics", "Powertrain")
 CATEGORIAS_INICIAIS = {
     "Resistências": ["valor (Ω)", "tolerância (%)", "potência (W)", "encapsulamento"],
@@ -459,7 +464,8 @@ def init_sqlite_schema(connection):
             is_admin INTEGER NOT NULL DEFAULT 0,
             avatar TEXT NOT NULL DEFAULT '',
             role TEXT NOT NULL DEFAULT 'Member',
-            department TEXT NOT NULL DEFAULT ''
+            department TEXT NOT NULL DEFAULT '',
+            notion_sync INTEGER NOT NULL DEFAULT 1
         );
         -- Sem FK para items: save_items reescreve a tabela items a cada escrita.
         CREATE TABLE IF NOT EXISTS movements (
@@ -516,6 +522,8 @@ def init_sqlite_schema(connection):
     if "role" not in {row["name"] for row in connection.execute("PRAGMA table_info(people)")}:
         connection.execute("ALTER TABLE people ADD COLUMN role TEXT NOT NULL DEFAULT 'Member'")
         connection.execute("ALTER TABLE people ADD COLUMN department TEXT NOT NULL DEFAULT ''")
+    if "notion_sync" not in {row["name"] for row in connection.execute("PRAGMA table_info(people)")}:
+        connection.execute("ALTER TABLE people ADD COLUMN notion_sync INTEGER NOT NULL DEFAULT 1")
     if "datasheet" not in {row["name"] for row in connection.execute("PRAGMA table_info(parts)")}:
         connection.execute("ALTER TABLE parts ADD COLUMN datasheet TEXT NOT NULL DEFAULT ''")
     if "code" not in {row["name"] for row in connection.execute("PRAGMA table_info(locations)")}:
@@ -2283,7 +2291,8 @@ def notion_callback():
             avatar = str(notion_user.get("avatar_url") or "")
             connection.execute("UPDATE people SET avatar = ? WHERE id = ?", (avatar[:1000] if avatar.startswith("https://") else "", row["id"]))
             if member:
-                connection.execute("UPDATE people SET role = ?, department = ? WHERE id = ?", (*member, row["id"]))
+                # Um admin que mudou o cargo/departamento na app desliga a sincronizacao dessa pessoa.
+                connection.execute("UPDATE people SET role = ?, department = ? WHERE id = ? AND notion_sync = 1", (*member, row["id"]))
     if row is None:
         return notion_page("Esta conta Notion não está na lista do Stocklart. Entra outra vez e escolhe o workspace LART no ecrã do Notion.")
     next_page = session.get("notion_next", "/#/stock")
@@ -2347,9 +2356,10 @@ def listar_pessoas():
     if (denied := require_admin()):
         return denied
     with db_connection() as connection:
-        rows = connection.execute("SELECT id, name, pin_hash, notion_id, is_admin, role, department FROM people ORDER BY name").fetchall()
+        rows = connection.execute("SELECT id, name, pin_hash, notion_id, is_admin, role, department, notion_sync FROM people ORDER BY name").fetchall()
     return jsonify(people=[{"id": row["id"], "name": row["name"], "admin": bool(row["is_admin"]), "role": row["role"], "department": row["department"],
-                            "pin": bool(row["pin_hash"]), "notion": bool(row["notion_id"])} for row in rows])
+                            "manual": not row["notion_sync"], "pin": bool(row["pin_hash"]), "notion": bool(row["notion_id"])} for row in rows],
+                   roles=ROLES, departments=DEPARTMENTS)
 
 
 # PIN: sem PIN, as pessoas novas entram sozinhas pelo Notion (ver notion_callback).
@@ -2391,6 +2401,15 @@ def editar_pessoa(person_id):
         if person_id == g.person["id"] and not data["admin"]:
             return erro("Não podes retirar o teu próprio acesso de admin")
         updates["is_admin"] = int(bool(data["admin"]))
+    if "role" in data:
+        if data["role"] not in ROLES:
+            return erro("Cargo desconhecido")
+        updates["role"], updates["notion_sync"] = data["role"], 0
+    if "departments" in data:
+        chosen = data["departments"]
+        if not isinstance(chosen, list) or any(department not in DEPARTMENTS for department in chosen):
+            return erro("Departamento desconhecido")
+        updates["department"], updates["notion_sync"] = ", ".join(d for d in DEPARTMENTS if d in chosen), 0
     if not updates:
         return erro("Nada para alterar")
     try:

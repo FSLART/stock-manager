@@ -93,6 +93,18 @@ class AuthTest(unittest.TestCase):
         self.notion_login(self.client, 'notion-rui', name='Rui Costa', members=None)
         self.assertEqual(self.user(self.client)['department'], 'Electronics')
 
+    def test_admin_sets_departments_and_notion_stops_overwriting(self):
+        led = {'cat': 'LEDs', 'props': {'cor': 'azul', 'tamanho (mm)': '5', 'tensão direta (V)': '3'}, 'qty': 1, 'mode': 'in'}
+        self.notion_login(self.client, 'notion-ana')
+        self.assertEqual(self.client.patch('/api/people/2', json={'departments': ['Nope']}).status_code, 400)
+        self.assertEqual(self.client.patch('/api/people/2', json={'role': 'Chefe'}).status_code, 400)
+        self.assertEqual(self.client.patch('/api/people/2', json={'departments': ['Powertrain', 'Electronics'], 'role': 'Department Leader'}).status_code, 200)
+        rui = next(person for person in self.client.get('/api/people').json['people'] if person['id'] == 2)
+        self.assertEqual((rui['role'], rui['department'], rui['manual']), ('Department Leader', 'Electronics, Powertrain', True))
+        self.notion_login(self.client, 'notion-rui', name='Rui Costa', members=[('Rui Costa', ['Dynamics'])])
+        self.assertEqual(self.user(self.client)['department'], 'Electronics, Powertrain')
+        self.assertEqual(self.client.post('/api/move', json=led).status_code, 200)
+
     def test_pin_login_is_disabled(self):
         self.assertEqual(self.client.post('/api/auth/login', json={'person_id': 1, 'pin': 'AB12'}).status_code, 404)
         self.assertEqual(self.client.get('/api/auth/people').status_code, 404)
