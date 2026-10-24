@@ -18,6 +18,7 @@ import MovementsPage from './pages/MovementsPage.vue'
 import PcbBomPage from './pages/PcbBomPage.vue'
 import SettingsPage from './pages/SettingsPage.vue'
 import LocationsPage from './pages/LocationsPage.vue'
+import HarnessPage from './pages/HarnessPage.vue'
 
 const loginDialog = ref(null)
 const api = createApi({ onUnauthorized() { auth.user = null; loginDialog.value?.open() } })
@@ -177,8 +178,8 @@ function setLocation(location) {
   act('setLocation', { ids: [...selected.value], location }, () => { selected.value = new Set(); locationName.value = '' })
 }
 
-const pages = { home: HomePage, 'analog-simulation': AnalogSimulationPage, movements: MovementsPage, pcbs: PcbBomPage, settings: SettingsPage, locations: LocationsPage }
-const routeKeys = { '/': 'home', '/stock': 'stock', '/analog-simulation': 'analog-simulation', '/movements': 'movements', '/pcbs': 'pcbs', '/settings': 'settings', '/locations': 'locations' }
+const pages = { home: HomePage, 'analog-simulation': AnalogSimulationPage, movements: MovementsPage, pcbs: PcbBomPage, settings: SettingsPage, locations: LocationsPage, harness: HarnessPage }
+const routeKeys = { '/': 'home', '/stock': 'stock', '/analog-simulation': 'analog-simulation', '/movements': 'movements', '/pcbs': 'pcbs', '/settings': 'settings', '/locations': 'locations', '/harness': 'harness' }
 const page = ref('home')
 // #/stock?location=Caixa%201 (o QR de cada caixa) abre o inventário só com essa localização.
 // Antes de os dados chegarem o código ainda não tem nome: load() volta a tentar.
@@ -215,6 +216,8 @@ provide('inventory', reactive({
     await act('editLocation', payload, done)
   }),
   deleteLocation: guard(name => act('deleteLocation', { name })),
+  consume: guard((payload, done) => act('consumeItems', payload, done)),
+  revertMovements: guard((ids, done) => act('revertMovements', { ids }, done)),
   async manageCategories() { navigation.push('/stock'); await nextTick(); document.querySelector('nav[aria-label="Categorias"]')?.focus() },
   addMaterial: guard(async () => { navigation.push('/stock'); await nextTick(); if (categories.value.length) movement.value.open(current.value) }),
 }))

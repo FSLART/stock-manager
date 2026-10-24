@@ -5,12 +5,12 @@ const emit = defineEmits(['submit', 'delete'])
 const dialog = ref(null)
 const SECTIONS = ['Componentes eletrónicos', 'Harness', 'Não consumíveis']
 const name = ref(''), image = ref(false), section = ref(SECTIONS[0])
-const originalName = ref(null), fields = ref([]), originalFields = ref([])
+const originalName = ref(null), fields = ref([]), originalFields = ref([]), copied = ref('')
 function open(category, defaultSection) {
   originalName.value = category?.name || null
   originalFields.value = [...(category?.props || [])]
   fields.value = category ? category.props.map(p => ({ source: p, name: p })) : [{ source: null, name: '' }]
-  name.value = ''; image.value = false; section.value = category?.section || defaultSection || SECTIONS[0]
+  name.value = ''; copied.value = ''; image.value = false; section.value = category?.section || defaultSection || SECTIONS[0]
   if (category) { name.value = category.name; image.value = category.image }
   dialog.value.showModal()
 }
@@ -27,6 +27,13 @@ function submit() {
     emit('submit', { name: name.value.trim(), props: fields.value.map(f => f.name), image: image.value, section: section.value })
   }
 }
+// Nova categoria: copia as propriedades (e a imagem) de uma que já existe, para depois só acrescentar ou mudar.
+function copyFrom(categoryName) {
+  const source = props.categories.find(c => c.name === categoryName)
+  if (!source) return
+  fields.value = source.props.map(p => ({ source: null, name: p }))
+  image.value = source.image
+}
 defineExpose({ open, close: () => dialog.value.close() })
 </script>
 
@@ -36,6 +43,9 @@ defineExpose({ open, close: () => dialog.value.close() })
       <h2 id="category-title">{{ originalName ? 'Editar categoria' : 'Nova categoria' }}</h2>
       <label>Nome <input v-model="name" placeholder="Ex.: Díodos" required></label>
       <label>Secção <select v-model="section"><option v-for="option in SECTIONS" :key="option">{{ option }}</option></select></label>
+      <label v-if="!originalName">Copiar propriedades de
+        <select v-model="copied" @change="copyFrom(copied)"><option value="">—</option><option v-for="category in categories" :key="category.name">{{ category.name }}</option></select>
+      </label>
       <div v-for="(field, index) in fields" :key="index" class="property-editor">
         <label>Propriedade <input v-model="field.name" list="known-properties" autocomplete="off" required></label>
         <button type="button" class="move" :disabled="index === 0" aria-label="Subir propriedade" @click="fields.splice(index - 1, 0, ...fields.splice(index, 1))">↑</button>

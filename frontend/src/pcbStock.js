@@ -103,3 +103,22 @@ export function stockCheck(boards, items) {
   }
   return [...rows.values()].map(row => ({ ...row, status: statusOf(row) }))
 }
+
+// O que retirar do stock para produzir `count` placas: cada linha gasta os itens que casam, por ordem, até chegar.
+// Linhas sem item (ou com vários valores, onde o BOM não diz quantas de cada) ou sem stock suficiente ficam em short.
+export function stockToTake(lines, count, items) {
+  const left = new Map(items.map(item => [item.id, item.qty]))
+  const take = new Map(), short = []
+  for (const line of lines) {
+    let needed = line.quantity * count
+    for (const item of matchStock(line, items).items) {
+      const qty = Math.min(needed, left.get(item.id))
+      if (qty <= 0) continue
+      take.set(item.id, (take.get(item.id) ?? 0) + qty)
+      left.set(item.id, left.get(item.id) - qty)
+      needed -= qty
+    }
+    if (needed > 0) short.push(empty(line.partNumber) ? line.value : line.partNumber)
+  }
+  return { items: [...take].map(([id, qty]) => ({ id, qty })), short }
+}

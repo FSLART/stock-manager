@@ -113,12 +113,13 @@ function suggestions(prop) {
 function fillFromPartNumber(value) {
   if (editing.value || !props.parts.some(p => p.mpn.toUpperCase() === String(value).trim().toUpperCase())) return
   partQuery.value = String(value).trim()
-  pickPart()
+  // A categoria já foi escolhida para chegar a este campo: não volta à do catálogo.
+  pickPart(null, true)
 }
 // Escolher uma peça do catálogo preenche o formulário. Se esse P/N já está em stock, usa os valores do item
 // existente, para a entrada somar a quantidade em vez de criar um item quase igual.
 // Uma etiqueta lida também procura o P/N no stock, e sem catálogo preenche só o P/N e o fabricante.
-function pickPart(label = null) {
+function pickPart(label = null, keepCategory = false) {
   const part = findPart(partQuery.value, props.parts)
   // Um P/N estragado na etiqueta é trocado pelo do catálogo.
   if (part) partQuery.value = part.mpn
@@ -131,7 +132,7 @@ function pickPart(label = null) {
     values.value = { ...stocked.props }
     return
   }
-  if (props.categories.some(c => c.name === part?.category)) category.value = part.category
+  if (!keepCategory && props.categories.some(c => c.name === part?.category)) category.value = part.category
   // Numa categoria sem P/N (ex. Resistências, a primeira em "Tudo") o número perdia-se: usa uma que o tenha,
   // de preferência também com fabricante, como as de CIs (Díodos só tem "referência").
   else if (!partNumberField.value) {

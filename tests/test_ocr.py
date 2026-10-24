@@ -46,6 +46,12 @@ class OcrTest(unittest.TestCase):
         self.assertIsNone(match('001 AGE-YYICI-025-99', []))
         # Um P/N desconhecido so passa no formato FABRICANTE:P/N e continua marcado como lido por OCR.
         self.assertEqual(match('mpn: ACME:XY123AB9 qty : 40 Pcs', [])['mpn'], 'XY123AB9')
+        # Etiqueta ST: "CPN:" e o rotulo do P/N, nao o fabricante.
+        self.assertEqual(match('CPN: STLINK-V3MINIE FG: LKV3MINIE$KR1 fos Batch n°: Z5K04001 Assembled in: CHINA', []),
+                         {'mpn': 'STLINK-V3MINIE', 'manufacturer': '', 'ocr': True})
+        # O rotulo da etiqueta Mouser nao passa por fabricante.
+        self.assertIsNone(match('Ref. do Fabricante: GSIEG2FL R1 Panjit', []))
+        self.assertIsNone(match('Ref. Mouser: 241-GS1 002FLR', []))
 
     def test_endpoint_needs_login_and_returns_the_label(self):
         client = self.module.app.test_client()

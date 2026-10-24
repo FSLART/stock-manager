@@ -1,10 +1,18 @@
 <script setup>
 import { computed, onUnmounted, ref } from 'vue'
 import { readBarcodesFromImageData } from 'zxing-wasm/reader'
-import { parseLabel, sharpen } from '../label.js'
+import { findPart, parseLabel, sharpen } from '../label.js'
 import { partNumberOf } from '../stockText.js'
 import { readStored, writeStored } from '../api.js'
-const props = defineProps({ action: String, items: { type: Array, default: null } })
+const props = defineProps({ action: String, items: { type: Array, default: null }, parts: { type: Array, default: () => [] } })
+// Uma etiqueta lida com o P/N do catálogo quando ele existe (a Mouser chega a estragar o P/N no código 2D).
+function readLabel(text) {
+  const found = parseLabel(text)
+  const part = found && findPart(found.mpn, props.parts)
+  return part ? { ...found, mpn: part.mpn, manufacturer: found.manufacturer || part.manufacturer } : found
+}
+// O que um código não reconhecido contém, para se perceber porque não serve (controlos visíveis como ·).
+const preview = text => String(text).replace(/[\x00-\x1f]/g, '·').slice(0, 70)
 const emit = defineEmits(['use'])
 const dialog = ref(null), video = ref(null), overlay = ref(null)
 const label = ref(null), status = ref(''), camera = ref(false), paused = ref(false), reading = ref(false), photo = ref(''), focus = ref(null)
@@ -116,7 +124,7 @@ async function track() {
       if (!paused.value && !reading.value) {
         drawBoxes(codes, image)
         // Ao encontrar uma etiqueta congela a imagem e mostra os dados, sem ter de carregar em Ler.
-        const found = codes.map(code => parseLabel(code.text)).find(Boolean)
+        const found = codes.map(code => readLabel(code.text)).find(Boolean)
         if (found) {
           togglePause()
           label.value = found
@@ -162,14 +170,14 @@ async function read(source) {
       const codes = await readBarcodesFromImageData(sharpened ? sharp[zoom] ||= sharpen(image) : image, { formats: FORMATS, textMode: 'Plain', binarizer })
       if (codes.length) seen = { codes, image }
       // shortcut: uses the first label found in the image, add a list if people photograph several labels at once.
-      label.value = codes.map(code => parseLabel(code.text)).find(Boolean) || null
+      label.value = codes.map(code => readLabel(code.text)).find(Boolean) || null
       if (label.value) break
     }
     drawBoxes(seen.codes, seen.image || images[1])
     if (!label.value) {
       try { label.value = await readText(source) } catch (error) { status.value = error.message; return }
     }
-    status.value = label.value ? '' : seen.codes.length ? 'O código encontrado (a laranja) não é de uma etiqueta de componente, nem reconheci o texto.'
+    status.value = label.value ? '' : seen.codes.length ? `O código encontrado (a laranja) não é de uma etiqueta de componente, nem reconheci o texto. Lido: «${preview(seen.codes[0].text)}»`
       : 'Não encontrei o código 2D nem reconheci o texto da etiqueta. Aproxima, foca e tenta de novo.'
   } catch { status.value = 'Não foi possível ler a imagem. Verifica a ligação à Internet e tenta de novo.' }
   finally { reading.value = false }

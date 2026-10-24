@@ -24,6 +24,30 @@ class EditingTest(unittest.TestCase):
         for code, size in [('A', 'small'), ('A', 'large')]:
             self.client.post('/api/move', json={'cat': 'Test', 'props': {'code': code, 'size': size}, 'qty': 4, 'mode': 'in'})
 
+    def test_consume_pcb_and_revert_mass_delete(self):
+        self.assertEqual(self.client.post('/api/items/consume', json={'items': [{'id': 1, 'qty': 5}], 'note': 'Placa'}).status_code, 400)
+        self.assertEqual(self.client.post('/api/items/consume', json={'items': [{'id': 1, 'qty': 3}], 'note': ' '}).status_code, 400)
+        response = self.client.post('/api/items/consume', json={'items': [{'id': 1, 'qty': 3}, {'id': 2, 'qty': 1}], 'note': ' Placa V1 '})
+        self.assertEqual(response.status_code, 200, response.json)
+        self.assertEqual([item['qty'] for item in self.module.db_items()], [1, 3])
+        self.client.delete('/api/categories/Test')
+        movements = self.client.get('/api/movements').get_json()['movements']
+        self.assertEqual(movements[2]['note'], 'Placa V1')
+        deletes = [m['id'] for m in movements if m['type'] == 'delete']
+        response = self.client.post('/api/movements/revert', json={'ids': deletes})
+        self.assertEqual(response.status_code, 200, response.json)
+        self.assertEqual([(item['id'], item['qty'], item['props']) for item in self.module.db_items()],
+                         [(1, 1, {'code': 'A', 'size': 'small'}), (2, 3, {'code': 'A', 'size': 'large'})])
+        self.assertEqual(self.client.post('/api/movements/revert', json={'ids': deletes}).status_code, 409)
+        self.assertTrue(all(m['reverted'] for m in self.client.get('/api/movements').get_json()['movements'] if m['id'] in deletes))
+        # Reverter a saida da PCB devolve as pecas.
+        self.assertEqual(self.client.post('/api/movements/revert', json={'ids': [movements[2]['id'], movements[3]['id']]}).status_code, 200)
+        self.assertEqual([item['qty'] for item in self.module.db_items()], [4, 4])
+
+    def test_only_admins_revert_movements(self):
+        as_person(self, self.module, {'id': 2, 'name': 'Other', 'admin': False, 'notion': False})
+        self.assertEqual(self.client.post('/api/movements/revert', json={'ids': [1]}).status_code, 403)
+
     def test_edit_item_preserves_identity_and_updates_stock(self):
         response = self.client.patch('/api/items/1', json={'props': {'code': 'B', 'size': 'small'}, 'qty': 0})
         self.assertEqual(response.status_code, 200, response.json)

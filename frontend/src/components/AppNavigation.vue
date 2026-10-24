@@ -51,10 +51,9 @@ const links = [
   { label: 'Simulação analógica', route: '/analog-simulation', key: 'analog-simulation' },
   { label: 'Movimentos', route: '/movements', key: 'movements' },
   { label: 'PCB e os seus BOMs', route: '/pcbs', key: 'pcbs' },
+  { label: 'Cablagem', route: '/harness', key: 'harness' },
   { label: 'Definições', route: '/settings', key: 'settings' }
 ]
-// site à parte (não é uma rota desta app); endereço completo para funcionar também no Apps Script
-const external = [{ label: 'Cablagem', href: 'https://stocklart.pt/harness/', key: 'harness' }]
 </script>
 
 <template>
@@ -77,7 +76,6 @@ const external = [{ label: 'Cablagem', href: 'https://stocklart.pt/harness/', ke
       >
         {{ link.label }}
       </button>
-      <a v-for="link in external" :key="link.key" class="menu-link" :href="link.href">{{ link.label }}</a>
     </nav>
     <div v-if="auth?.enabled" ref="box" class="session-box">
       <button v-if="!auth.user" class="text-button" @click="auth.login()">Entrar</button>

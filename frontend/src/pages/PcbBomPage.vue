@@ -1,8 +1,8 @@
 <script setup>
-import { computed, inject, nextTick, reactive, ref } from 'vue'
+import { computed, inject, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { parseBom } from '../bom.js'
 import { readStored, writeStored } from '../api.js'
-import { stockCheck } from '../pcbStock.js'
+import { stockCheck, stockToTake } from '../pcbStock.js'
 import { useInventoryContext } from '../composables/useInventoryContext.js'
 import WorkspacePage from '../components/WorkspacePage.vue'
 import LabelScanner from '../components/LabelScanner.vue'
@@ -19,9 +19,13 @@ const selectedProject = ref(null)
 const labelScanner = ref(null), projectDetail = ref(null)
 const api = inject('api')
 const inventory = useInventoryContext()
-const stepBusy = ref(false), stepError = ref(''), bomError = ref('')
+const stepBusy = ref(false), stepError = ref(''), bomError = ref(''), imageBusy = ref(false)
 // Placas a produzir por projeto; 0 deixa o projeto fora da lista de produção.
 const boardCounts = reactive({})
+// Retirar do stock: o nome da PCB escrito à mão confirma, e fica nos movimentos.
+const consumeDialog = ref(null), consumeBoards = ref(1), consumeName = ref('')
+const toTake = computed(() => selectedProject.value ? stockToTake(selectedProject.value.items, consumeBoards.value || 0, inventory.items) : { items: [], short: [] })
+const toTakeUnits = computed(() => toTake.value.items.reduce((total, item) => total + item.qty, 0))
 
 const componentCount = computed(() => bomItems.value.reduce((total, item) => total + item.quantity, 0))
 // Cada linha do BOM do projeto aberto, com o que o BOM diz dela para ver ao abrir a linha.
@@ -146,12 +150,41 @@ async function attachStep(event) {
   } finally { stepBusy.value = false }
 }
 
+// Foto da placa: ficheiro ou Ctrl+V com o projeto aberto (fora dos popups).
+async function attachImage(file) {
+  if (!file?.type.startsWith('image/') || imageBusy.value) return
+  stepError.value = ''
+  imageBusy.value = true
+  try { updateProject({ ...selectedProject.value, image: await api.uploadImage(file) }) }
+  catch (error) { stepError.value = error.message }
+  finally { imageBusy.value = false }
+}
+function pasteImage(event) {
+  const file = [...(event.clipboardData?.files || [])].find(f => f.type.startsWith('image/'))
+  if (!file || !selectedProject.value || document.querySelector('dialog[open]')) return
+  event.preventDefault()
+  attachImage(file)
+}
+onMounted(() => window.addEventListener('paste', pasteImage))
+onUnmounted(() => window.removeEventListener('paste', pasteImage))
+
 // O projeto abre por baixo da lista de produção: leva a vista até ele.
 async function openProject(project) {
   selectedProject.value = project
   await nextTick()
   projectDetail.value?.scrollIntoView?.({ behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' })
 }
+
+function openConsume() {
+  consumeBoards.value = boardCounts[selectedProject.value.id] || 1
+  consumeName.value = ''
+  consumeDialog.value.showModal()
+}
+function consume() {
+  inventory.consume({ items: toTake.value.items, note: `PCB ${selectedProject.value.name} × ${consumeBoards.value}` }, () => consumeDialog.value.close())
+}
+
+const formatDate = timestamp => !timestamp ? '' : new Intl.DateTimeFormat('pt-PT', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(timestamp))
 
 function removeProject(projectId) {
   if (!confirm('Apagar este projeto PCB guardado?')) return
@@ -220,23 +253,24 @@ function removeProject(projectId) {
       </div>
       <div v-if="!projects.length" class="empty-workspace">Ainda não tens projetos PCB guardados.</div>
       <div v-else class="saved-project-list">
-        <div v-for="project in projects" :key="project.id" class="saved-project">
+        <div v-for="project in projects" :key="project.id" :class="['saved-project', { selected: selectedProject?.id === project.id }]">
           <button class="saved-project-open" @click="openProject(project)">
-          <span>
-            <strong>{{ project.name }}</strong>
-            <small>{{ project.fileName }} · {{ project.items.length }} linhas no BOM</small>
-          </span>
-          <span class="saved-project-count">{{ project.items.reduce((total, item) => total + item.quantity, 0) }}</span>
+            <span class="saved-project-thumb">
+              <img v-if="project.image" :src="project.image" alt="" loading="lazy">
+              <span v-else class="step-file-mark">PCB</span>
+            </span>
+            <span>
+              <strong>{{ project.name }}</strong>
+              <small>{{ [formatDate(project.updatedAt || project.createdAt), `${project.items.reduce((total, item) => total + item.quantity, 0)} componentes`].filter(Boolean).join(" · ") }}</small>
+            </span>
           </button>
-          <label class="board-count">
-            <span>Placas</span>
-            <input v-model.number="boardCounts[project.id]" type="number" min="0" step="1" placeholder="0" :aria-label="`Placas a produzir de ${project.name}`" />
-          </label>
-          <button
-            class="saved-project-delete"
-            aria-label="Apagar projeto"
-            @click.stop="removeProject(project.id)"
-            >×</button>
+          <div class="saved-project-foot">
+            <label class="board-count">
+              <span>Placas</span>
+              <input v-model.number="boardCounts[project.id]" type="number" min="0" step="1" placeholder="0" :aria-label="`Placas a produzir de ${project.name}`" />
+            </label>
+            <button class="saved-project-delete" aria-label="Apagar projeto" @click.stop="removeProject(project.id)">×</button>
+          </div>
         </div>
       </div>
       <div v-if="build.length" class="build-list">
@@ -257,12 +291,22 @@ function removeProject(projectId) {
             <input type="file" class="sr-only" accept=".csv,.bom,.txt,text/csv,text/plain" aria-label="Substituir ficheiro BOM" @change="replaceBom" />
           </label>
           <button class="text-button" type="button" @click="labelScanner.open()">Ler etiqueta</button>
+          <button class="text-button" type="button" @click="openConsume">Retirar do stock</button>
           <button class="text-button" type="button" @click="selectedProject = null">Fechar</button>
         </span>
       </div>
       <div v-if="bomError" class="upload-error" role="alert">{{ bomError }}</div>
       <div class="pcb-detail-grid">
         <div class="pcb-step-panel">
+          <img v-if="selectedProject.image" class="pcb-image" :src="selectedProject.image" :alt="`Placa ${selectedProject.name}`">
+          <span class="pcb-step-actions">
+            <label class="text-button">
+              {{ imageBusy ? 'A enviar…' : selectedProject.image ? 'Substituir imagem' : 'Anexar imagem' }}
+              <input type="file" class="sr-only" accept="image/*" aria-label="Anexar imagem da PCB" :disabled="imageBusy" @change="attachImage($event.target.files?.[0]); $event.target.value = ''" />
+            </label>
+            <button v-if="selectedProject.image" class="text-button" type="button" @click="updateProject({ ...selectedProject, image: '' })">Remover imagem</button>
+            <small>ou Ctrl+V para colar</small>
+          </span>
           <StepViewer v-if="selectedProject.step" :url="selectedProject.step.url" />
           <div v-else class="pcb-step-empty">
             <div class="step-file-mark">STEP</div>
@@ -284,6 +328,19 @@ function removeProject(projectId) {
         <BomStockList :rows="lineStock" :label="`BOM de ${selectedProject.name}`" />
       </div>
     </section>
+    <dialog ref="consumeDialog" aria-labelledby="consume-title">
+      <form v-if="selectedProject" @submit.prevent="consume">
+        <h2 id="consume-title">Retirar do stock</h2>
+        <label>Placas produzidas <input v-model.number="consumeBoards" type="number" min="1" step="1" required></label>
+        <p class="hint">Sai do stock: <b>{{ toTakeUnits }}</b> unidade(s) de {{ toTake.items.length }} componente(s). Fica registado nos movimentos.</p>
+        <p v-if="toTake.short.length" class="hint error">Sem stock suficiente (retira-se só o que há): {{ toTake.short.join(', ') }}</p>
+        <label>Escreve <b>{{ selectedProject.name }}</b> para confirmar <input v-model="consumeName" autocomplete="off" required></label>
+        <div class="actions">
+          <button type="button" class="ghost" @click="consumeDialog.close()">Cancelar</button>
+          <button class="primary" :disabled="consumeName.trim() !== selectedProject.name || !toTake.items.length">Retirar do stock</button>
+        </div>
+      </form>
+    </dialog>
     <LabelScanner ref="labelScanner" action="Adicionar ao BOM" @use="addLabel" />
   </WorkspacePage>
 </template>

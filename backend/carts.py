@@ -110,17 +110,23 @@ CATEGORY_RULES = (
     (r"transist|\bbjt\b|^trans (pnp|npn)", "Transístores"),
     (r"inductor|choke|indutor", "Indutores"),
     (r"trimmer|potentiometer|potenci", "Potenciómetros"),
-    (r"thermistors? -|\bntc\b|\bptc\b|termístor", "Termístores"),
+    # Antes dos termistores: os fusiveis rearmaveis (PPTC) dizem "PTC".
     (r"fuse|fusí", "Fusíveis"),
+    (r"thermistors? -|\bntc\b|\bptc\b|termístor", "Termístores"),
     (r"eeprom|\bmemory\b", "EEPROM"),
+    # Antes dos microcontroladores: as placas e os depuradores tambem falam do MCU.
+    (r"debugger|depurador", "Placa de Debugging"),
+    (r"development board|raspberry", "Placas de Desenvolvimento"),
     (r"microcontroller|microprocessor|\bmcu\b|embedded", "Microprocessadores"),
     (r"crystal|cristal|oscillator", "Cristais"),
-    (r"can interface|ethernet|transceiver|rs-?485", "CI de comunicação e redes"),
+    (r"can interface|interface ic can|ethernet|transceiver|rs-?485", "CI de comunicação e redes"),
     (r"logic|portas lógicas|\bgate\b", "CIs de Portas Lógicas"),
     (r"amplifier|op amp|comparator|comparador", "CIs Amplificadores"),
     (r"\badc\b|analog to digital|\bdac\b", "CIs de Conversão"),
     (r"dc/dc|dc-dc", "DCDC"),
-    (r"regulator|switching controller|power management", "LDO"),
+    # Sem "power management": a arvore da DigiKey poe tudo de PMIC ai (ex. monitores de baterias como o ADBMS6830).
+    (r"regulator|\bldo\b", "LDO"),
+    (r"switching controller", "CIs Gestão de Energia"),
     (r"timer", "Temporizadores"),
     (r"sensor", "Sensores"),
     (r"\bfan\b|ventilador", "Ventoinhas"),
@@ -128,9 +134,8 @@ CATEGORY_RULES = (
     (r"transformer|transformador", "Transformador"),
     (r"ferrite", "Ferrites"),
     (r"\bswitch\b", "Interruptores"),
-    (r"wire|cabo", "Cabos e fios"),
+    (r"wire|cabo", "Cabos"),
     (r"thermal", "Materiais térmicos"),
-    (r"development board|raspberry", "Placas de Desenvolvimento"),
 )
 
 
@@ -170,7 +175,7 @@ def parse_cart(rows, name):
 # Todas comecam por P/N, Fabricante e Encapsulamento (menos as de NO_PACKAGE). Sem parametros: preenche-se a mao.
 # "@category" e a subcategoria da DigiKey (ex. "Ceramic Capacitors"), traduzida por KINDS.
 PACKAGE = ("Supplier Device Package", "Package / Case", "Mounting Type")
-NO_PACKAGE = {"Placas de Desenvolvimento", "Conectores", "Crimps"}
+NO_PACKAGE = {"Placas de Desenvolvimento", "Conectores", "Crimps", "Ventoinhas", "Materiais térmicos"}
 CATEGORY_FIELDS = {
     "Resistências": {"Resistência (Ω)": ("Resistance",), "Potência (W)": ("Power (Watts)",), "Tolerância": ("Tolerance",)},
     "Condensadores": {"Capacidade": ("Capacitance",), "Tensão (V)": ("Voltage - Rated",), "Dielétrico": ("Temperature Coefficient",), "Tipo": ("@category",)},
@@ -199,9 +204,17 @@ CATEGORY_FIELDS = {
     "Fusíveis": {"Corrente (A)": ("Current Rating (Amps)",), "Tensão (V)": ("Voltage Rating - DC", "Voltage Rating - AC"), "Resposta": ("Response Time",)},
     "EEPROM": {"Interface": ("Memory Interface",), "Memória": ("Memory Size",)},
     "Microprocessadores": {"Núcleo": ("Core Processor",), "Flash": ("Program Memory Size",), "RAM": ("RAM Size",)},
-    "Conectores": {"Tipo": ("Connector Type",), "Posições": ("Number of Positions",), "Passo": ("Pitch - Mating",), "Género": ("Gender",)},
+    "Conectores": {"Tipo": ("Connector Type",), "Posições": ("Number of Positions",), "Passo": ("Pitch - Mating", "Pitch"),
+                   "Género": ("Gender", "@gender"), "Type (SMD/THT/Harness)": ("Mounting Type",), "Mate P/N (Plug)": ("Mating Part",),
+                   "Mate P/N (Crimp)": ("Mate Crimp Part",), "Crimp P/N Counterpart": ("Crimp Part",)},
     "Crimps": {"AWG": ("Wire Gauge or Range - AWG",), "Género": ("Contact Type", "Gender")},
     "Transformador": {"Indutância (µH)": ("Inductance",), "Relação": ("Turns Ratio - Primary:Secondary",)},
+    "Temporizadores": {"Tipo": ("Type",), "Frequência": ("Frequency",)},
+    "Termístores": {"Tipo (NTC/PTC)": (), "Resistência (Ω)": ("Resistance @ 25°C",), "B (K)": ("B25/50", "B25/85"), "Tolerância": ("Resistance Tolerance",)},
+    "Interruptores": {"Tipo": ("@category",), "Contactos": ("Circuit",), "Posições": ("Number of Positions",)},
+    "Ferrites": {"Impedância (Ω)": ("Impedance @ Frequency",), "Diâmetro do cabo": ("Cable Diameter",)},
+    "Ventoinhas": {"Dimensões": ("Size / Dimension",), "Tensão (V)": ("Voltage - Rated",), "Caudal": ("Air Flow",)},
+    "Materiais térmicos": {"Tipo": ("Type",), "Condutividade": ("Thermal Conductivity",)},
 }
 KINDS = {"zener": "Zener", "schottky": "Schottky", "tvs": "TVS", "rectifier": "Retificador", "ceramic": "cerâmico",
          "electrolytic": "eletrolítico", "tantalum": "tântalo", "film": "filme"}
@@ -222,6 +235,12 @@ def field_value(field, text):
         return re.sub(r"\s*\(.*\)$", "", text)
     if " ~ " in text:
         return "-".join(field_value(field, end) for end in text.split(" ~ ", 1))
+    if field == "Type (SMD/THT/Harness)":
+        kind = "SMD" if "Surface Mount" in text else "THT" if "Through Hole" in text else "Harness" if "Free Hanging" in text else ""
+        return kind or text
+    if field == "Passo":
+        mm = re.search(r"\(([\d.]+)\s*mm\)", text)   # '0.100" (2.54mm)' -> "2.54mm"
+        return f"{mm.group(1)}mm" if mm else text
     if field.startswith("Tipo (N"):
         return re.sub(r"-Channel$", "", text)
     unit = re.search(r"\((Ω|W|V|A|µH|MHz)\)$", field)
@@ -244,7 +263,9 @@ def digikey_props(category, parameters, category_path=""):
     kind = next((name for word, name in KINDS.items() if word in category_path.lower()), category_path.split(" > ")[-1])
     props = {}
     for field, sources in fields.items():
-        values = [kind if source == "@category" else parameters.get(source, "") for source in sources]
+        # A DigiKey quase nunca da "Gender" nos conectores; o caminho diz "Male Pins" ou "Female Sockets".
+        gender = "Fêmea" if "female" in category_path.lower() else "Macho" if "male" in category_path.lower() else ""
+        values = [kind if source == "@category" else gender if source == "@gender" else parameters.get(source, "") for source in sources]
         value = next((value for value in values if value and value.strip() != "-"), "")
         if value:
             props[field] = field_value(field, value)

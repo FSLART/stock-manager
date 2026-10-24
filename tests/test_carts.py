@@ -74,6 +74,12 @@ class CartParsingTest(unittest.TestCase):
                          {'Encapsulamento': '0603', 'Capacidade': '8pF', 'Tensão (V)': '50', 'Dielétrico': 'C0G, NP0', 'Tipo': 'cerâmico'})
         # Um parametro "-" conta como em falta e passa ao seguinte.
         self.assertEqual(digikey_props('Díodos', {'Technology': '-', 'Current - Average Rectified (Io)': '-'}, 'Diodes > Zener > Single Zener Diodes'), {'Tipo': 'Zener'})
+        header = {'Connector Type': 'Header', 'Number of Positions': '24', 'Pitch - Mating': '0.100" (2.54mm)',
+                  'Mounting Type': 'Surface Mount, Right Angle', 'Mating Part': '0430251608'}
+        self.assertEqual(digikey_props('Conectores', header, 'Connectors, Interconnects > Rectangular Connectors > Headers, Receptacles, Female Sockets'),
+                         {'Tipo': 'Header', 'Posições': '24', 'Passo': '2.54mm', 'Género': 'Fêmea', 'Type (SMD/THT/Harness)': 'SMD',
+                          'Mate P/N (Plug)': '0430251608'})
+        self.assertEqual(field_value('Type (SMD/THT/Harness)', 'Free Hanging (In-Line)'), 'Harness')
 
     def test_other_parts_get_a_catalog_category_from_the_description(self):
         from backend.carts import catalog_category
@@ -81,7 +87,12 @@ class CartParsingTest(unittest.TestCase):
             'Transistor Output Optocouplers Phototransistor Out': 'Optocouplers',
             'Headers & Wire Housings XH HEADER (SIDE)': 'Conectores',
             'Distribuidores e Alojamento de Fios FEMALE TERM 20-24': 'Conectores',
-            'Hook-up Wire 782201 BLUE 100 FT': 'Cabos e fios',
+            'Hook-up Wire 782201 BLUE 100 FT': 'Cabos',
+            'Fusíveis rearmáveis - PPTC PTC 8V 1206 0.75A POLYFUSE SMD THIN': 'Fusíveis',
+            'Placas e kits de desenvolvimento - ARM STM32 Nucleo-64 development board STM32G474RE MCU': 'Placas de Desenvolvimento',
+            'Depuradores de hardware STLINK-V3 compact in-circuit debugger and programmer for STM32': 'Placa de Debugging',
+            'Interface IC CAN W/ SPI Inter 125dC': 'CI de comunicação e redes',
+            'Switching Controllers 560VIN Micropower, Isolated No-Opto Flyb': 'CIs Gestão de Energia',
             'Small Signal Switching Diodes 1000V,General Purpose Rectifiers': 'Díodos',
             'Single Colour LEDs WL-SMCD SMD Mono SMD 0603 Blue 465nm': 'LEDs',
             'TRANS PNP 100V 3A DPAK': 'Transístores',
@@ -92,6 +103,8 @@ class CartParsingTest(unittest.TestCase):
             'Circular MIL Spec Contacts Connectors, Interconnects > Circular Connectors > Circular Connector Contacts': 'Crimps',
             'MOSFET N-CH 50V 1.5A SOT89-3 Discrete Semiconductor Products > Transistors > FETs, MOSFETs': 'Mosfets',
             'IC EEPROM 8KBIT I2C 1MHZ 8MSOP Integrated Circuits (ICs) > Memory > Memory': 'EEPROM',
+            'LDO Voltage Regulators 3.3V 1A Integrated Circuits (ICs) > Power Management (PMIC) > Voltage Regulators - Linear': 'LDO',
+            'Battery Management 16-Channel Multicell Battery Monitor Integrated Circuits (ICs) > Power Management (PMIC) > Battery Management': '',
             'Something unknown': '',
         }
         for description, category in cases.items():
@@ -137,6 +150,37 @@ class PartsStorageTest(unittest.TestCase):
         self.assertEqual(client.post('/api/parts', json={'mpn': 'stm32f103cbt6', 'category': 'MCUs'}).json['msg'], 'Peça guardada')
         [part] = self.module.db_parts()
         self.assertEqual((part['manufacturer'], part['description'], part['category'], part['price']), ('ST', 'MCU', 'MCUs', None))
+
+    def test_connector_lookup_matches_digikey_spelling_and_finds_the_mating_housing(self):
+        def supplier(url, body=None, headers=None, form=None):
+            if 'oauth2' in url:
+                return {'access_token': 'token', 'expires_in': 599}
+            if url.endswith('/0430451625/associations'):
+                return {'ProductAssociations': {'MatingProducts': [
+                    {'ManufacturerProductNumber': 'SP-1504-18', 'Description': 'SPEAKER 8OHM 1W TOP PORT 93DB'},
+                    {'ManufacturerProductNumber': '0430251608', 'Description': 'CONN RCPT HSG 16POS 3.00MM'}]}}
+            if url.endswith('/0430251608/associations'):
+                return {'ProductAssociations': {'AssociatedProducts': [
+                    {'ManufacturerProductNumber': '0430300009', 'Description': 'CONN SOCKET 20-24AWG CRIMP GOLD'},
+                    {'ManufacturerProductNumber': '0430300007', 'Description': 'CONN SOCKET 20-24AWG CRIMP TIN'}]}}
+            return {'Products': [{'ManufacturerProductNumber': '0430451625', 'Manufacturer': {'Name': 'Molex'},
+                                  'Description': {'ProductDescription': 'CONN HEADER VERT 16POS 3MM'},
+                                  'Category': {'Name': 'Connectors, Interconnects', 'ChildCategories': [{'Name': 'Headers, Male Pins'}]},
+                                  'Parameters': [{'ParameterText': 'Mounting Type', 'ValueText': 'Through Hole'}]}]}
+
+        as_person(self, self.module)
+        self.module.MOUSER_API_KEY, self.module.DIGIKEY_CLIENT_ID, self.module.DIGIKEY_CLIENT_SECRET = '', 'id', 'secret'
+        self.module.DIGIKEY_TOKEN.update(value='', expires=0)
+        lookup = lambda: self.module.app.test_client().get('/api/parts/lookup?mpn=43045-1625').json['part']
+        with patch.object(self.module, 'supplier_json', side_effect=supplier):
+            part = lookup()
+            self.assertEqual((part['mpn'], part['category']), ('43045-1625', 'Conectores'))
+            self.assertEqual((part['props']['Type (SMD/THT/Harness)'], part['props']['Mate P/N (Plug)'], part['props']['Género']), ('THT', '0430251608', 'Macho'))
+            # Sem o crimp no catalogo fica o primeiro estanhado; com ele, o do catalogo, escrito como la esta.
+            self.assertEqual(part['props']['Mate P/N (Crimp)'], '0430300007')
+            self.module.save_parts([{**part, 'mpn': '43030-0009', 'props': {}}])
+            self.module.save_parts([{**part, 'props': {}}])
+            self.assertEqual(lookup()['props']['Mate P/N (Crimp)'], '43030-0009')
 
     def test_lookup_fills_the_catalog_from_mouser_and_digikey(self):
         def supplier(url, body=None, headers=None, form=None):

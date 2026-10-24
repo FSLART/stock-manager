@@ -27,6 +27,8 @@ const routes = {
   savePart: () => ['/api/parts', 'POST'],
   lookupPart: p => [`/api/parts/lookup?mpn=${encodeURIComponent(p.mpn)}`, 'GET'],
   movements: () => ['/api/movements', 'GET'],
+  consumeItems: () => ['/api/items/consume', 'POST'],
+  revertMovements: () => ['/api/movements/revert', 'POST'],
   // PIN (desativado): authPeople: () => ['/api/auth/people', 'GET'],
   // PIN (desativado): login: () => ['/api/auth/login', 'POST'],
   logout: () => ['/api/auth/logout', 'POST'],

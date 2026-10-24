@@ -28,7 +28,7 @@ from contextlib import contextmanager
 # Representa caminhos de ficheiros de forma independente do sistema operativo.
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlencode, urljoin, urlparse
+from urllib.parse import quote, urlencode, urljoin, urlparse
 import urllib.error
 import urllib.request
 
@@ -174,7 +174,9 @@ def init_mysql_schema(connection):
             props LONGTEXT NOT NULL,
             delta BIGINT NOT NULL,
             before_qty BIGINT NOT NULL,
-            after_qty BIGINT NOT NULL
+            after_qty BIGINT NOT NULL,
+            note VARCHAR(255) NOT NULL DEFAULT '',
+            reverts BIGINT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
         # Catalogo de pecas (carrinhos Mouser/DigiKey), separado do stock: preenche o formulario e da o preco.
         """CREATE TABLE IF NOT EXISTS parts (
@@ -209,6 +211,9 @@ def init_mysql_schema(connection):
         connection.execute("ALTER TABLE parts ADD COLUMN datasheet VARCHAR(1000) NOT NULL DEFAULT ''")
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'locations' AND COLUMN_NAME = 'code'").fetchone():
         connection.execute("ALTER TABLE locations ADD COLUMN code VARCHAR(16) NOT NULL DEFAULT ''")
+    if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'movements' AND COLUMN_NAME = 'note'").fetchone():
+        connection.execute("ALTER TABLE movements ADD COLUMN note VARCHAR(255) NOT NULL DEFAULT ''")
+        connection.execute("ALTER TABLE movements ADD COLUMN reverts BIGINT NULL")
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", BASE_DIR / "uploads"))
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
@@ -323,9 +328,9 @@ def record_movements(connection, movements):
         return
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
     connection.executemany(
-        "INSERT INTO movements (ts, person_id, person, type, item_id, cat, props, delta, before_qty, after_qty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO movements (ts, person_id, person, type, item_id, cat, props, delta, before_qty, after_qty, note, reverts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [(ts, g.person["id"], g.person["name"], m["type"], m.get("item_id"), m["cat"],
-          json.dumps(m["props"], ensure_ascii=False), m["delta"], m["before"], m["before"] + m["delta"])
+          json.dumps(m["props"], ensure_ascii=False), m["delta"], m["before"], m["before"] + m["delta"], m.get("note", ""), m.get("reverts"))
          for m in movements],
     )
 
@@ -442,7 +447,9 @@ def init_sqlite_schema(connection):
             props TEXT NOT NULL,
             delta INTEGER NOT NULL,
             before_qty INTEGER NOT NULL,
-            after_qty INTEGER NOT NULL
+            after_qty INTEGER NOT NULL,
+            note TEXT NOT NULL DEFAULT '',
+            reverts INTEGER
         );
         CREATE TABLE IF NOT EXISTS parts (
             mpn TEXT PRIMARY KEY COLLATE NOCASE,
@@ -484,6 +491,9 @@ def init_sqlite_schema(connection):
         connection.execute("ALTER TABLE parts ADD COLUMN datasheet TEXT NOT NULL DEFAULT ''")
     if "code" not in {row["name"] for row in connection.execute("PRAGMA table_info(locations)")}:
         connection.execute("ALTER TABLE locations ADD COLUMN code TEXT NOT NULL DEFAULT ''")
+    if "note" not in {row["name"] for row in connection.execute("PRAGMA table_info(movements)")}:
+        connection.execute("ALTER TABLE movements ADD COLUMN note TEXT NOT NULL DEFAULT ''")
+        connection.execute("ALTER TABLE movements ADD COLUMN reverts INTEGER")
 
 
 def split_sections(connection):
@@ -1430,6 +1440,35 @@ def mover():
         return erro(str(exc), 500)
 
 
+@app.post("/api/items/consume")
+def consumir():
+    # Tira do stock as pecas de uma PCB produzida: tudo ou nada, e cada saida fica com o nome da PCB.
+    data = request.get_json(silent=True) or {}
+    lines, note = data.get("items"), data.get("note")
+    if not isinstance(note, str) or not note.strip() or len(note.strip()) > 255:
+        return erro("Escreve o nome da PCB")
+    if not isinstance(lines, list) or not lines or not all(
+            isinstance(line, dict) and type(line.get("id")) is int and type(line.get("qty")) is int and line["qty"] > 0 for line in lines):
+        return erro("Escolhe os componentes e as quantidades a retirar")
+    try:
+        _, _, _, items = read_items()
+        by_id = {item["id"]: item for item in items}
+        movements = []
+        for line in lines:
+            item = by_id.get(line["id"])
+            if not item:
+                return erro("Item não encontrado", 404)
+            if item["qty"] < line["qty"]:
+                return erro(f"Só há {item['qty']} de {' · '.join(item['props'].values())} em stock")
+            movements.append({"type": "out", "item_id": item["id"], "cat": item["cat"], "props": item["props"],
+                              "delta": -line["qty"], "before": item["qty"], "note": note.strip()})
+            item["qty"] -= line["qty"]
+        save_items(items, movements)
+        return jsonify(msg=f"{sum(line['qty'] for line in lines)} unidade(s) retiradas para {note.strip()}")
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
 @app.post("/api/items/<int:item_id>/step")
 def ajustar(item_id):
     # POST /api/items/<id>/step altera a quantidade de um item ja identificado.
@@ -1676,23 +1715,67 @@ def digikey_token():
 def digikey_lookup(mpn):
     if not (DIGIKEY_CLIENT_ID and DIGIKEY_CLIENT_SECRET):
         return None
-    data = supplier_json("https://api.digikey.com/products/v4/search/keyword", {"Keywords": mpn, "Limit": 10}, {
-        "Authorization": f"Bearer {digikey_token()}", "X-DIGIKEY-Client-Id": DIGIKEY_CLIENT_ID,
-        "X-DIGIKEY-Locale-Site": "PT", "X-DIGIKEY-Locale-Language": "en", "X-DIGIKEY-Locale-Currency": "EUR"})
-    found = next((part for part in [*(data.get("ExactMatches") or []), *(data.get("Products") or [])]
-                  if str(part.get("ManufacturerProductNumber", "")).casefold() == mpn.casefold()), None)
+    headers = {"Authorization": f"Bearer {digikey_token()}", "X-DIGIKEY-Client-Id": DIGIKEY_CLIENT_ID,
+               "X-DIGIKEY-Locale-Site": "PT", "X-DIGIKEY-Locale-Language": "en", "X-DIGIKEY-Locale-Currency": "EUR"}
+    data = supplier_json("https://api.digikey.com/products/v4/search/keyword", {"Keywords": mpn, "Limit": 10}, headers)
+    products = [*(data.get("ExactMatches") or []), *(data.get("Products") or [])]
+    found = next((part for part in products if str(part.get("ManufacturerProductNumber", "")).casefold() == mpn.casefold()), None)
+    exact = found is not None
+    if not found:
+        # A DigiKey escreve alguns P/N de outra forma (Molex 43045-1625 -> 0430451625, JST sem "(LF)(SN)"): fica o P/N lido.
+        found = next((part for part in products if mpn_key(part.get("ManufacturerProductNumber")) == mpn_key(mpn)), None)
     if not found:
         return None
+    description = (found.get("Description") or {}).get("ProductDescription") or ""
+    parameters = {parameter.get("ParameterText"): str(parameter.get("ValueText") or "") for parameter in found.get("Parameters") or []}
+    if str((found.get("Category") or {}).get("Name", "")).startswith("Connectors"):
+        parameters.update(digikey_mates(found["ManufacturerProductNumber"], description, headers))
     # A categoria vem em arvore ("Capacitors" > "Ceramic Capacitors"): guarda o caminho ate a folha.
     path, category = [], found.get("Category") or {}
     while category:
         path.append(category.get("Name") or "")
         category = (category.get("ChildCategories") or [None])[0]
-    return {"supplier": "DigiKey", "mpn": found["ManufacturerProductNumber"], "manufacturer": (found.get("Manufacturer") or {}).get("Name") or "",
-            "description": (found.get("Description") or {}).get("ProductDescription") or "",
+    return {"supplier": "DigiKey", "mpn": found["ManufacturerProductNumber"] if exact else mpn,
+            "manufacturer": (found.get("Manufacturer") or {}).get("Name") or "", "description": description,
             "category": " > ".join(path), "price": found.get("UnitPrice") or None,
-            "datasheet": web_link(found.get("DatasheetUrl")), "image": web_link(found.get("PhotoUrl")),
-            "parameters": {parameter.get("ParameterText"): str(parameter.get("ValueText") or "") for parameter in found.get("Parameters") or []}}
+            "datasheet": web_link(found.get("DatasheetUrl")), "image": web_link(found.get("PhotoUrl")), "parameters": parameters}
+
+
+def mpn_key(text):
+    # P/N sem separadores, zeros a esquerda nem sufixos entre parenteses: 0430451625 == 43045-1625, S2B-XH-A-1(LF)(SN) == S2B-XH-A-1.
+    return re.sub(r"[^0-9a-z]", "", re.sub(r"\(.*?\)", "", str(text).casefold())).lstrip("0")
+
+
+def digikey_associations(product, headers):
+    try:
+        data = supplier_json(f"https://api.digikey.com/products/v4/search/{quote(product, safe='')}/associations", headers=headers)
+    except (OSError, ValueError):
+        return {}   # sem associacoes o resto da pesquisa continua a servir
+    return data.get("ProductAssociations") or {}
+
+
+def digikey_crimp(associations):
+    """Crimp de uma housing: um que ja esta no catalogo (escrito como la esta), senao o primeiro estanhado da DigiKey."""
+    crimps = [(str(part.get("ManufacturerProductNumber")), str(part.get("Description")).upper())
+              for part in associations.get("AssociatedProducts") or [] if "CRIMP" in str(part.get("Description")).upper()]
+    if not crimps:
+        return ""
+    catalog = {mpn_key(part["mpn"]): part["mpn"] for part in db_parts()}
+    return next((catalog[mpn_key(pn)] for pn, _ in crimps if mpn_key(pn) in catalog), "") or \
+        next((pn for pn, text in crimps if "TIN" in text), crimps[0][0])
+
+
+def digikey_mates(product, description, headers):
+    """Num conector: a peca que encaixa (header -> housing, housing -> header) e os crimps da housing."""
+    housing = bool(re.search(r"\bHSG\b|HOUSING", description.upper()))
+    associations = digikey_associations(product, headers)
+    # As associacoes trazem tambem cabos, colunas e fontes: so serve o outro lado do conector.
+    want = "HEADER" if housing else "HSG"
+    mate = next((str(part.get("ManufacturerProductNumber")) for part in associations.get("MatingProducts") or []
+                 if re.search(rf"\b{want}\b", str(part.get("Description")).upper())), "")
+    if housing:
+        return {"Mating Part": mate, "Crimp Part": digikey_crimp(associations)}
+    return {"Mating Part": mate, "Mate Crimp Part": digikey_crimp(digikey_associations(mate, headers)) if mate else ""}
 
 
 @app.get("/api/parts/lookup")
@@ -1911,10 +1994,19 @@ def match_label_text(text, parts):
         label = {"mpn": best[1]["mpn"], "manufacturer": best[1]["manufacturer"] or ""}
     else:
         # Sem catalogo: "FABRICANTE:P/N" como nas etiquetas Comkey.
-        found = re.search(r"\b([A-Za-z][A-Za-z.&]{2,14}):\s*([A-Za-z0-9][A-Za-z0-9\-/.+]{5,})", text)
-        if not found or not re.search(r"\d", found.group(2)) or not re.search(r"[A-Za-z]", found.group(2)):
+        # Os rotulos da propria etiqueta ("Ref. do Fabricante:", "MPN:") nao sao o nome do fabricante.
+        # Nem os distribuidores (o numero deles nao e o P/N do fabricante).
+        labels = {"fabricante", "manufacturer", "mfr", "mpn", "part", "ref", "pn", "referencia", "model", "modelo", "qty", "quantity",
+                  "mouser", "digikey", "farnell", "rs", "lcsc", "tme"}
+        found = next((match for match in re.finditer(r"\b([A-Za-z][A-Za-z.&]{2,14}):\s*([A-Za-z0-9][A-Za-z0-9\-/.+]{5,})", text)
+                      if match.group(1).lower().strip(".") not in labels
+                      and len(ocr_key(match.group(2))) >= 8
+                      and re.search(r"\d", match.group(2)) and re.search(r"[A-Za-z]", match.group(2))), None)
+        if not found:
             return None
-        label = {"mpn": found.group(2).upper(), "manufacturer": found.group(1).title()}
+        # "CPN:" (etiquetas ST) e o rotulo do P/N, nao um fabricante.
+        manufacturer = "" if found.group(1).lower() == "cpn" else found.group(1).title()
+        label = {"mpn": found.group(2).upper(), "manufacturer": manufacturer}
     if qty_match:
         label["qty"] = int(qty_match.group(1))
     return {**label, "ocr": True}
@@ -1981,11 +2073,56 @@ def movimentos():
         with db_connection() as connection:
             # shortcut: so os ultimos 1000 movimentos; paginar quando o historico crescer.
             rows = connection.execute("SELECT * FROM movements ORDER BY id DESC LIMIT 1000").fetchall()
+            reverted = {row["reverts"] for row in connection.execute("SELECT reverts FROM movements WHERE reverts IS NOT NULL")}
         return jsonify(movements=[{
             "id": row["id"], "ts": row["ts"], "person": row["person"], "type": row["type"], "item_id": row["item_id"],
             "cat": row["cat"], "props": json.loads(row["props"]), "delta": row["delta"],
-            "before": row["before_qty"], "after": row["after_qty"],
+            "before": row["before_qty"], "after": row["after_qty"], "note": row["note"], "reverted": row["id"] in reverted,
         } for row in rows])
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.post("/api/movements/revert")
+def reverter_movimentos():
+    # So admins: desfaz a quantidade de cada movimento escolhido, do mais recente para o mais antigo.
+    # Um item apagado volta a existir (sem imagem nem localizacao, que o historico nao guarda).
+    if not g.person["admin"]:
+        return erro("Só um admin pode reverter movimentos", 403)
+    ids = (request.get_json(silent=True) or {}).get("ids")
+    if not isinstance(ids, list) or not ids or not all(type(i) is int for i in ids):
+        return erro("Escolhe os movimentos a reverter")
+    ids = sorted(set(ids), reverse=True)
+    try:
+        init_db()
+        marks = ", ".join("?" * len(ids))
+        with db_connection() as connection:
+            rows = connection.execute(f"SELECT * FROM movements WHERE id IN ({marks}) ORDER BY id DESC", ids).fetchall()
+            done = connection.execute(f"SELECT 1 FROM movements WHERE reverts IN ({marks})", ids).fetchone()
+        if len(rows) != len(ids):
+            return erro("Movimento não encontrado", 404)
+        if done:
+            return erro("Algum dos movimentos escolhidos já foi revertido", 409)
+        _, _, _, items = read_items()
+        movements = []
+        for row in rows:
+            props = json.loads(row["props"])
+            # O item identifica-se pela categoria e propriedades: os ids podem ser reutilizados depois de apagar.
+            item = next((current for current in items if current["cat"] == row["cat"]
+                         and all(norm(current["props"].get(name, "")) == norm(value) for name, value in props.items())), None)
+            before = item["qty"] if item else 0
+            if item:
+                item["qty"] = max(0, before - row["delta"])
+            elif row["delta"] < 0:
+                taken = {current["id"] for current in items}
+                item = {"id": row["item_id"] if row["item_id"] and row["item_id"] not in taken else max(taken, default=0) + 1,
+                        "cat": row["cat"], "props": props, "qty": -row["delta"], "image": "", "location": ""}
+                items.append(item)
+            if item and item["qty"] != before:
+                movements.append({"type": "revert", "item_id": item["id"], "cat": row["cat"], "props": item["props"],
+                                  "delta": item["qty"] - before, "before": before, "note": f"Reverte #{row['id']}", "reverts": row["id"]})
+        save_items(items, movements)
+        return jsonify(msg=f"{len(movements)} movimento(s) revertido(s)")
     except Exception as exc:
         return erro(str(exc), 500)
 

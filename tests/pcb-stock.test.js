@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { matchStock, siValue, stockCheck } from '../frontend/src/pcbStock.js'
+import { matchStock, siValue, stockCheck, stockToTake } from '../frontend/src/pcbStock.js'
 
 const items = [
   { id: 1, cat: 'Resistências', props: { 'P/N': '-', Encapsulamento: '0603', 'Resistência (Ω)': '4.7k' }, qty: 30, location: 'Cx1' },
@@ -56,4 +56,10 @@ it('reads Altium names: the P/N in the name, and lines that group several values
   expect(stockCheck([{ lines: [mixed], count: 1 }], stock)[0]).toMatchObject({ status: 'check', onHand: 54, needed: 5 })
   expect(stockCheck([{ lines: [mixed], count: 5 }], stock)[0].status).toBe('short')
   expect(stockCheck([{ lines: [{ ...mixed, quantity: 4 }], count: 1 }], stock)[0].status).toBe('ok')
+})
+
+it('takes what each BOM line needs from stock and reports what is short', () => {
+  const lines = [line({ reference: 'R1', value: '4k7', footprint: '0603', quantity: 10 }), line({ reference: 'R2', value: '4.7k', footprint: '0603', quantity: 5 }),
+    line({ partNumber: 'GRM188R71H104KA93D', quantity: 3 }), line({ partNumber: 'MCP6542-I/MS' }), line({ partNumber: 'NOPE' })]
+  expect(stockToTake(lines, 2, items)).toEqual({ items: [{ id: 1, qty: 30 }, { id: 3, qty: 4 }], short: ['GRM188R71H104KA93D', 'MCP6542-I/MS', 'NOPE'] })
 })

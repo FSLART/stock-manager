@@ -792,55 +792,6 @@ h2,
 .saved-projects {
   margin-top: 18px;
 }
-.saved-project-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 18px;
-}
-.saved-project {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 28px;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg);
-  color: var(--ink);
-  text-align: left;
-}
-.saved-project:hover {
-  border-color: var(--accent);
-}
-.saved-project > span:first-child {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-.saved-project small {
-  overflow: hidden;
-  color: var(--muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.saved-project-count {
-  color: var(--accent);
-  font:700 24px var(--head);
-}
-.saved-project-delete {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: 7px;
-  color: var(--muted);
-  font-size: 20px;
-}
-.saved-project-delete:hover {
-  background: #b83d2420;
-  color: var(--danger-text);
-}
 .pcb-detail-grid {
   display: grid;
   grid-template-columns: minmax(300px, 0.8fr) minmax(0, 1.5fr);
@@ -902,6 +853,17 @@ h2,
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--bg);
+}
+.movement-list.selecting .movement-row {
+  grid-template-columns: auto 88px minmax(0, 1fr) auto;
+}
+.movement-revert-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
 }
 .movement-badge {
   padding: 5px 8px;
@@ -1150,21 +1112,18 @@ dialog .seg button[aria-pressed=true]{background:var(--accent);color:var(--on-ac
 .board-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px}
 .board-preview{display:block;width:100%;aspect-ratio:4/3;border:0;border-radius:10px;background:var(--bg);pointer-events:none}
 .board-card h2{margin:18px 0 0}
+.harness-page{display:flex;flex-direction:column;height:100vh}
+.harness-frame{flex:1;width:100%;border:0}
 .simulation-frame{display:block;width:100%;height:100vh;border:0}
 a.text-button{display:inline-flex;align-items:center;text-decoration:none}
-.saved-project{min-width:0}
-.saved-project>span:first-child{min-width:0;overflow-wrap:anywhere}
-.saved-project-delete{border:0;background:none;color:var(--muted);font-size:24px}
 
 
 @media(max-width:1000px){.home-nav{gap:20px;flex-wrap:wrap;padding:20px}.main-menu{justify-content:flex-start;flex-basis:100%;gap:12px 24px}.stock-shell{grid-template-columns:280px minmax(0,1fr)}}
 @media(max-width:820px){.stock-shell{display:block}.stock-shell .sidebar{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}.category-nav{flex-direction:row;flex-wrap:wrap}.stock-content{padding:20px 16px}.sidebar .side-btn{align-self:flex-start}.home-brand small{font-size:12px}}
-.saved-project-open{display:flex;align-items:center;justify-content:space-between;gap:16px;flex:1;min-width:0;border:0;background:none;text-align:left;padding:0;color:var(--ink)}
-.saved-project-open>span:first-child{display:grid;gap:4px;min-width:0;overflow-wrap:anywhere}
 .file-dropzone:focus-within{outline:2px solid var(--accent);outline-offset:3px}
 @media(max-width:560px){.main-menu{display:flex;gap:6px 18px}.main-menu .menu-link{font-size:12px}.workspace-card{padding:20px}.card-heading{flex-wrap:wrap}.movement-row{flex-wrap:wrap}.home-carousel{height:420px}.carousel-copy{left:24px;right:24px}.home-content{padding-top:24px}.workspace-header h1{font-size:36px}}
 .card-icon,.file-dropzone-icon{color:var(--on-accent)}
-@media(max-width:560px){.movement-row{grid-template-columns:auto minmax(0,1fr);padding:12px}.movement-quantity{grid-column:2;text-align:left}.movement-main{overflow-wrap:anywhere}}
+@media(max-width:560px){.movement-row{grid-template-columns:auto minmax(0,1fr);padding:12px}.movement-quantity{grid-column:2;text-align:left}.movement-main{overflow-wrap:anywhere}.movement-list.selecting .movement-row{grid-template-columns:auto auto minmax(0,1fr)}.movement-list.selecting .movement-quantity{grid-column:3}}
 
 /* Secondary actions share the dark theme instead of browser button defaults. */
 .text-button {
@@ -1570,10 +1529,26 @@ summary.bom-line:focus-visible{outline-offset:-2px}
 .step-viewer-loading .step-viewer-idle .hint{color:var(--ink)}
 .step-viewer-close{position:absolute;top:10px;right:10px;background:var(--panel)}
 .pcb-step-meta{display:grid;gap:10px}
+/* Projetos como cartões com a foto da placa, à maneira do Altium 365. */
+.saved-project-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:18px}
+.saved-project{display:grid;align-content:start;gap:12px;min-width:0;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.saved-project:hover{border-color:var(--line-strong)}
+.saved-project.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.saved-project-open{display:grid;gap:12px;min-width:0;padding:0;border:0;background:none;text-align:left;color:var(--ink);cursor:pointer}
+.saved-project-open:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:8px}
+.saved-project-thumb{display:grid;place-items:center;aspect-ratio:4/3;border-radius:8px;background:var(--side);overflow:hidden}
+.saved-project-thumb img{width:100%;height:100%;object-fit:contain}
+.saved-project-open>span:last-child{display:grid;gap:3px;min-width:0;overflow-wrap:anywhere}
+.saved-project small{color:var(--muted)}
+.saved-project-foot{display:flex;align-items:end;justify-content:space-between;gap:8px}
+.saved-project-delete{display:grid;width:28px;height:28px;place-items:center;border:0;border-radius:7px;background:none;color:var(--muted);font-size:20px}
+.saved-project-delete:hover{background:#b83d2420;color:var(--danger-text)}
+.pcb-image{width:100%;border:1px solid var(--line);border-radius:12px;background:var(--side)}
 .pcb-step-meta>strong{overflow-wrap:anywhere}
 .pcb-step-meta small{color:var(--muted)}
 .pcb-step-meta b{color:var(--ink)}
 .pcb-step-actions{display:flex;flex-wrap:wrap;gap:8px}
+.pcb-step-actions small{align-self:center;color:var(--muted)}
 .pcb-step-actions label.text-button,.location-actions label.text-button{cursor:pointer}
 .pcb-step-actions label.text-button:focus-within,.location-actions label.text-button:focus-within{outline:2px solid var(--accent);outline-offset:2px}
 @media(max-width:820px){.pcb-step-panel{position:static}}
