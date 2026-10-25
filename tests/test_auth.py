@@ -79,6 +79,11 @@ class AuthTest(unittest.TestCase):
         self.assertEqual(self.client.delete('/api/categories/LEDs').status_code, 403)
         self.assertEqual(self.client.post('/api/categories', json={'name': 'Novos', 'props': ['x']}).status_code, 403)
         self.assertEqual(self.client.post('/api/move', json=cable).status_code, 200)
+        # Etiquetas seguem a regra do stock eletronico; /api/auth/me diz ao site da cablagem quem tem sessao.
+        self.assertEqual(self.client.post('/api/labels', json={'title': 'A1', 'width': 55, 'height': 25}).status_code, 403)
+        self.assertEqual(self.client.delete('/api/labels', json={'ids': [1]}).status_code, 403)
+        self.assertIsNotNone(self.client.get('/api/auth/me').json['user'])
+        self.assertIsNone(self.module.app.test_client().get('/api/auth/me').json['user'])
         # Nao encontrado (ou ambiguo) no Notion: fica como estava.
         self.notion_login(self.client, 'notion-rui', name='Rui Costa', members=[('Rui Sá Costa', ['Electronics']), ('Rui Lopes Costa', ['Board'])])
         self.assertEqual(self.client.post('/api/move', json=led).status_code, 403)

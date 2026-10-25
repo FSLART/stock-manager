@@ -69,3 +69,33 @@ class LabelsTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class PcbProjectsTest(unittest.TestCase):
+    # Os projetos PCB guardam-se como as etiquetas (JSON por linha), por isso partilham o setUp.
+    setUp = LabelsTest.setUp
+
+    def projects(self):
+        return self.client.get('/api/pcb-projects').get_json()['projects']
+
+    def test_projects_are_shared_and_upserted_by_browser_id(self):
+        line = {'reference': 'R1', 'value': '10k', 'description': '—', 'footprint': '0603', 'partNumber': '—', 'quantity': 2, 'extra': 1}
+        old = {'id': 'a-1', 'name': 'Motor', 'fileName': 'motor.csv', 'items': [line], 'createdAt': '2026-01-01T00:00:00Z', 'html': '<b>'}
+        new = {'id': 'b-2', 'name': 'BMS', 'fileName': 'bms.csv', 'items': [], 'createdAt': '2026-02-01T00:00:00Z', 'step': {'name': 'bms.step', 'url': '/uploads/x.step'}}
+        self.assertEqual(self.client.post('/api/pcb-projects', json={'projects': [old, new]}).status_code, 200)
+        self.assertEqual([project['name'] for project in self.projects()], ['BMS', 'Motor'])
+        self.assertEqual(self.projects()[1]['items'], [{k: v for k, v in line.items() if k != 'extra'}])
+        self.assertNotIn('html', self.projects()[1])
+        # O mesmo id substitui (migrar duas vezes do mesmo browser nao duplica).
+        self.assertEqual(self.client.post('/api/pcb-projects', json={'projects': [{**old, 'name': 'Motor V2'}]}).status_code, 200)
+        self.assertEqual([project['name'] for project in self.projects()], ['BMS', 'Motor V2'])
+        self.assertEqual(self.client.delete('/api/pcb-projects/a-1').status_code, 200)
+        self.assertEqual([project['id'] for project in self.projects()], ['b-2'])
+
+    def test_rejects_invalid_projects(self):
+        valid = {'id': 'p1', 'name': 'Placa', 'items': []}
+        for bad in ({**valid, 'id': '../x'}, {**valid, 'items': 'R1'}, {**valid, 'items': [{'quantity': -1}]},
+                    {**valid, 'step': {'url': 'javascript:alert(1)'}}, {**valid, 'image': 'javascript:x'}, {**valid, 'name': ''}):
+            self.assertEqual(self.client.post('/api/pcb-projects', json={'projects': [bad]}).status_code, 400, bad)
+        self.assertEqual(self.client.post('/api/pcb-projects', json={'projects': []}).status_code, 400)
+        self.assertEqual(self.projects(), [])

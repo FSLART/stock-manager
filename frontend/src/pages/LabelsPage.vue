@@ -8,6 +8,8 @@ import { ICON_GROUPS, iconFor } from '../labelIcons.js'
 import { useInventoryContext } from '../composables/useInventoryContext.js'
 const inventory = useInventoryContext()
 const tutorial = ref(null)
+// Só Electronics (ou um admin) cria e muda etiquetas; os outros veem e imprimem.
+const canChange = computed(() => inventory.canEdit && inventory.electronicsEditor)
 
 // Etiquetas em dois formatos: gaveta (código 2D à esquerda, título e campos à direita) e caixa (ícones em cima e texto
 // centrado, como as etiquetas Gridfinity). Ficam no servidor, partilhadas pela equipa. Edita-se uma cópia (label) e só "Guardar" a envia.
@@ -27,6 +29,7 @@ const label = ref(null)
 const saved = computed(() => labels.value.find(entry => entry.id === label.value?.id))
 const dirty = computed(() => Boolean(label.value) && JSON.stringify(label.value) !== JSON.stringify(saved.value ?? null))
 const select = entry => { label.value = entry ? copy(entry) : null }
+watch(canChange, ok => { if (!ok) label.value = null })
 // Sem etiqueta aberta (label null) a página mostra a lista; volta a ela depois de guardar ou se a etiqueta aberta foi apagada.
 watch(labels, () => { if (label.value?.id != null && !saved.value) label.value = null })
 
@@ -153,14 +156,14 @@ async function print(entries) {
       <div class="card-heading">
         <div><span class="card-icon">▤</span><h2>Etiquetas da equipa</h2></div>
         <div class="label-heading-actions">
-          <button type="button" class="text-button tutorial-button" @click="tutorial.open()"><span aria-hidden="true">?</span> Tutorial</button>
+          <button v-if="canChange" type="button" class="text-button tutorial-button" @click="tutorial.open()"><span aria-hidden="true">?</span> Tutorial</button>
           <span class="status-pill">{{ labels.length }} etiqueta(s)</span>
         </div>
       </div>
       <div class="drawer-label-bar">
         <button v-if="label" type="button" class="text-button" @click="back">← Todas as etiquetas</button>
         <div class="location-actions">
-          <div class="location-actions" role="group" aria-label="Nova etiqueta">
+          <div v-if="canChange" class="location-actions" role="group" aria-label="Nova etiqueta">
             <button v-for="[name, template] in templates" :key="name" class="text-button" @click="add(blank(template))">+ {{ name }}</button>
           </div>
           <button v-if="!label" class="text-button" :disabled="!labels.length" @click="print(labels)">Imprimir todas ({{ labels.length }})</button>
@@ -174,20 +177,21 @@ async function print(entries) {
           <button type="button" class="toggle-chip" :aria-pressed="allPicked" @click="picked = new Set(allPicked ? [] : labels.map(entry => entry.id))">Selecionar todas</button>
           <template v-if="picked.size">
             <button type="button" class="text-button" @click="print(pickedLabels)">Imprimir selecionadas ({{ picked.size }})</button>
-            <button v-if="inventory.canEdit" type="button" class="text-button danger" @click="removePicked">Apagar selecionadas ({{ picked.size }})</button>
+            <button v-if="canChange" type="button" class="text-button danger" @click="removePicked">Apagar selecionadas ({{ picked.size }})</button>
             <button type="button" class="text-button" @click="picked = new Set()">Limpar seleção</button>
           </template>
         </div>
         <ul v-if="labels.length" class="label-list">
           <li v-for="entry in labels" :key="entry.id" class="label-card" :class="{ picked: picked.has(entry.id) }">
             <!-- A miniatura também abre a etiqueta; para o teclado e leitores de ecrã é o botão do título. -->
-            <div class="label-card-preview" aria-hidden="true" @click="open(entry)">
+            <div class="label-card-preview" aria-hidden="true" :style="canChange ? null : { cursor: 'default' }" @click="canChange && open(entry)">
               <div :style="{ zoom: fit(entry) }"><DrawerLabel :label="entry" :code="listSvgs[entry.id] || ''" /></div>
             </div>
-            <button type="button" class="label-card-title" @click="open(entry)">{{ entry.title || 'Sem título' }}</button>
+            <button v-if="canChange" type="button" class="label-card-title" @click="open(entry)">{{ entry.title || 'Sem título' }}</button>
+            <strong v-else class="label-card-title">{{ entry.title || 'Sem título' }}</strong>
             <span class="sub">{{ entry.width }} × {{ entry.height }} mm · {{ entry.layout === 'bin' ? 'caixa' : 'gaveta' }}</span>
             <div class="location-actions">
-              <button class="text-button" @click="open(entry)">Editar</button>
+              <button v-if="canChange" class="text-button" @click="open(entry)">Editar</button>
               <button class="text-button" @click="print([entry])">Imprimir</button>
               <button type="button" class="toggle-chip" :aria-pressed="picked.has(entry.id)" :aria-label="`Selecionar ${entry.title || 'Sem título'}`" @click="togglePick(entry.id)">{{ picked.has(entry.id) ? '✓ Selecionada' : 'Selecionar' }}</button>
             </div>
@@ -267,7 +271,7 @@ async function print(entries) {
           </div>
           <p v-if="dirty" class="hint" role="status">{{ label.id == null ? 'Etiqueta nova, ainda não guardada.' : 'Alterações por guardar.' }}</p>
           <div class="location-actions">
-            <button v-if="inventory.canEdit" class="primary" :disabled="!dirty || (many && !titleLines.length)" @click="save">{{ many ? `Guardar ${titleLines.length}` : 'Guardar' }}</button>
+            <button v-if="canChange" class="primary" :disabled="!dirty || (many && !titleLines.length)" @click="save">{{ many ? `Guardar ${titleLines.length}` : 'Guardar' }}</button>
             <button class="text-button" :disabled="!drafts.length" @click="print(drafts)">{{ many ? `Imprimir ${drafts.length}` : 'Imprimir' }}</button>
             <button class="text-button" @click="add(label)">Duplicar</button>
             <button class="text-button danger" @click="remove">Apagar</button>

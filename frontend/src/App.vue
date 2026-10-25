@@ -51,6 +51,11 @@ const normalize = value => String(value).toLowerCase().replace(/\s+/g, '')
 const propertyFilters = ref({}), filterSearch = ref({}), stockFilter = ref(''), imageFilter = ref(''), locationFilter = ref('')
 const filtersOpen = ref(false), sortKey = ref(''), sortDirection = ref(1)
 const sectionOf = computed(() => Object.fromEntries(categories.value.map(c => [c.name, c.section])))
+// Igual a electronics_denied no Flask: só Electronics (ou um admin) mexe no stock eletrónico; categoria desconhecida conta como eletrónica.
+const signedIn = computed(() => !auth.enabled || Boolean(auth.user))
+const electronicsEditor = computed(() => !auth.enabled || Boolean(auth.user?.admin || auth.user?.department?.split(', ').includes('Electronics')))
+const mayChange = cat => signedIn.value && (electronicsEditor.value || (sectionOf.value[cat] ?? 'Componentes eletrónicos') !== 'Componentes eletrónicos')
+const editableCategories = computed(() => categories.value.filter(c => mayChange(c.name)))
 // Subcategorias: uma categoria mostra o seu stock e o de todas as que estão dentro dela.
 const childrenOf = computed(() => {
   const names = new Set(categories.value.map(c => c.name)), map = new Map()
@@ -157,9 +162,10 @@ const locked = computed(() => busy.value || queues.size > 0)
 const locations = computed(() => [...new Set([...items.value.map(item => item.location), ...Object.keys(locationImages.value)].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true })))
 const selected = ref(new Set()), locationName = ref('')
 let lastPicked = null
-const allShownSelected = computed(() => shown.value.length > 0 && shown.value.every(item => selected.value.has(item.id)))
+const selectable = computed(() => shown.value.filter(item => mayChange(item.cat)))
+const allShownSelected = computed(() => selectable.value.length > 0 && selectable.value.every(item => selected.value.has(item.id)))
 function pick(item, shift) {
-  const on = !selected.value.has(item.id), list = shown.value
+  const on = !selected.value.has(item.id), list = selectable.value
   const from = list.findIndex(entry => entry.id === lastPicked), to = list.indexOf(item)
   // Shift+clique marca (ou desmarca) tudo entre o último clicado e este.
   for (const entry of shift && from >= 0 ? list.slice(Math.min(from, to), Math.max(from, to) + 1) : [item]) {
@@ -169,7 +175,7 @@ function pick(item, shift) {
 }
 function toggleShown() {
   const on = !allShownSelected.value
-  for (const item of shown.value) { if (on) selected.value.add(item.id); else selected.value.delete(item.id) }
+  for (const item of selectable.value) { if (on) selected.value.add(item.id); else selected.value.delete(item.id) }
 }
 // P/N únicos dos selecionados; "-" é a convenção para "sem P/N".
 const selectedPartNumbers = computed(() => [...new Map(items.value.filter(item => selected.value.has(item.id))
@@ -232,6 +238,10 @@ provide('inventory', reactive({
   codes: computed(() => locationCodes.value),
   labels: computed(() => labels.value),
   canEdit: computed(() => canEdit.value),
+  electronicsEditor,
+  signedIn,
+  // A sessão só se sabe depois do primeiro load(); até lá signedIn ainda não é fiável.
+  ready: computed(() => !loading.value),
   editLocation: guard(async ({ file, ...payload }, done) => {
     if (file) {
       try { payload.image = await api.uploadImage(file) } catch (error) { return toast(error.message, true) }
@@ -454,7 +464,7 @@ onUnmounted(() => {
   <aside class="sidebar">
     <!-- O fundo da barra vai até ao fim da página; o conteúdo fica fixo no topo enquanto a lista desce. -->
     <div class="sidebar-inner">
-    <div class="sidebar-heading"><h2>Categorias</h2><button class="new-category" aria-label="Nova categoria" :disabled="locked" @click="guarded.openCategory()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nova</button></div>
+    <div class="sidebar-heading"><h2>Categorias</h2><button v-if="signedIn" class="new-category" aria-label="Nova categoria" :disabled="locked" @click="guarded.openCategory()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nova</button></div>
     <nav class="category-nav" aria-label="Categorias" tabindex="-1">
       <div class="cat-row"><button :aria-current="!current && !section" @click="current = null; section = null">Tudo <span class="n">{{ total() }}</span></button></div>
       <template v-for="group in sections" :key="group.name">
@@ -462,8 +472,10 @@ onUnmounted(() => {
       <div v-for="category in group.categories" :key="category.name" class="cat-row">
         <button :aria-current="current === category.name" :style="{ '--depth': category.depth }" @click="current = category.name; section = null"><span><i class="dot" :style="{ background: color(category.name) }"></i>{{ category.name }}</span><span class="n">{{ total(category.name) }}</span></button>
         <!-- Um só botão discreto por categoria; apagar fica dentro do formulário de edição. -->
+        <template v-if="mayChange(category.name)">
         <button v-if="canEdit" class="cat-edit" :aria-label="`Editar categoria ${category.name}`" title="Editar categoria" :disabled="locked" @click="guarded.openCategory(category)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg></button>
         <button v-else class="cat-del" :aria-label="`Apagar categoria ${category.name}`" title="Apagar categoria" :disabled="locked" @click="guarded.deleteCategory(category)">✕</button>
+        </template>
       </div>
       </template>
       <label v-if="emptyCount" class="show-empty"><input v-model="showEmpty" type="checkbox"> Mostrar vazias ({{ emptyCount }})</label>
@@ -477,10 +489,12 @@ onUnmounted(() => {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input v-model="query" type="search" aria-label="Pesquisar componentes" placeholder="Pesquisar componentes…" autocomplete="off">
       </div>
-      <button class="text-button tutorial-button" @click="inventoryTutorial.open()"><span aria-hidden="true">?</span> Tutorial</button>
-      <button v-if="canEdit" class="text-button import-csv-button" aria-label="Importar CSV" :disabled="locked || !categories.length" @click="guarded.importCsv()">Importar CSV</button>
-      <button class="text-button" :disabled="locked || !categories.length" @click="guarded.scanLabel()">Ler etiqueta</button>
-      <button class="primary" :disabled="locked || !categories.length" @click="guarded.openMovement()">Adicionar</button>
+      <button v-if="signedIn" class="text-button tutorial-button" @click="inventoryTutorial.open()"><span aria-hidden="true">?</span> Tutorial</button>
+      <template v-if="editableCategories.length">
+      <button v-if="canEdit" class="text-button import-csv-button" aria-label="Importar CSV" :disabled="locked" @click="guarded.importCsv()">Importar CSV</button>
+      <button class="text-button" :disabled="locked" @click="guarded.scanLabel()">Ler etiqueta</button>
+      <button class="primary" :disabled="locked" @click="guarded.openMovement()">Adicionar</button>
+      </template>
     </div>
     <section class="filter-section" :class="{ open: filtersOpen || activeFilters }" aria-label="Filtros de componentes">
       <div class="filter-toolbar">
@@ -521,7 +535,7 @@ onUnmounted(() => {
       <label>Ordenar por
         <select v-model="sortChoice"><option value="">Ordem original</option><option v-for="column in columns" :key="column.key" :value="column.key">{{ column.label }}</option></select>
       </label>
-      <label v-if="canEdit && shown.length" class="select-shown"><input type="checkbox" :checked="allShownSelected" @change="toggleShown"> Todos</label>
+      <label v-if="canEdit && selectable.length" class="select-shown"><input type="checkbox" :checked="allShownSelected" @change="toggleShown"> Todos</label>
       <button class="text-button" :disabled="!sortKey" :aria-label="sortDirection === 1 ? 'Ordem crescente, inverter' : 'Ordem decrescente, inverter'" @click="sortDirection = -sortDirection">{{ sortDirection === 1 ? '↑' : '↓' }}</button>
     </div>
     <div class="list" :aria-busy="loading">
@@ -530,14 +544,14 @@ onUnmounted(() => {
         <table class="stock-table">
           <caption class="sr-only">Stock de componentes</caption>
           <thead><tr>
-            <th v-if="canEdit" scope="col" class="select-cell"><input type="checkbox" :aria-label="allShownSelected ? 'Desmarcar todos os mostrados' : 'Selecionar todos os mostrados'" :checked="allShownSelected" :disabled="!shown.length" @change="toggleShown"></th>
+            <th v-if="canEdit && selectable.length" scope="col" class="select-cell"><input type="checkbox" :aria-label="allShownSelected ? 'Desmarcar todos os mostrados' : 'Selecionar todos os mostrados'" :checked="allShownSelected" :disabled="!selectable.length" @change="toggleShown"></th>
             <th scope="col" class="image-column">Imagem</th>
             <th v-for="column in columns" :key="column.key" scope="col" :aria-sort="sortKey === column.key ? (sortDirection === 1 ? 'ascending' : 'descending') : 'none'">
               <button :aria-label="`Ordenar por ${column.label}`" @click="sortBy(column.key)">{{ column.label }} <span aria-hidden="true">{{ sortKey === column.key ? (sortDirection === 1 ? '↑' : '↓') : '↕' }}</span></button>
             </th>
-            <th scope="col">Ações</th>
+            <th v-if="selectable.length" scope="col">Ações</th>
           </tr></thead>
-          <tbody><StockItem v-for="item in shown" :key="item.id" :item="item" :price="priceOf(item)" :property-keys="showCategory ? [] : propertyKeys" :show-category="showCategory" :busy="busy" :locked="locked" :can-edit="canEdit" :selected="selected.has(item.id)" @select="shift => pick(item, shift)" @edit="guarded.editItem(item)" @step="delta => guarded.step(item, delta)" @delete="guarded.deleteItem(item)" /></tbody>
+          <tbody><StockItem v-for="item in shown" :key="item.id" :item="item" :price="priceOf(item)" :property-keys="showCategory ? [] : propertyKeys" :show-category="showCategory" :busy="busy" :locked="locked" :can-edit="canEdit && selectable.length > 0" :can-change="mayChange(item.cat)" :actions="selectable.length > 0" :selected="selected.has(item.id)" @select="shift => pick(item, shift)" @edit="guarded.editItem(item)" @step="delta => guarded.step(item, delta)" @delete="guarded.deleteItem(item)" /></tbody>
         </table>
         <div v-if="!shown.length" class="empty"><b>Nada encontrado.</b><br>Tenta outra pesquisa ou adiciona um item novo.</div>
       </template>
@@ -545,9 +559,9 @@ onUnmounted(() => {
   </main>
   </div>
   </div>
-  <StockMovement ref="movement" :categories="categories" :items="items" :parts="parts" :busy="busy" :error="formError" @submit="submitMovement" @clear-error="formError = ''" @part="updatePart" />
+  <StockMovement ref="movement" :categories="editableCategories" :items="items" :parts="parts" :busy="busy" :error="formError" @submit="submitMovement" @clear-error="formError = ''" @part="updatePart" />
   <CategoryForm ref="categoryForm" :categories="categories" :busy="busy" :error="categoryError" @submit="submitCategory" @delete="deleteFromForm" />
-  <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
+  <InventoryCsvImport ref="csvImport" :categories="editableCategories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
   <LoginDialog ref="loginDialog" @login="user => { auth.user = user; toast(`Sessão iniciada: ${user.name}`) }" />
   <PartsCatalog v-if="parts.length" ref="partsCatalog" :parts="parts" :items="items" :categories="categories" :busy="busy" :error="partError" @save="guarded.savePart" @clear-error="partError = ''" />
   <InventoryTutorial ref="inventoryTutorial" />

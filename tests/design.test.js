@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import App from '../frontend/src/App.vue'
+import { pcbServer } from './pcb-server.js'
 
 let wrapper
 const data = { can_edit: true, categories: [{ name: 'LEDs', props: ['cor'], image: false }], items: [{ id: 1, cat: 'LEDs', props: { cor: 'azul' }, qty: 3, image: '' }] }
@@ -29,6 +30,7 @@ it('opens the reference home and navigates all six pages without losing backend 
   expect(fetch.mock.calls.filter(([url]) => url === '/api/data')).toHaveLength(1)
 })
 it('imports a quoted BOM, persists it and reopens it after mounting again', async () => {
+  const server = pcbServer()
   wrapper = mount(App)
   await flushPromises()
   await open('PCB e os seus BOMs')
@@ -39,9 +41,11 @@ it('imports a quoted BOM, persists it and reopens it after mounting again', asyn
   await input.trigger('change')
   await flushPromises()
   await wrapper.find('.card-heading .primary-button').trigger('click')
+  await flushPromises()
   expect(wrapper.find('.pcb-project-detail .bom-lines').text()).toContain('RC10K')
   expect(wrapper.find('.pcb-project-detail .bom-lines').text()).toContain('Resistor, precision')
   expect(wrapper.find('.pcb-project-detail .bom-line-qty').text()).toBe('0 / 2')
+  expect(server.map(project => project.name)).toEqual(['Motor V1'])
   wrapper.unmount()
   wrapper = mount(App)
   await flushPromises()
@@ -79,6 +83,8 @@ it('checks BOM lines against stock, totals a build list and keeps the STEP model
   fetch.mockImplementation(async url => url === '/api/pcb-step'
     ? { ok: true, status: 200, json: async () => ({ url: '/uploads/abc.step' }) }
     : { ok: true, json: async () => structuredClone(stock) })
+  const server = pcbServer()
+  // Projeto de antes de irem para o servidor: sobe ao abrir a página com sessão e sai do browser.
   localStorage.setItem('stocklart-pcb-projects', JSON.stringify([{ id: 'p1', name: 'Motor', fileName: 'motor.csv', createdAt: '', items: [
     { reference: 'R1,R2', value: '10k', description: '—', footprint: 'R_0603', partNumber: '—', quantity: 2 },
     { reference: 'U1', value: 'Componente sem valor', description: '—', footprint: '—', partNumber: 'NE555', quantity: 1 },
@@ -86,6 +92,8 @@ it('checks BOM lines against stock, totals a build list and keeps the STEP model
   wrapper = mount(App)
   await flushPromises()
   await open('PCB e os seus BOMs')
+  expect(server.map(project => project.id)).toEqual(['p1'])
+  expect(JSON.parse(localStorage.getItem('stocklart-pcb-projects'))).toEqual([])
   await wrapper.find('.saved-project-open').trigger('click')
   expect(wrapper.findAll('.pcb-project-detail .bom-lines .stock-status').map(pill => pill.text())).toEqual(['OK', 'Em falta'])
   await wrapper.find('input[aria-label="Placas a produzir de Motor"]').setValue(3)
@@ -102,9 +110,10 @@ it('checks BOM lines against stock, totals a build list and keeps the STEP model
   await step.trigger('change')
   await flushPromises()
   expect(wrapper.find('a[download="motor.step"]').attributes('href')).toBe('/uploads/abc.step')
-  expect(JSON.parse(localStorage.getItem('stocklart-pcb-projects'))[0].step).toEqual({ name: 'motor.step', url: '/uploads/abc.step' })
+  expect(server[0].step).toEqual({ name: 'motor.step', url: '/uploads/abc.step' })
 })
-it('keeps an invalid BOM from being saved and reports browser storage failures', async () => {
+it('keeps an invalid BOM from being saved and reports server failures', async () => {
+  pcbServer()
   wrapper = mount(App)
   await flushPromises()
   await open('PCB e os seus BOMs')
@@ -117,11 +126,11 @@ it('keeps an invalid BOM from being saved and reports browser storage failures',
   Object.defineProperty(input.element, 'files', { configurable: true, value: [{ name: 'ok.csv', text: async () => 'Reference,Value,Qty\nR1,10k,1' }] })
   await input.trigger('change')
   await flushPromises()
-  const storage = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Quota exceeded') })
+  fetch.mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'Base de dados indisponível' }) })
   await wrapper.find('.card-heading .primary-button').trigger('click')
-  expect(wrapper.find('[role=alert]').text()).toContain('Não foi possível guardar')
+  await flushPromises()
+  expect(wrapper.find('[role=alert]').text()).toContain('Base de dados indisponível')
   expect(wrapper.find('.saved-project').exists()).toBe(false)
-  storage.mockRestore()
 })
 it('supports bookmarked pages and hash back navigation', async () => {
   window.history.replaceState(null, '', '/#/pcbs')
@@ -157,24 +166,39 @@ it('shows the movement history stored on the server with who made each change', 
   await wrapper.find('input[aria-label="Pesquisar movimentos"]').setValue('rui')
   expect(wrapper.find('.movement-row').exists()).toBe(false)
 })
-it('asks for a Notion login before the first stock change', async () => {
-  vi.useFakeTimers()
+it('hides electronics stock changes until someone from Electronics signs in', async () => {
   const signedOut = { ...structuredClone(data), auth: true, user: null, notion_login: true }
   fetch.mockImplementation(async url => ({ ok: true, json: async () => url === '/api/data' ? structuredClone(signedOut) : { msg: 'ok' } }))
   wrapper = mount(App)
   await flushPromises()
   await open('Inventário')
   expect(wrapper.find('.session-box').text()).toBe('Entrar')
-  await wrapper.find('button[aria-label="Adicionar 1"]').trigger('click')
-  await flushPromises()
+  for (const selector of ['button[aria-label="Adicionar 1"]', 'tbody .del', 'tbody .edit', '.top .primary', 'tbody input[type=checkbox]', '.new-category', '.stock-content .tutorial-button', '.actions-cell']) expect(wrapper.find(selector).exists()).toBe(false)
+  expect(wrapper.find('thead').text()).not.toContain('Ações')
+  await wrapper.find('.session-box button').trigger('click')
   const login = wrapper.find('dialog[aria-labelledby="login-title"]')
   expect(login.element.open).toBe(true)
   expect(login.find('a.notion-login').attributes('href')).toBe('/api/auth/notion')
   expect(login.find('input[type=password]').exists()).toBe(false)
-  await vi.advanceTimersByTimeAsync(151)
-  expect(fetch.mock.calls.some(([url]) => url === '/api/items/1/step')).toBe(false)
   await login.find('button.ghost').trigger('click')
   expect(login.element.open).toBe(false)
+  await open('PCB e os seus BOMs')
+  expect(wrapper.text()).not.toContain('Novo projeto PCB')
+  expect(wrapper.text()).toContain('Inicia sessão para criar um.')
+  wrapper.unmount()
+  signedOut.user = { id: 1, name: 'Ana', admin: false, department: 'Powertrain' }
+  wrapper = mount(App)
+  await flushPromises()
+  await open('Inventário')
+  expect(wrapper.find('button[aria-label="Adicionar 1"]').exists()).toBe(false)
+  wrapper.unmount()
+  signedOut.user.department = 'Powertrain, Electronics'
+  wrapper = mount(App)
+  await flushPromises()
+  await open('Inventário')
+  expect(wrapper.find('button[aria-label="Adicionar 1"]').exists()).toBe(true)
+  expect(wrapper.find('tbody .del').exists()).toBe(true)
+  expect(wrapper.find('thead').text()).toContain('Ações')
 })
 it('previews a CSV before importing its components through the backend', async () => {
   wrapper = mount(App)

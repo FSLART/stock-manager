@@ -62,6 +62,11 @@ export default function App() {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [progress, setProgress] = useState('')
+  // Mudar coordenadas pede sessão no Stocklart (mesmo domínio); sem resposta conta como sem sessão.
+  const [signedIn, setSignedIn] = useState(false)
+  useEffect(() => {
+    fetch('/api/auth/me').then((r) => (r.ok ? r.json() : {})).then((d) => setSignedIn(Boolean(d.user)), () => {})
+  }, [])
 
   useEffect(() => {
     load(setProgress).then(setData, (e) => setError(`Não consegui carregar os harnesses: ${e.message}`))
@@ -81,7 +86,7 @@ export default function App() {
   else if (page === 'bom') body = <BomPage data={data} code={a} />
   else if (page === 'diagram') body = <DiagramPage data={data} code={a} refName={b} />
   else if (page === 'formboard') body = <FormboardPage key={a} data={data} code={a} refName={b} />
-  else if (page === '3d' || page === 'pick') body = <Suspense fallback={<Loader size="sm" mt="xl" />}><Viewer3D key={page} data={data} mode={a} code={b} id={c} pickPage={page === 'pick'} /></Suspense>
+  else if (page === '3d' || page === 'pick') body = <Suspense fallback={<Loader size="sm" mt="xl" />}><Viewer3D key={page + signedIn} data={data} mode={a} code={b} id={c} pickPage={page === 'pick' && signedIn} canPick={signedIn} /></Suspense>
   else body = <CarOverview data={data} />
 
   return (
@@ -92,7 +97,7 @@ export default function App() {
             LART <Text span c="dimmed">harness</Text>
           </Anchor>
           <Group gap="md" component="nav" aria-label="Secções" wrap="wrap">
-            {NAV.map(([id, label]) => (
+            {NAV.filter(([id]) => id !== 'pick' || signedIn).map(([id, label]) => (
               <Anchor key={id} href={href(id)} size="sm" underline="never" c={active === id ? 'white' : 'dimmed'} fw={active === id ? 600 : 400}
                 aria-current={active === id ? 'page' : undefined}>
                 {label}

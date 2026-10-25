@@ -962,6 +962,7 @@ h2,
   color: var(--muted);
   font-size: 16px;
   font-weight: 700;
+  white-space: nowrap;
 }
 .home-button:hover {
   border-color: var(--accent);
@@ -1475,6 +1476,7 @@ a.notion-login{display:inline-flex;align-items:center;text-decoration:none}
 .new-image{display:flex;align-items:center;gap:12px}
 .new-image .item-image{width:64px;height:64px}
 /* Localização: seleção por caixas, barra para mover os selecionados de uma vez. */
+.stock-table .qty-cell{width:1%}
 .stock-table .select-cell{width:36px;padding-right:0;text-align:center}
 .stock-table .select-cell input,.select-shown input{width:18px;height:18px;accent-color:var(--accent)}
 .stock-table .row.selected td{background:color-mix(in srgb,var(--accent) 8%,transparent)}
@@ -1676,7 +1678,7 @@ div.location-image{background:var(--bg);border:1px dashed var(--line-strong)}
 .label-card-preview{display:grid;place-items:center;height:120px;overflow:hidden;border-radius:10px;background:var(--bg);cursor:pointer}
 .label-card-preview .drawer-label{border-radius:1mm;box-shadow:0 1mm 3mm #0008}
 .label-card-title{align-self:start;max-width:100%;padding:0;border:0;background:none;color:var(--ink);font:inherit;font-weight:700;text-align:left;overflow-wrap:anywhere}
-.label-card-title:hover{color:var(--accent)}
+button.label-card-title:hover{color:var(--accent)}
 /* Várias de uma vez: todas as etiquetas, umas por baixo das outras, um pouco menores. */
 .drawer-label-preview.many{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:14px;max-height:480px}
 .drawer-label-preview.many .drawer-label{flex:none;zoom:1.25}
