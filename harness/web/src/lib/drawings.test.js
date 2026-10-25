@@ -22,12 +22,16 @@ test('AMPSEAL 23: filas 8/7/8 a 4 mm, a do meio desfasada meio passo', () => {
   assert.equal(Math.abs(d.cav[9][0] - d.cav[1][0]), 2)
 })
 
-test('RTS 18-32: 32 cavidades, A à esquerda de T no topo; a ficha macho é o espelho', () => {
+test('RTS 18-32 como o desenho da inserção: A à direita de T no topo, letras no sentido do relógio; fêmea (lado dos fios) = macho (frente)', () => {
   const s = connectorDrawing(catalog, 'RTS718N32S03')
   const p = connectorDrawing(catalog, 'RTS6BS18N32PHEC03')
   assert.equal(Object.keys(s.cav).length, 32)
-  assert.ok(s.cav.A[0] < 0 && s.cav.T[0] > 0 && s.cav.A[1] < -8)
-  assert.equal(p.cav.A[0], -s.cav.A[0])
+  assert.ok(s.cav.A[0] > 0 && s.cav.T[0] < 0 && s.cav.A[1] < -8)
+  assert.ok(s.cav.B[0] > s.cav.A[0] && s.cav.E[0] > 8 && s.cav.P[0] < -8) // B, C… pela direita; N, P pela esquerda
+  assert.ok(s.cav.j[0] < 0 && s.cav.g[0] > 0 && s.cav.f[1] < 0)
+  assert.deepEqual(p.cav, s.cav)
+  assert.equal(s.view, 'rear')
+  assert.equal(p.view, 'front')
   assert.equal(connectorDrawing(catalog, 'RTS714N19S03').cav.V.join(), '0,0')
 })
 
