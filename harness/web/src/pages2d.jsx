@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ActionIcon, Alert, Anchor, Badge, Button, Group, Progress, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text, Title } from '@mantine/core'
 import { ends, txt } from './lib/harness.js'
 import { bomCsv, bomOf, completeness, housingOf } from './lib/bom.js'
-import { D, diagram, face, formboard, MISSING, spreadLabels, twist } from './lib/layout2d.js'
+import { D, diagram, formboard, MISSING, spreadLabels, twist } from './lib/layout2d.js'
+import { connectorDrawing, faceLayout } from './lib/drawings.js'
 import { busById, CAN_BUSES, canPairs } from './lib/can.js'
 import { Card, Colour, HarnessSelect, href, PartPhoto, Stats } from './pages.jsx'
 
@@ -274,21 +275,39 @@ const PX_MM = 25.4 / 96 // 1 px CSS em mm (escala 1:1)
 const lightWire = (c) => ['#fcc419', '#f8f9fa', '#ced4da', '#adb5bd', '#22b8cf', '#fd7e14', '#40c057', '#f783ac'].includes(c)
 // ficha vista de cima (harness.design): corpo claro do lado do troço, face de encaixe escura na ponta; em mm, x para fora
 const CONN = { L: 16, W: 15, T: 4 }
+const GENERIC = [[20, 15]] // perfil de cima de uma ficha sem desenho no catálogo
+// perfil de cima: cada troço [comprimento, largura] do lado dos fios para a face, e a face escura na ponta
+function ConnTop({ top, cls }) {
+  let x = 0
+  const L = top.reduce((a, [l]) => a + l, 0)
+  const [, wf] = top.at(-1)
+  const T = Math.min(3, 0.4 * top.at(-1)[0])
+  return (
+    <>
+      {top.map(([l, w], i) => {
+        const r = <rect key={i} x={x} y={-w / 2} width={l} height={w} rx={i ? 1.5 : Math.min(5, w / 3)} className={cls} />
+        x += l
+        return r
+      })}
+      <rect x={L - T} y={-wf / 2 - 0.5} width={T} height={wf + 1} rx="1" className="conn2d-face" />
+    </>
+  )
+}
 
 // cavidades de uma ficha: as do pinout e as que têm fio mas faltam no pinout
 const cavities = (h, ref) => [...new Set([...h.H.pinsOf(ref).map((p) => txt(p.pin)), ...[...h.H.usage.keys()].filter((key) => key.startsWith(`${ref}\u0000`)).map((key) => key.split('\u0000')[1])])]
 // onde fica a face: ficha deitada → por cima (ou por baixo); de pé → ao lado. dx/dy em px, a partir da ficha
 function facePlace(n, fc) {
   const side = Math.abs(Math.cos(n.dir)) >= 0.5
-  return side ? { dx: 0, dy: (Math.sin(n.dir) > 0.3 ? 1 : -1) * (fc.h / 2 + 70) } : { dx: (Math.cos(n.dir) >= 0 ? 1 : -1) * (fc.w / 2 + 70), dy: 0 }
+  return side ? { dx: 0, dy: Math.sin(n.dir) > 0.3 ? fc.h / 2 + 105 : -(fc.h / 2 + 70) } : { dx: (Math.cos(n.dir) >= 0 ? 1 : -1) * (fc.w / 2 + 70), dy: 0 } // por baixo: espaço para o título
 }
 
 // face de encaixe da ficha selecionada, presa à ficha por uma linha (tamanhos em px, k = mm por px)
-function Pinout({ h, n, k, round, onPin }) {
+function Pinout({ h, n, k, dwg, onPin }) {
   const ref = n.id
   const pins = cavities(h, ref)
   if (!pins.length) return null
-  const fc = face(pins, round)
+  const fc = faceLayout(dwg, pins)
   const { dx, dy } = facePlace(n, fc)
   const [cx, cy] = [n.x + dx * k, n.y + dy * k]
   const pn = txt(h.H.conns.get(ref)?.housing_pn)
@@ -296,10 +315,15 @@ function Pinout({ h, n, k, round, onPin }) {
     <g>
       <line x1={n.x} y1={n.y} x2={cx - Math.sign(dx) * (fc.w / 2) * k} y2={cy - Math.sign(dy) * (fc.h / 2 + 6) * k} className="tether2d" strokeWidth={1.5 * k} />
       <g transform={`translate(${cx},${cy}) scale(${k})`}>
-        <rect x={-fc.w * 0.13} y={-fc.h / 2 - 7} width={fc.w * 0.26} height="10" rx="3" className="face2d-key" />
-        {round ? <circle r={fc.w / 2} className="face2d" /> : <rect x={-fc.w / 2} y={-fc.h / 2} width={fc.w} height={fc.h} rx="16" className="face2d" />}
-        <text y={-fc.h / 2 - 16} textAnchor="middle" className="face2d-title" onClick={() => go(href('c', h.code, ref))}>{ref}{pn ? ` · ${pn}` : ''}<title>Abrir a ficha {ref}</title></text>
-        {fc.pts.map(({ pin, x, y }) => {
+        {(fc.latch || !dwg) && <rect x={-Math.min(fc.w * 0.13, 22)} y={-fc.h / 2 - 7} width={Math.min(fc.w * 0.26, 44)} height="10" rx="3" className="face2d-key" />}
+        {fc.round ? <circle r={fc.w / 2} className="face2d" /> : <rect x={-fc.w / 2} y={-fc.h / 2} width={fc.w} height={fc.h} rx={Math.min(16, fc.h * 0.2)} className="face2d" />}
+        <text y={-fc.h / 2 - 30} textAnchor="middle" className="face2d-title" onClick={() => go(href('c', h.code, ref))}>{ref}{pn ? ` · ${pn}` : ''}<title>Abrir a ficha {ref}</title></text>
+        <text y={-fc.h / 2 - 15} textAnchor="middle" className="face2d-sub">
+          {dwg ? `${dwg.name}${dwg.confirmed ? '' : ' · por confirmar'}` : pn ? 'P/N sem desenho no catálogo' : 'sem P/N: disposição genérica'}
+          <title>{dwg ? `Face de encaixe vista de frente, trinco/chave em cima. ${dwg.source}` : 'Cavidades pela ordem do pinout, não a posição real'}</title>
+        </text>
+        {fc.extra.length > 0 && <text y={fc.h / 2 + 58} textAnchor="middle" className="face2d-sub face2d-warn">{fc.extra.length} pino(s) do Excel que esta ficha não tem</text>}
+        {fc.pts.map(({ pin, x, y, r, extra }) => {
           const ws = h.H.usage.get(`${ref}\u0000${pin}`) || []
           const c = ws.length ? wireColour(ws[0]) : null
           const label = txt(h.H.pins.get(`${ref}\u0000${pin}`)?.label)
@@ -307,7 +331,7 @@ function Pinout({ h, n, k, round, onPin }) {
           return (
             <g key={pin} transform={`translate(${x},${y})`} className={ws.length ? 'cav2d cav2d-on' : 'cav2d'}
               onMouseEnter={() => onPin(info)} onMouseLeave={() => onPin(null)} onClick={() => ws.length && go(href('t', h.code, txt(ws[0].wire_id)))}>
-              <circle r="10.5" fill={c || '#2c2e33'} />
+              <circle r={r} fill={c || '#2c2e33'} className={extra ? 'cav2d-extra' : undefined} />
               <text y="3.8" textAnchor="middle" fill={c ? (lightWire(c) ? '#111' : '#fff') : '#6a6e76'}>{pin}</text>
               <title>{info}</title>
             </g>
@@ -410,27 +434,42 @@ export function FormboardPage({ data, code, refName }) {
   const k = real ? PX_MM : v.k
   const vb = real ? [all.x, all.y, all.w, all.h] : [v.cx - (W / 2) * k, v.cy - (H / 2) * k, W * k, H * k]
   const at = new Map(f.nodes.map((n) => [n.id, n]))
-  const u = Math.max(1, 0.9 * k) // as fichas nunca ficam mais pequenas do que ~14 px
+  const u = Math.max(1, 0.9 * k) // splices e o símbolo genérico nunca ficam mais pequenos do que ~14 px
   const thick = (n) => Math.max(1.6 * Math.sqrt(Math.max(1, n)), 3 * k) // diâmetro do troço: ~1,6 mm por fio de 0,5 mm²
   const mine = new Set(sel ? h.model.sheets.Wires.filter((w) => ends(w).some((e) => e.ref === sel)).map((w) => txt(w.wire_id)) : [])
   const connectors = f.nodes.filter((n) => n.kind === 'connector' || n.kind === 'drawing')
+  // desenho de cada ficha pelo P/N (catálogo); sem desenho, o perfil genérico
+  const dwgOf = (ref) => {
+    const pn = txt(h.H.conns.get(ref)?.housing_pn)
+    const n = Math.max(housingOf(data.catalog, pn)?.housing.positions || 0, ...cavities(h, ref).map(Number).filter(Number.isFinite))
+    return connectorDrawing(data.catalog, pn, n)
+  }
+  const shape = new Map(connectors.map((n) => {
+    const dwg = dwgOf(n.id)
+    const top = dwg?.top || GENERIC
+    const [L, Wd] = [top.reduce((a, [l]) => a + l, 0), Math.max(...top.map(([, w]) => w))]
+    return [n.id, { dwg, top, L, W: Wd, s: Math.max(1, (14 * k) / Wd) }] // à escala, mas nunca com menos de ~14 px de largura
+  }))
   // nome de cada ficha à frente da face de encaixe; os que chocam sobem ou descem uma linha
-  const tip = u * (CONN.L + CONN.T) + 8 * k
   const items = connectors.map((n) => {
     const [c, sn] = [Math.cos(n.dir), Math.sin(n.dir)]
+    const tip = shape.get(n.id).s * shape.get(n.id).L + 8 * k
     return { x: n.x + c * tip, y: n.y + sn * tip + (Math.abs(c) < 0.5 ? Math.sign(sn) * 6 * k : 0), w: 8 * k * n.id.length, h: 15 * k, anchor: c > 0.5 ? 'start' : c < -0.5 ? 'end' : 'middle' }
   })
-  const bodies = connectors.map((n) => ({ x: n.x + Math.cos(n.dir) * 10 * u - 10 * u, y: n.y + Math.sin(n.dir) * 10 * u - 10 * u, w: 20 * u, h: 20 * u }))
+  const bodies = connectors.map((n) => {
+    const { s, L, W: Wd } = shape.get(n.id)
+    const r = (s * Math.max(L, Wd)) / 2
+    return { x: n.x + Math.cos(n.dir) * (s * L) / 2 - r, y: n.y + Math.sin(n.dir) * (s * L) / 2 - r, w: 2 * r, h: 2 * r }
+  })
   const labelAt = new Map(spreadLabels(items, bodies).map((p, i) => [connectors[i].id, { ...items[i], ...p, from: items[i].y }]))
   const selNode = sel && at.get(sel)
-  const roundOf = (ref) => /circular/i.test(housingOf(data.catalog, txt(h.H.conns.get(ref)?.housing_pn))?.family.name || '')
   // seleciona uma ficha e move o desenho só o preciso para a ficha e a sua face caberem
   const pick = (id, zoom = v.k) => {
     setSel(id)
     const n = id && at.get(id)
     const pins = n && cavities(h, id)
     if (!pins?.length || real) return
-    const fc = face(pins, roundOf(id))
+    const fc = faceLayout(dwgOf(id), pins)
     const { dx, dy } = facePlace(n, fc)
     const m = 24
     const [x0, x1] = [Math.min(n.x / zoom - 60, n.x / zoom + dx - fc.w / 2 - m), Math.max(n.x / zoom + 60, n.x / zoom + dx + fc.w / 2 + m)]
@@ -503,9 +542,9 @@ export function FormboardPage({ data, code, refName }) {
               return (
                 <g key={n.id} className="conn2d-g" opacity={sel && !isSel && !h.model.sheets.Wires.some((w) => mine.has(txt(w.wire_id)) && ends(w).some((e) => e.ref === n.id)) ? 0.45 : 1}
                   onClick={tap(() => (isSel ? setSel(null) : pick(n.id)))} onMouseEnter={() => setHover(`${n.id}${txt(h.H.conns.get(n.id)?.housing_pn) ? ` · ${txt(h.H.conns.get(n.id).housing_pn)}` : ''} · clica para a face de encaixe`)} onMouseLeave={() => setHover(null)}>
-                  <g transform={`translate(${n.x},${n.y}) rotate(${deg(n.dir)}) scale(${u})`}>
-                    <path d={`M${CONN.L} ${-CONN.W / 2}H5a5 5 0 0 0 -5 5V${CONN.W / 2 - 5}a5 5 0 0 0 5 5H${CONN.L}Z`} className={n.kind === 'drawing' ? 'conn2d conn2d-odd' : isSel ? 'conn2d conn2d-sel' : 'conn2d'} />
-                    <rect x={CONN.L} y={-CONN.W / 2 - 1} width={CONN.T} height={CONN.W + 2} rx="1" className="conn2d-face" />
+                  <g transform={`translate(${n.x},${n.y}) rotate(${deg(n.dir)}) scale(${shape.get(n.id).s})`}>
+                    <ConnTop top={shape.get(n.id).top} cls={n.kind === 'drawing' ? 'conn2d conn2d-odd' : isSel ? 'conn2d conn2d-sel' : 'conn2d'} />
+                    <title>{shape.get(n.id).dwg ? `${n.id} · ${shape.get(n.id).dwg.name} (${shape.get(n.id).L.toFixed(0)} × ${shape.get(n.id).W.toFixed(0)} mm)` : n.id}</title>
                   </g>
                   {Math.abs(labelAt.get(n.id).y - labelAt.get(n.id).from) > 20 * k && ( // nome longe da ficha: linha a ligá-los
                     <line x1={labelAt.get(n.id).x} y1={labelAt.get(n.id).from} x2={labelAt.get(n.id).x} y2={labelAt.get(n.id).y - Math.sign(labelAt.get(n.id).y - labelAt.get(n.id).from) * 7 * k} className="tether2d" strokeWidth={k} />
@@ -514,7 +553,7 @@ export function FormboardPage({ data, code, refName }) {
                 </g>
               )
             })}
-            {selNode && <Pinout h={h} n={selNode} k={real ? PX_MM : k} round={roundOf(sel)} onPin={setHover} />}
+            {selNode && <Pinout h={h} n={selNode} k={real ? PX_MM : k} dwg={dwgOf(sel)} onPin={setHover} />}
           </svg>
         </div>
       </div>

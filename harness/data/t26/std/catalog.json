@@ -526,5 +526,689 @@
       "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/200/473/879/MFG_RTS718N32S03_sml.jpg",
       "url": "https://www.digikey.com/en/products/result?keywords=RTS718N32S03"
     }
-  }
+  },
+  "_drawings": "Desenho de cada ficha pelo P/N (regex \"match\"), para o formboard e a face de encaixe. cavities: {pino: [x, y]} em mm a partir do centro, vista da face de encaixe DESTA ficha com a chave/trinco em cima (y para baixo); ou grid: rows = nº de cavidades por fila de cima para baixo, start = canto onde fica a cavidade 1 (a numeração segue ao longo da fila e depois para a fila seguinte). margin: largura = passo·colunas + margin (para top com 'A'). top: perfil visto de cima, do lado dos fios para a face de encaixe, [[comprimento, largura], …] em mm. face: [largura, altura] da face em mm, se não for a da grelha. sizes: diâmetro em mm das cavidades maiores. confirmed=false: medidas ou numeração por confirmar no desenho do fabricante.",
+  "drawings": [
+    {
+      "match": "^(\\d-)?794617-\\d$",
+      "name": "TE Micro MATE-N-LOK, recetáculo, 2 filas",
+      "shape": "rect",
+      "latch": true,
+      "grid": {
+        "pitch": 3.0,
+        "rowPitch": 3.0,
+        "rows": 2,
+        "start": "bottom-right"
+      },
+      "top": [
+        [
+          14.04,
+          "A"
+        ]
+      ],
+      "source": "TE C-794617 rev F6 (customer drawing): passo 3,00, largura 3·colunas+1, altura 8,26, comprimento 14,04; cavidade 1 em baixo à direita",
+      "confirmed": true,
+      "margin": 1.0
+    },
+    {
+      "match": "^(\\d-)?794615-\\d$",
+      "name": "TE Micro MATE-N-LOK, ficha macho (plug), 2 filas",
+      "shape": "rect",
+      "latch": true,
+      "grid": {
+        "pitch": 3.0,
+        "rowPitch": 3.0,
+        "rows": 2,
+        "start": "bottom-left"
+      },
+      "top": [
+        [
+          14.04,
+          "A"
+        ]
+      ],
+      "source": "contraparte do 794617 (nota 7 do desenho C-794617): face espelhada",
+      "confirmed": false,
+      "margin": 1.0
+    },
+    {
+      "match": "^1445022-\\d$",
+      "name": "TE Micro MATE-N-LOK, recetáculo, 1 fila",
+      "shape": "rect",
+      "latch": true,
+      "grid": {
+        "pitch": 3.0,
+        "rowPitch": 3.0,
+        "rows": 1,
+        "start": "bottom-right"
+      },
+      "top": [
+        [
+          14.04,
+          "A"
+        ]
+      ],
+      "source": "passo 3,00 da família; sem desenho do fabricante",
+      "confirmed": false,
+      "margin": 1.0
+    },
+    {
+      "match": "^43025-\\d{4}$",
+      "name": "Molex Micro-Fit 3.0, recetáculo, 2 filas",
+      "shape": "rect",
+      "latch": true,
+      "grid": {
+        "pitch": 3.0,
+        "rowPitch": 3.0,
+        "rows": 2,
+        "start": "bottom-right"
+      },
+      "top": [
+        [
+          13.7,
+          "A"
+        ]
+      ],
+      "source": "passo 3,00 × 3,00 da série 43025; desenho da Molex (430250000-SD) não acessível daqui: numeração e medidas por confirmar",
+      "confirmed": false,
+      "margin": 2.7
+    },
+    {
+      "match": "^770680-\\d$",
+      "name": "TE AMPSEAL 23 vias, ficha (plug)",
+      "shape": "rect",
+      "latch": true,
+      "grid": {
+        "pitch": 4.0,
+        "rowPitch": 4.0,
+        "rows": [
+          8,
+          7,
+          8
+        ],
+        "start": "top-right"
+      },
+      "top": [
+        [
+          33.6,
+          47.4
+        ]
+      ],
+      "source": "TE C-770680 rev M1: passo 4,00 × 4,00, 8/7/8, corpo 47,4 × 27,6 × 33,6; 1–8 em cima (vista dos fios: 1 à esquerda)",
+      "confirmed": true,
+      "face": [
+        47.4,
+        20.6
+      ]
+    },
+    {
+      "match": "^RTS7\\d*14N19S",
+      "name": "Amphenol Sine ecomate RTS, recetáculo jam nut, casco 14, 14-19 fêmea",
+      "shape": "round",
+      "latch": true,
+      "cavities": {
+        "V": [
+          0.0,
+          0.0
+        ],
+        "N": [
+          1.65,
+          -2.86
+        ],
+        "P": [
+          -1.65,
+          -2.86
+        ],
+        "R": [
+          -3.29,
+          0.0
+        ],
+        "S": [
+          -1.65,
+          2.86
+        ],
+        "T": [
+          1.65,
+          2.86
+        ],
+        "U": [
+          3.29,
+          0.0
+        ],
+        "A": [
+          0.0,
+          -5.7
+        ],
+        "B": [
+          -3.29,
+          -5.7
+        ],
+        "C": [
+          -4.94,
+          -2.86
+        ],
+        "D": [
+          -6.58,
+          0.0
+        ],
+        "E": [
+          -4.94,
+          2.86
+        ],
+        "F": [
+          -3.29,
+          5.7
+        ],
+        "G": [
+          0.0,
+          5.7
+        ],
+        "H": [
+          3.29,
+          5.7
+        ],
+        "J": [
+          4.94,
+          2.86
+        ],
+        "K": [
+          6.59,
+          0.0
+        ],
+        "L": [
+          4.94,
+          -2.86
+        ],
+        "M": [
+          3.29,
+          -5.7
+        ]
+      },
+      "top": [
+        [
+          14.0,
+          22.2
+        ],
+        [
+          5.0,
+          30.2
+        ],
+        [
+          14.4,
+          22.2
+        ]
+      ],
+      "source": "Amphenol Sine RTS714*19Sxx (hexágono 30,2, Ø22,2, 33,4) e RTS1BS14*19SHEC (inserção 14-19 medida no desenho)",
+      "confirmed": true
+    },
+    {
+      "match": "^RTS6\\w*14N19P",
+      "name": "Amphenol Sine ecomate RTS, ficha reta, casco 14, 14-19 macho",
+      "shape": "round",
+      "latch": true,
+      "cavities": {
+        "V": [
+          0.0,
+          0.0
+        ],
+        "N": [
+          -1.65,
+          -2.86
+        ],
+        "P": [
+          1.65,
+          -2.86
+        ],
+        "R": [
+          3.29,
+          0.0
+        ],
+        "S": [
+          1.65,
+          2.86
+        ],
+        "T": [
+          -1.65,
+          2.86
+        ],
+        "U": [
+          -3.29,
+          0.0
+        ],
+        "A": [
+          0.0,
+          -5.7
+        ],
+        "B": [
+          3.29,
+          -5.7
+        ],
+        "C": [
+          4.94,
+          -2.86
+        ],
+        "D": [
+          6.58,
+          0.0
+        ],
+        "E": [
+          4.94,
+          2.86
+        ],
+        "F": [
+          3.29,
+          5.7
+        ],
+        "G": [
+          0.0,
+          5.7
+        ],
+        "H": [
+          -3.29,
+          5.7
+        ],
+        "J": [
+          -4.94,
+          2.86
+        ],
+        "K": [
+          -6.59,
+          0.0
+        ],
+        "L": [
+          -4.94,
+          -2.86
+        ],
+        "M": [
+          -3.29,
+          -5.7
+        ]
+      },
+      "top": [
+        [
+          18.0,
+          26.0
+        ],
+        [
+          22.0,
+          30.6
+        ]
+      ],
+      "source": "Amphenol Sine RTS6BS14*19PHECxx (porca Ø30,6); face de pinos = espelho da de contactos (RTS1BS14*19PHEC)",
+      "confirmed": true
+    },
+    {
+      "match": "^RTS7\\d*18N32S",
+      "name": "Amphenol Sine ecomate RTS, recetáculo jam nut, casco 18, 18-32 fêmea",
+      "shape": "round",
+      "latch": true,
+      "cavities": {
+        "f": [
+          0.0,
+          -2.44
+        ],
+        "g": [
+          -2.44,
+          -0.0
+        ],
+        "h": [
+          0.0,
+          2.44
+        ],
+        "j": [
+          2.44,
+          -0.0
+        ],
+        "U": [
+          0.0,
+          -5.84
+        ],
+        "V": [
+          -3.15,
+          -4.9
+        ],
+        "W": [
+          -5.31,
+          -2.41
+        ],
+        "X": [
+          -5.79,
+          0.84
+        ],
+        "Y": [
+          -4.42,
+          3.83
+        ],
+        "Z": [
+          -1.65,
+          5.61
+        ],
+        "a": [
+          1.65,
+          5.61
+        ],
+        "b": [
+          4.42,
+          3.83
+        ],
+        "c": [
+          5.79,
+          0.84
+        ],
+        "d": [
+          5.31,
+          -2.41
+        ],
+        "e": [
+          3.15,
+          -4.9
+        ],
+        "A": [
+          -1.68,
+          -8.97
+        ],
+        "B": [
+          -4.8,
+          -7.75
+        ],
+        "C": [
+          -7.26,
+          -5.51
+        ],
+        "D": [
+          -8.76,
+          -2.49
+        ],
+        "E": [
+          -9.07,
+          0.84
+        ],
+        "F": [
+          -8.15,
+          4.06
+        ],
+        "G": [
+          -6.15,
+          6.73
+        ],
+        "H": [
+          -3.3,
+          8.49
+        ],
+        "J": [
+          0.0,
+          9.12
+        ],
+        "K": [
+          3.3,
+          8.49
+        ],
+        "L": [
+          6.15,
+          6.73
+        ],
+        "M": [
+          8.15,
+          4.06
+        ],
+        "N": [
+          9.07,
+          0.84
+        ],
+        "P": [
+          8.76,
+          -2.49
+        ],
+        "R": [
+          7.26,
+          -5.51
+        ],
+        "S": [
+          4.8,
+          -7.75
+        ],
+        "T": [
+          1.68,
+          -8.97
+        ]
+      },
+      "top": [
+        [
+          14.0,
+          28.0
+        ],
+        [
+          5.0,
+          41.3
+        ],
+        [
+          14.4,
+          30.0
+        ]
+      ],
+      "source": "Amphenol Sine RTS718*32Sxx rev A3: hexágono 41,3, 33,4; inserção 18-32 medida no desenho",
+      "confirmed": true,
+      "face": [
+        21.9,
+        21.9
+      ]
+    },
+    {
+      "match": "^RTS6\\w*18N32P",
+      "name": "Amphenol Sine ecomate RTS, ficha reta, casco 18, 18-32 macho",
+      "shape": "round",
+      "latch": true,
+      "cavities": {
+        "f": [
+          0.0,
+          -2.44
+        ],
+        "g": [
+          2.44,
+          -0.0
+        ],
+        "h": [
+          0.0,
+          2.44
+        ],
+        "j": [
+          -2.44,
+          -0.0
+        ],
+        "U": [
+          0.0,
+          -5.84
+        ],
+        "V": [
+          3.15,
+          -4.9
+        ],
+        "W": [
+          5.31,
+          -2.41
+        ],
+        "X": [
+          5.79,
+          0.84
+        ],
+        "Y": [
+          4.42,
+          3.83
+        ],
+        "Z": [
+          1.65,
+          5.61
+        ],
+        "a": [
+          -1.65,
+          5.61
+        ],
+        "b": [
+          -4.42,
+          3.83
+        ],
+        "c": [
+          -5.79,
+          0.84
+        ],
+        "d": [
+          -5.31,
+          -2.41
+        ],
+        "e": [
+          -3.15,
+          -4.9
+        ],
+        "A": [
+          1.68,
+          -8.97
+        ],
+        "B": [
+          4.8,
+          -7.75
+        ],
+        "C": [
+          7.26,
+          -5.51
+        ],
+        "D": [
+          8.76,
+          -2.49
+        ],
+        "E": [
+          9.07,
+          0.84
+        ],
+        "F": [
+          8.15,
+          4.06
+        ],
+        "G": [
+          6.15,
+          6.73
+        ],
+        "H": [
+          3.3,
+          8.49
+        ],
+        "J": [
+          0.0,
+          9.12
+        ],
+        "K": [
+          -3.3,
+          8.49
+        ],
+        "L": [
+          -6.15,
+          6.73
+        ],
+        "M": [
+          -8.15,
+          4.06
+        ],
+        "N": [
+          -9.07,
+          0.84
+        ],
+        "P": [
+          -8.76,
+          -2.49
+        ],
+        "R": [
+          -7.26,
+          -5.51
+        ],
+        "S": [
+          -4.8,
+          -7.75
+        ],
+        "T": [
+          -1.68,
+          -8.97
+        ]
+      },
+      "top": [
+        [
+          20.2,
+          31.0
+        ],
+        [
+          22.8,
+          35.3
+        ]
+      ],
+      "source": "Amphenol Sine RTS6BS18*32PHECxx rev A3: porca Ø35,3 × 22,8, tampa Ø31, 43,0; face de pinos = espelho da de contactos",
+      "confirmed": true,
+      "face": [
+        21.9,
+        21.9
+      ]
+    },
+    {
+      "match": "^HVSLS600022",
+      "name": "Amphenol PCD HVSLS600, recetáculo 2 pólos HV + HVIL, barramento M6",
+      "shape": "rect",
+      "latch": false,
+      "cavities": {
+        "A1": [
+          -11.3,
+          0
+        ],
+        "A2": [
+          11.1,
+          0
+        ],
+        "IL+": [
+          -1.7,
+          -7.5
+        ],
+        "IL-": [
+          1.7,
+          -7.5
+        ]
+      },
+      "sizes": {
+        "A1": 7.0,
+        "A2": 7.0
+      },
+      "top": [
+        [
+          29.1,
+          35.0
+        ],
+        [
+          21.0,
+          55.0
+        ]
+      ],
+      "source": "Amphenol catálogo HVSL, HVSLS600XX2 (p. 21): flange 55 × 35 (59,9 com trincos); pólos 1 e 2 a ±11 mm; HVIL em cima. IL+/IL- por confirmar",
+      "confirmed": false,
+      "face": [
+        55.0,
+        35.0
+      ]
+    },
+    {
+      "match": "^\\d-283407[45]-\\d$",
+      "name": "TE SlimSeal Miniature, 1 fila",
+      "shape": "rect",
+      "latch": true,
+      "grid": {
+        "pitch": 2.5,
+        "rowPitch": 2.5,
+        "rows": 1,
+        "start": "top-left"
+      },
+      "top": [
+        [
+          20.0,
+          "A"
+        ]
+      ],
+      "source": "passo 2,5 mm, 1 fila (TE 1-2834074-3 / 1-2834075-3); sem desenho com medidas",
+      "confirmed": false,
+      "margin": 4.0
+    }
+  ]
 }

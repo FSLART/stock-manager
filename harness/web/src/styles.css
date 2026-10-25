@@ -185,6 +185,25 @@ body {
   font: 600 12px Inter, sans-serif;
   cursor: pointer;
 }
+.face2d-title,
+.face2d-sub {
+  paint-order: stroke; /* contorno escuro: o título lê-se por cima de outros nomes */
+  stroke: #14161d;
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+.face2d-sub {
+  fill: #868e96;
+  font: 11px Inter, sans-serif;
+}
+.face2d-warn {
+  fill: #ff8787;
+}
+.cav2d-extra {
+  stroke: #ff8787;
+  stroke-width: 2;
+  stroke-dasharray: 3 2;
+}
 .cav2d text {
   font: 600 11px Inter, sans-serif;
   pointer-events: none;
