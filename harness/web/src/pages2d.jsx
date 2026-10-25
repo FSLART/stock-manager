@@ -319,8 +319,8 @@ function Pinout({ h, n, k, dwg, onPin }) {
         {fc.round ? <circle r={fc.w / 2} className="face2d" /> : <rect x={-fc.w / 2} y={-fc.h / 2} width={fc.w} height={fc.h} rx={Math.min(16, fc.h * 0.2)} className="face2d" />}
         <text y={-fc.h / 2 - 30} textAnchor="middle" className="face2d-title" onClick={() => go(href('c', h.code, ref))}>{ref}{pn ? ` · ${pn}` : ''}<title>Abrir a ficha {ref}</title></text>
         <text y={-fc.h / 2 - 15} textAnchor="middle" className="face2d-sub">
-          {dwg ? `${dwg.name}${dwg.confirmed ? '' : ' · por confirmar'}` : pn ? 'P/N sem desenho no catálogo' : 'sem P/N: disposição genérica'}
-          <title>{dwg ? `Face de encaixe vista de frente, trinco/chave em cima. ${dwg.source}` : 'Cavidades pela ordem do pinout, não a posição real'}</title>
+          {dwg ? `${dwg.view === 'rear' ? 'vista do lado dos fios' : 'vista de frente'} · ${dwg.name}${dwg.confirmed ? '' : ' · por confirmar'}` : pn ? 'P/N sem desenho no catálogo' : 'sem P/N: disposição genérica'}
+          <title>{dwg ? `${dwg.view === 'rear' ? 'Vista do lado dos fios (por onde entram os contactos)' : 'Vista da face de encaixe'}, chave/trinco em cima. ${dwg.source}` : 'Cavidades pela ordem do pinout, não a posição real'}</title>
         </text>
         {fc.extra.length > 0 && <text y={fc.h / 2 + 58} textAnchor="middle" className="face2d-sub face2d-warn">{fc.extra.length} pino(s) do Excel que esta ficha não tem</text>}
         {fc.pts.map(({ pin, x, y, r, extra }) => {

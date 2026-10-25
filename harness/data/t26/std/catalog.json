@@ -527,7 +527,7 @@
       "url": "https://www.digikey.com/en/products/result?keywords=RTS718N32S03"
     }
   },
-  "_drawings": "Desenho de cada ficha pelo P/N (regex \"match\"), para o formboard e a face de encaixe. cavities: {pino: [x, y]} em mm a partir do centro, vista da face de encaixe DESTA ficha com a chave/trinco em cima (y para baixo); ou grid: rows = nº de cavidades por fila de cima para baixo, start = canto onde fica a cavidade 1 (a numeração segue ao longo da fila e depois para a fila seguinte). margin: largura = passo·colunas + margin (para top com 'A'). top: perfil visto de cima, do lado dos fios para a face de encaixe, [[comprimento, largura], …] em mm. face: [largura, altura] da face em mm, se não for a da grelha. sizes: diâmetro em mm das cavidades maiores. confirmed=false: medidas ou numeração por confirmar no desenho do fabricante.",
+  "_drawings": "Desenho de cada ficha pelo P/N (regex \"match\"), para o formboard e a face de encaixe. cavities: {pino: [x, y]} em mm a partir do centro, chave/trinco em cima (y para baixo), vistas do lado que diz view: front = face de encaixe, rear = lado dos fios. As inserções circulares (MIL-STD-1669) desenham-se como no catálogo: frente dos pinos = traseira dos contactos fêmea, o mesmo desenho para as duas metades; ou grid: rows = nº de cavidades por fila de cima para baixo, start = canto onde fica a cavidade 1 (a numeração segue ao longo da fila e depois para a fila seguinte). margin: largura = passo·colunas + margin (para top com 'A'). top: perfil visto de cima, do lado dos fios para a face de encaixe, [[comprimento, largura], …] em mm. face: [largura, altura] da face em mm, se não for a da grelha. sizes: diâmetro em mm das cavidades maiores. confirmed=false: medidas ou numeração por confirmar no desenho do fabricante.",
   "drawings": [
     {
       "match": "^(\\d-)?794617-\\d$",
@@ -548,7 +548,8 @@
       ],
       "source": "TE C-794617 rev F6 (customer drawing): passo 3,00, largura 3·colunas+1, altura 8,26, comprimento 14,04; cavidade 1 em baixo à direita",
       "confirmed": true,
-      "margin": 1.0
+      "margin": 1.0,
+      "view": "front"
     },
     {
       "match": "^(\\d-)?794615-\\d$",
@@ -569,7 +570,8 @@
       ],
       "source": "contraparte do 794617 (nota 7 do desenho C-794617): face espelhada",
       "confirmed": false,
-      "margin": 1.0
+      "margin": 1.0,
+      "view": "front"
     },
     {
       "match": "^1445022-\\d$",
@@ -590,7 +592,8 @@
       ],
       "source": "passo 3,00 da família; sem desenho do fabricante",
       "confirmed": false,
-      "margin": 1.0
+      "margin": 1.0,
+      "view": "front"
     },
     {
       "match": "^43025-\\d{4}$",
@@ -611,7 +614,8 @@
       ],
       "source": "passo 3,00 × 3,00 da série 43025; desenho da Molex (430250000-SD) não acessível daqui: numeração e medidas por confirmar",
       "confirmed": false,
-      "margin": 2.7
+      "margin": 2.7,
+      "view": "front"
     },
     {
       "match": "^770680-\\d$",
@@ -639,7 +643,8 @@
       "face": [
         47.4,
         20.6
-      ]
+      ],
+      "view": "front"
     },
     {
       "match": "^RTS7\\d*14N19S",
@@ -652,27 +657,27 @@
           0.0
         ],
         "N": [
-          1.65,
+          -1.65,
           -2.86
         ],
         "P": [
-          -1.65,
+          1.65,
           -2.86
         ],
         "R": [
-          -3.29,
+          3.29,
           0.0
         ],
         "S": [
-          -1.65,
-          2.86
-        ],
-        "T": [
           1.65,
           2.86
         ],
+        "T": [
+          -1.65,
+          2.86
+        ],
         "U": [
-          3.29,
+          -3.29,
           0.0
         ],
         "A": [
@@ -680,23 +685,23 @@
           -5.7
         ],
         "B": [
-          -3.29,
+          3.29,
           -5.7
         ],
         "C": [
-          -4.94,
+          4.94,
           -2.86
         ],
         "D": [
-          -6.58,
+          6.58,
           0.0
         ],
         "E": [
-          -4.94,
+          4.94,
           2.86
         ],
         "F": [
-          -3.29,
+          3.29,
           5.7
         ],
         "G": [
@@ -704,23 +709,23 @@
           5.7
         ],
         "H": [
-          3.29,
+          -3.29,
           5.7
         ],
         "J": [
-          4.94,
+          -4.94,
           2.86
         ],
         "K": [
-          6.59,
+          -6.59,
           0.0
         ],
         "L": [
-          4.94,
+          -4.94,
           -2.86
         ],
         "M": [
-          3.29,
+          -3.29,
           -5.7
         ]
       },
@@ -738,8 +743,9 @@
           22.2
         ]
       ],
-      "source": "Amphenol Sine RTS714*19Sxx (hexágono 30,2, Ø22,2, 33,4) e RTS1BS14*19SHEC (inserção 14-19 medida no desenho)",
-      "confirmed": true
+      "source": "Amphenol Sine RTS714*19Sxx (hexágono 30,2, Ø22,2, 33,4) e RTS1BS14*19SHEC (inserção 14-19 medida no desenho); vista do lado dos fios, como o desenho da inserção (frente dos pinos = traseira dos contactos fêmea)",
+      "confirmed": true,
+      "view": "rear"
     },
     {
       "match": "^RTS6\\w*14N19P",
@@ -835,7 +841,8 @@
         ]
       ],
       "source": "Amphenol Sine RTS6BS14*19PHECxx (porca Ø30,6); face de pinos = espelho da de contactos (RTS1BS14*19PHEC)",
-      "confirmed": true
+      "confirmed": true,
+      "view": "front"
     },
     {
       "match": "^RTS7\\d*18N32S",
@@ -848,7 +855,7 @@
           -2.44
         ],
         "g": [
-          -2.44,
+          2.44,
           -0.0
         ],
         "h": [
@@ -856,7 +863,7 @@
           2.44
         ],
         "j": [
-          2.44,
+          -2.44,
           -0.0
         ],
         "U": [
@@ -864,75 +871,75 @@
           -5.84
         ],
         "V": [
-          -3.15,
-          -4.9
-        ],
-        "W": [
-          -5.31,
-          -2.41
-        ],
-        "X": [
-          -5.79,
-          0.84
-        ],
-        "Y": [
-          -4.42,
-          3.83
-        ],
-        "Z": [
-          -1.65,
-          5.61
-        ],
-        "a": [
-          1.65,
-          5.61
-        ],
-        "b": [
-          4.42,
-          3.83
-        ],
-        "c": [
-          5.79,
-          0.84
-        ],
-        "d": [
-          5.31,
-          -2.41
-        ],
-        "e": [
           3.15,
           -4.9
         ],
+        "W": [
+          5.31,
+          -2.41
+        ],
+        "X": [
+          5.79,
+          0.84
+        ],
+        "Y": [
+          4.42,
+          3.83
+        ],
+        "Z": [
+          1.65,
+          5.61
+        ],
+        "a": [
+          -1.65,
+          5.61
+        ],
+        "b": [
+          -4.42,
+          3.83
+        ],
+        "c": [
+          -5.79,
+          0.84
+        ],
+        "d": [
+          -5.31,
+          -2.41
+        ],
+        "e": [
+          -3.15,
+          -4.9
+        ],
         "A": [
-          -1.68,
+          1.68,
           -8.97
         ],
         "B": [
-          -4.8,
+          4.8,
           -7.75
         ],
         "C": [
-          -7.26,
+          7.26,
           -5.51
         ],
         "D": [
-          -8.76,
+          8.76,
           -2.49
         ],
         "E": [
-          -9.07,
+          9.07,
           0.84
         ],
         "F": [
-          -8.15,
+          8.15,
           4.06
         ],
         "G": [
-          -6.15,
+          6.15,
           6.73
         ],
         "H": [
-          -3.3,
+          3.3,
           8.49
         ],
         "J": [
@@ -940,35 +947,35 @@
           9.12
         ],
         "K": [
-          3.3,
+          -3.3,
           8.49
         ],
         "L": [
-          6.15,
+          -6.15,
           6.73
         ],
         "M": [
-          8.15,
+          -8.15,
           4.06
         ],
         "N": [
-          9.07,
+          -9.07,
           0.84
         ],
         "P": [
-          8.76,
+          -8.76,
           -2.49
         ],
         "R": [
-          7.26,
+          -7.26,
           -5.51
         ],
         "S": [
-          4.8,
+          -4.8,
           -7.75
         ],
         "T": [
-          1.68,
+          -1.68,
           -8.97
         ]
       },
@@ -986,12 +993,13 @@
           30.0
         ]
       ],
-      "source": "Amphenol Sine RTS718*32Sxx rev A3: hexágono 41,3, 33,4; inserção 18-32 medida no desenho",
+      "source": "Amphenol Sine RTS718*32Sxx rev A3: hexágono 41,3, 33,4; inserção 18-32 medida no desenho; vista do lado dos fios, como o desenho da inserção (frente dos pinos = traseira dos contactos fêmea)",
       "confirmed": true,
       "face": [
         21.9,
         21.9
-      ]
+      ],
+      "view": "rear"
     },
     {
       "match": "^RTS6\\w*18N32P",
@@ -1143,7 +1151,8 @@
       "face": [
         21.9,
         21.9
-      ]
+      ],
+      "view": "front"
     },
     {
       "match": "^HVSLS600022",
@@ -1187,7 +1196,8 @@
       "face": [
         55.0,
         35.0
-      ]
+      ],
+      "view": "front"
     },
     {
       "match": "^\\d-283407[45]-\\d$",
@@ -1208,7 +1218,8 @@
       ],
       "source": "passo 2,5 mm, 1 fila (TE 1-2834074-3 / 1-2834075-3); sem desenho com medidas",
       "confirmed": false,
-      "margin": 4.0
+      "margin": 4.0,
+      "view": "front"
     }
   ]
 }
