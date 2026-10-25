@@ -50,7 +50,7 @@ const arc = (a, b) => {
   return new THREE.QuadraticBezierCurve3(a, mid, b)
 }
 
-export default function Viewer3D({ data, mode, code, id, pickPage = false }) {
+export default function Viewer3D({ data, mode, code, id, pickPage = false, canPick = false }) {
   const box = useRef(null)
   const three = useRef(null)
   const [status, setStatus] = useState('loading')
@@ -324,7 +324,7 @@ export default function Viewer3D({ data, mode, code, id, pickPage = false }) {
         <NativeSelect aria-label="Harness" value={filter} onChange={(e) => setFilter(e.currentTarget.value)} style={{ flex: '0 0 220px' }}
           data={[{ value: '', label: 'Todos os harnesses' }, ...data.list.map((h) => ({ value: h.code, label: `${h.code} · ${h.meta.name}` }))]} />
         <Switch label="Raio-x" checked={xray} onChange={(e) => setXray(e.currentTarget.checked)} />
-        <Switch label="Modo pick" checked={pick} onChange={(e) => setPick(e.currentTarget.checked)} />
+        {canPick && <Switch label="Modo pick" checked={pick} onChange={(e) => setPick(e.currentTarget.checked)} />}
       </Group>
 
       <div className="glass">

@@ -205,6 +205,11 @@ def init_mysql_schema(connection):
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
             data LONGTEXT NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
+        # Projetos da pagina PCB e os seus BOMs, partilhados pela equipa; o id vem do browser (UUID).
+        """CREATE TABLE IF NOT EXISTS pcb_projects (
+            id VARCHAR(64) PRIMARY KEY,
+            data LONGTEXT NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
     ):
         if mariadb:
             sql = sql.replace("utf8mb4_0900_as_ci", "utf8mb4_uca1400_as_ci").replace("utf8mb4_0900_bin", "utf8mb4_bin")
@@ -331,14 +336,11 @@ def current_person():
             "role": row["role"], "department": row["department"]} if row else None
 
 
-def electronics_denied(cat_names, *sections):
-    # Stock eletrónico: so o departamento de Electronics (ou um admin) o altera. Categoria nova conta como eletrónica.
+def electronics_denied():
+    # Todo o stock (eletronico, Harness e nao consumiveis) e do departamento de Electronics; um admin tambem o altera.
     if g.person["admin"] or "Electronics" in g.person.get("department", "").split(", "):
         return None
-    by_name = {category["name"].casefold(): category["section"] for category in db_categories()}
-    if SECTIONS[0] in {by_name.get(str(name).casefold(), SECTIONS[0]) for name in cat_names} | set(sections):
-        return erro("Só o departamento de Electronics pode alterar o stock eletrónico", 403)
-    return None
+    return erro("Só o departamento de Electronics pode alterar o stock", 403)
 
 
 def start_session(person_id):
@@ -510,6 +512,10 @@ def init_sqlite_schema(connection):
         );
         CREATE TABLE IF NOT EXISTS labels (
             id INTEGER PRIMARY KEY,
+            data TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS pcb_projects (
+            id TEXT PRIMARY KEY,
             data TEXT NOT NULL
         );
         """
@@ -714,6 +720,36 @@ def label_from_json(data):
         # Cabeça do parafuso desenhado no formato caixa, uma chave de labelIcons.js.
         "screw": text(data.get("screw"), 40),
         **sizes,
+    }
+
+
+def pcb_project_from_json(data):
+    # Projeto PCB vindo do browser: so ficam os campos que a pagina usa, com limites.
+    text = lambda value, limit: value.strip()[:limit] if isinstance(value, str) else ""
+    project_id, items, step = data.get("id"), data.get("items"), data.get("step")
+    if not isinstance(project_id, str) or not re.fullmatch(r"[\w-]{1,64}", project_id):
+        raise ValueError("Projeto inválido")
+    if not isinstance(items, list) or len(items) > 5000 or not all(isinstance(item, dict) for item in items):
+        raise ValueError("O BOM tem de ser uma lista de até 5000 linhas")
+    if not all(isinstance(item.get("quantity"), (int, float)) and not isinstance(item.get("quantity"), bool) and 0 <= item["quantity"] <= 1_000_000 for item in items):
+        raise ValueError("Quantidade inválida no BOM")
+    if step is not None and not (isinstance(step, dict) and isinstance(step.get("url"), str) and step["url"].startswith("/")):
+        raise ValueError("Modelo STEP inválido")
+    image = text(data.get("image"), 1000)
+    if image and not image.startswith(("/", "https://")):
+        raise ValueError("Imagem inválida")
+    name = text(data.get("name"), 200) or text(data.get("fileName"), 200)
+    if not name:
+        raise ValueError("O projeto precisa de um nome")
+    return {
+        "id": project_id,
+        "name": name,
+        "fileName": text(data.get("fileName"), 255),
+        "items": [{key: text(item.get(key), 500) for key in ("reference", "value", "description", "footprint", "partNumber")} | {"quantity": item["quantity"]} for item in items],
+        **({"step": {"name": text(step.get("name"), 255), "url": text(step["url"], 1000)}} if step else {}),
+        **({"image": image} if image else {}),
+        "createdAt": text(data.get("createdAt"), 40),
+        **({"updatedAt": text(data.get("updatedAt"), 40)} if data.get("updatedAt") else {}),
     }
 
 
@@ -1431,7 +1467,7 @@ def import_items():
     rows = data.get("items") if isinstance(data, dict) else None
     if not isinstance(rows, list) or not rows or len(rows) > 5000:
         return erro("Envia entre 1 e 5000 componentes para importar")
-    if (denied := electronics_denied(item.get("cat") for item in rows if isinstance(item, dict))):
+    if (denied := electronics_denied()):
         return denied
     try:
         with EXCEL_LOCK:
@@ -1506,7 +1542,7 @@ def mover():
             return erro("Preenche a categoria e todas as propriedades")
         if not category_config:
             return erro("Categoria não encontrada", 404)
-        if (denied := electronics_denied([category])):
+        if (denied := electronics_denied()):
             return denied
         if image and not category_config["image"]:
             return erro("Esta categoria não aceita imagens")
@@ -1566,7 +1602,7 @@ def consumir():
             movements.append({"type": "out", "item_id": item["id"], "cat": item["cat"], "props": item["props"],
                               "delta": -line["qty"], "before": item["qty"], "note": note.strip()})
             item["qty"] -= line["qty"]
-        if (denied := electronics_denied(movement["cat"] for movement in movements)):
+        if (denied := electronics_denied()):
             return denied
         save_items(items, movements)
         return jsonify(msg=f"{sum(line['qty'] for line in lines)} unidade(s) retiradas para {note.strip()}")
@@ -1583,7 +1619,7 @@ def ajustar(item_id):
         item = next((current for current in items if current["id"] == item_id), None)
         if not item:
             return erro("Item não encontrado", 404)
-        if (denied := electronics_denied([item["cat"]])):
+        if (denied := electronics_denied()):
             return denied
         before = item["qty"]
         item["qty"] = max(0, item["qty"] + delta)
@@ -1606,7 +1642,7 @@ def apagar(item_id):
         item = next((current for current in items if current["id"] == item_id), None)
         if not item:
             return erro("Item não encontrado", 404)
-        if (denied := electronics_denied([item["cat"]])):
+        if (denied := electronics_denied()):
             return denied
         save_items([current for current in items if current["id"] != item_id],
                    [{"type": "delete", "item_id": item_id, "cat": item["cat"], "props": item["props"], "delta": -item["qty"], "before": item["qty"]}])
@@ -1627,7 +1663,7 @@ def editar_item(item_id):
             if row is None:
                 return erro("Item não encontrado", 404)
             category = connection.execute("SELECT * FROM categories WHERE id = ?", (row["cat_id"],)).fetchone()
-            if (denied := electronics_denied([category["name"]])):
+            if (denied := electronics_denied()):
                 return denied
             raw_props = data.get("props")
             raw_qty = data.get("qty")
@@ -1675,8 +1711,7 @@ def mudar_localizacao():
         init_db()
         with EXCEL_LOCK, db_connection() as connection:
             placeholders = ",".join("?" for _ in ids)
-            names = connection.execute(f"SELECT DISTINCT c.name FROM items i JOIN categories c ON c.id = i.cat_id WHERE i.id IN ({placeholders})", ids).fetchall()
-            if (denied := electronics_denied(row["name"] for row in names)):
+            if (denied := electronics_denied()):
                 return denied
             changed = connection.execute(f"SELECT COUNT(*) AS n FROM items WHERE id IN ({placeholders})", ids).fetchone()["n"]
             connection.execute(f"UPDATE items SET location = ? WHERE id IN ({placeholders})", (location, *ids))
@@ -1740,6 +1775,9 @@ def guardar_etiqueta():
     # Sem id cria uma etiqueta nova; com id substitui a guardada.
     if STORAGE_MODE != "local":
         return erro("A edição está disponível no modo local")
+    # As etiquetas sao das gavetas do stock eletronico: mesma regra.
+    if (denied := electronics_denied()):
+        return denied
     data = request.get_json(silent=True) or {}
     # {"labels": [...]} cria várias de uma vez (ex.: parafusos de vários tamanhos): ou ficam todas ou nenhuma.
     batch = data.get("labels")
@@ -1784,6 +1822,9 @@ def apagar_etiquetas():
     # Apaga uma ou várias etiquetas de uma vez: {"ids": [1, 2, 3]}.
     if STORAGE_MODE != "local":
         return erro("A edição está disponível no modo local")
+    # As etiquetas sao das gavetas do stock eletronico: mesma regra.
+    if (denied := electronics_denied()):
+        return denied
     ids = (request.get_json(silent=True) or {}).get("ids")
     if not isinstance(ids, list) or not 1 <= len(ids) <= 500 or not all(isinstance(label_id, int) and not isinstance(label_id, bool) for label_id in ids):
         return erro("Indica as etiquetas a apagar")
@@ -1792,6 +1833,57 @@ def apagar_etiquetas():
         with EXCEL_LOCK, db_connection() as connection:
             connection.executemany("DELETE FROM labels WHERE id = ?", [(label_id,) for label_id in ids])
         return jsonify(msg=f"{len(ids)} etiqueta(s) apagada(s)")
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.get("/api/pcb-projects")
+def projetos_pcb():
+    # Publico como o stock: todos veem os projetos; o mais recente primeiro.
+    try:
+        init_db()
+        with db_connection() as connection:
+            projects = [json.loads(row["data"]) for row in connection.execute("SELECT data FROM pcb_projects")]
+        return jsonify(projects=sorted(projects, key=lambda project: project.get("createdAt", ""), reverse=True))
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.post("/api/pcb-projects")
+def guardar_projetos_pcb():
+    # {"projects": [...]}: cria ou substitui cada projeto pelo id. Varios de uma vez trazem os guardados no browser.
+    if STORAGE_MODE != "local":
+        return erro("A edição está disponível no modo local")
+    batch = (request.get_json(silent=True) or {}).get("projects")
+    if not isinstance(batch, list) or not 1 <= len(batch) <= 200 or not all(isinstance(entry, dict) for entry in batch):
+        return erro("Envia entre 1 e 200 projetos")
+    try:
+        projects = [pcb_project_from_json(entry) for entry in batch]
+    except ValueError as exc:
+        return erro(str(exc))
+    try:
+        init_db()
+        with EXCEL_LOCK, db_connection() as connection:
+            for project in projects:
+                stored = json.dumps(project, ensure_ascii=False)
+                if connection.execute("SELECT 1 FROM pcb_projects WHERE id = ?", (project["id"],)).fetchone():
+                    connection.execute("UPDATE pcb_projects SET data = ? WHERE id = ?", (stored, project["id"]))
+                else:
+                    connection.execute("INSERT INTO pcb_projects (id, data) VALUES (?, ?)", (project["id"], stored))
+        return jsonify(msg=f"{len(projects)} projeto(s) guardado(s)", projects=projects)
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.delete("/api/pcb-projects/<project_id>")
+def apagar_projeto_pcb(project_id):
+    if STORAGE_MODE != "local":
+        return erro("A edição está disponível no modo local")
+    try:
+        init_db()
+        with EXCEL_LOCK, db_connection() as connection:
+            connection.execute("DELETE FROM pcb_projects WHERE id = ?", (project_id,))
+        return jsonify(msg="Projeto apagado")
     except Exception as exc:
         return erro(str(exc), 500)
 
@@ -2049,7 +2141,7 @@ def editar_categoria(original_name):
     section = data.get("section", SECTIONS[0])
     if section not in SECTIONS:
         return erro("Secção desconhecida")
-    if (denied := electronics_denied([original_name], section)):
+    if (denied := electronics_denied()):
         return denied
     try:
         init_db()
@@ -2103,7 +2195,7 @@ def nova_categoria():
         return erro("Indica o nome e pelo menos uma propriedade")
     if section not in SECTIONS:
         return erro("Secção desconhecida")
-    if (denied := electronics_denied([], section)):
+    if (denied := electronics_denied()):
         return denied
     try:
         init_db()
@@ -2126,7 +2218,7 @@ def nova_categoria():
 def apagar_categoria(name):
     # DELETE /api/categories/<name> remove a categoria e, pela chave estrangeira,
     # os componentes ligados a ela; depois atualiza tambem o Excel.
-    if (denied := electronics_denied([name])):
+    if (denied := electronics_denied()):
         return denied
     try:
         init_db()
@@ -2381,6 +2473,12 @@ def reverter_movimentos():
 #     LOGIN_ATTEMPTS.pop(person_id, None)
 #     start_session(row["id"])
 #     return jsonify(msg="Sessão iniciada", user=current_person())
+
+
+@app.get("/api/auth/me")
+def me():
+    # O site da cablagem (/harness/) so pergunta quem tem sessao, sem descarregar o stock.
+    return jsonify(user=current_person())
 
 
 @app.post("/api/auth/logout")

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, inject, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, inject, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { parseBom } from '../bom.js'
 import { readStored, writeStored } from '../api.js'
 import { stockCheck, stockToTake } from '../pcbStock.js'
@@ -9,12 +9,13 @@ import LabelScanner from '../components/LabelScanner.vue'
 import BomStockList from '../components/BomStockList.vue'
 import StepViewer from '../components/StepViewer.vue'
 
+// Antes os projetos ficavam só no browser; os que ainda lá estão sobem para o servidor quando há sessão.
 const PROJECTS_STORAGE_KEY = 'stocklart-pcb-projects'
 const bomFile = ref(null)
 const projectName = ref('')
 const bomItems = ref([])
 const projectError = ref('')
-const projects = ref(loadProjects())
+const projects = ref([]), localProjects = ref(readLocal()), listError = ref('')
 const selectedProject = ref(null)
 const labelScanner = ref(null), projectDetail = ref(null)
 const api = inject('api')
@@ -39,17 +40,30 @@ const lineStock = computed(() => selectedProject.value?.items.map(line => ({
 })) ?? [])
 const build = computed(() => stockCheck(projects.value.filter(project => boardCounts[project.id] > 0).map(project => ({ lines: project.items, count: boardCounts[project.id] })), inventory.items))
 
-function loadProjects() {
+function readLocal() {
   const saved = readStored(PROJECTS_STORAGE_KEY, [])
   return Array.isArray(saved) ? saved : []
 }
-function saveProjects(updated) {
-  if (!writeStored(PROJECTS_STORAGE_KEY, updated)) {
-    projectError.value = 'Não foi possível guardar os projetos neste navegador.'
-    return false
-  }
-  projects.value = updated
-  projectError.value = ''
+async function loadProjects() {
+  try {
+    // Sobem com o mesmo id, por isso repetir (outro separador, falha a meio) não duplica.
+    if (localProjects.value.length && inventory.signedIn) {
+      await api.direct('savePcbProjects', { projects: localProjects.value })
+      writeStored(PROJECTS_STORAGE_KEY, [])
+      localProjects.value = []
+    }
+    projects.value = (await api.direct('pcbProjects')).projects || []
+    listError.value = ''
+  } catch (error) { listError.value = error.message || 'Não foi possível carregar os projetos.' }
+}
+// Carrega quando a sessão é conhecida e outra vez ao entrar ou sair (entrar também sobe os do browser).
+watch(() => inventory.ready ? String(inventory.signedIn) : '', key => { if (key) loadProjects() }, { immediate: true })
+async function persist(project, errorRef = projectError) {
+  try { await api.direct('savePcbProjects', { projects: [project] }) }
+  catch (error) { errorRef.value = error.message || 'Não foi possível guardar o projeto.'; return false }
+  const index = projects.value.findIndex(entry => entry.id === project.id)
+  projects.value = index < 0 ? [project, ...projects.value] : projects.value.with(index, project)
+  errorRef.value = ''
   return true
 }
 
@@ -82,7 +96,7 @@ async function selectBom(event) {
   }
 }
 
-function saveAndOpenProject() {
+async function saveAndOpenProject() {
   if (!bomFile.value) return
   const project = {
     id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -91,7 +105,7 @@ function saveAndOpenProject() {
     items: bomItems.value,
     createdAt: new Date().toISOString()
   }
-  if (!saveProjects([project, ...projects.value])) return
+  if (!await persist(project)) return
   selectedProject.value = project
   bomFile.value = null
   bomItems.value = []
@@ -108,8 +122,8 @@ function addLabel({ mpn, manufacturer, qty }) {
   updateProject({ ...project, items })
 }
 
-function updateProject(updated) {
-  if (saveProjects(projects.value.map(entry => entry.id === updated.id ? updated : entry))) selectedProject.value = updated
+async function updateProject(updated) {
+  if (await persist(updated, bomError)) selectedProject.value = updated
 }
 
 // Uma nova versão do BOM substitui as linhas do projeto aberto; nome e STEP ficam.
@@ -144,7 +158,7 @@ async function attachStep(event) {
   stepBusy.value = true
   try {
     const url = await api.uploadStep(file)
-    updateProject({ ...selectedProject.value, step: { name: file.name, url } })
+    await updateProject({ ...selectedProject.value, step: { name: file.name, url } })
   } catch (error) {
     stepError.value = error.message
   } finally { stepBusy.value = false }
@@ -155,13 +169,13 @@ async function attachImage(file) {
   if (!file?.type.startsWith('image/') || imageBusy.value) return
   stepError.value = ''
   imageBusy.value = true
-  try { updateProject({ ...selectedProject.value, image: await api.uploadImage(file) }) }
+  try { await updateProject({ ...selectedProject.value, image: await api.uploadImage(file) }) }
   catch (error) { stepError.value = error.message }
   finally { imageBusy.value = false }
 }
 function pasteImage(event) {
   const file = [...(event.clipboardData?.files || [])].find(f => f.type.startsWith('image/'))
-  if (!file || !selectedProject.value || document.querySelector('dialog[open]')) return
+  if (!file || !selectedProject.value || !inventory.signedIn || document.querySelector('dialog[open]')) return
   event.preventDefault()
   attachImage(file)
 }
@@ -186,9 +200,11 @@ function consume() {
 
 const formatDate = timestamp => !timestamp ? '' : new Intl.DateTimeFormat('pt-PT', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(timestamp))
 
-function removeProject(projectId) {
-  if (!confirm('Apagar este projeto PCB guardado?')) return
-  if (!saveProjects(projects.value.filter((project) => project.id !== projectId))) return
+async function removeProject(projectId) {
+  if (!confirm('Apagar este projeto PCB para toda a equipa?')) return
+  try { await api.direct('deletePcbProject', { id: projectId }) }
+  catch (error) { listError.value = error.message || 'Não foi possível apagar o projeto.'; return }
+  projects.value = projects.value.filter(project => project.id !== projectId)
   if (selectedProject.value?.id === projectId) selectedProject.value = null
 }
 </script>
@@ -198,9 +214,10 @@ function removeProject(projectId) {
     active="pcbs"
     eyebrow="Produção · listas de materiais"
     title="PCB e os seus BOMs"
-    description="Cria projetos PCB, consulta os seus BOMs e confirma o stock para produzir. Projetos guardados neste navegador; modelos STEP no servidor."
+    description="Cria projetos PCB, consulta os seus BOMs e confirma o stock para produzir. Os projetos e os modelos STEP ficam no servidor, para toda a equipa."
   >
-    <section class="workspace-grid">
+    <!-- Sem sessão só se consultam os projetos: criar e mudar pede login, como no inventário. -->
+    <section v-if="inventory.signedIn" class="workspace-grid">
       <article class="workspace-card workspace-card-wide">
         <div class="card-heading">
           <div>
@@ -238,7 +255,7 @@ function removeProject(projectId) {
         <p class="eyebrow">Fluxo de trabalho</p>
         <h2>Projeto e BOM associados</h2>
         <p class="card-muted">
-          Cada projeto mantém o seu nome e o BOM neste navegador, e o modelo STEP no servidor. Indica quantas placas queres produzir de cada projeto para ver o que há em stock.
+          Cada projeto guarda o nome, o BOM e o modelo STEP no servidor, e toda a equipa vê os mesmos. Indica quantas placas queres produzir de cada projeto para ver o que há em stock.
         </p>
       </article>
     </section>
@@ -251,7 +268,9 @@ function removeProject(projectId) {
         </div>
         <span class="status-pill">{{ projects.length }} projeto(s)</span>
       </div>
-      <div v-if="!projects.length" class="empty-workspace">Ainda não tens projetos PCB guardados.</div>
+      <div v-if="listError" class="upload-error" role="alert">{{ listError }}</div>
+      <div v-if="!projects.length" class="empty-workspace">Ainda não há projetos PCB guardados.<template v-if="!inventory.signedIn"> Inicia sessão para criar um.</template></div>
+      <p v-if="localProjects.length && !inventory.signedIn" class="hint">{{ localProjects.length }} projeto(s) guardado(s) só neste navegador sobem para a equipa quando iniciares sessão.</p>
       <div v-else class="saved-project-list">
         <div v-for="project in projects" :key="project.id" :class="['saved-project', { selected: selectedProject?.id === project.id }]">
           <button class="saved-project-open" @click="openProject(project)">
@@ -269,7 +288,7 @@ function removeProject(projectId) {
               <span>Placas</span>
               <input v-model.number="boardCounts[project.id]" type="number" min="0" step="1" placeholder="0" :aria-label="`Placas a produzir de ${project.name}`" />
             </label>
-            <button class="saved-project-delete" aria-label="Apagar projeto" @click.stop="removeProject(project.id)">×</button>
+            <button v-if="inventory.signedIn" class="saved-project-delete" aria-label="Apagar projeto" @click.stop="removeProject(project.id)">×</button>
           </div>
         </div>
       </div>
@@ -286,12 +305,12 @@ function removeProject(projectId) {
           <h2>{{ selectedProject.name }}</h2>
         </div>
         <span class="pcb-detail-actions">
-          <label class="text-button">
+          <label v-if="inventory.signedIn" class="text-button">
             Substituir BOM
             <input type="file" class="sr-only" accept=".csv,.bom,.txt,text/csv,text/plain" aria-label="Substituir ficheiro BOM" @change="replaceBom" />
           </label>
-          <button class="text-button" type="button" @click="labelScanner.open()">Ler etiqueta</button>
-          <button class="text-button" type="button" @click="openConsume">Retirar do stock</button>
+          <button v-if="inventory.signedIn" class="text-button" type="button" @click="labelScanner.open()">Ler etiqueta</button>
+          <button v-if="inventory.electronicsEditor" class="text-button" type="button" @click="openConsume">Retirar do stock</button>
           <button class="text-button" type="button" @click="selectedProject = null">Fechar</button>
         </span>
       </div>
@@ -299,7 +318,7 @@ function removeProject(projectId) {
       <div class="pcb-detail-grid">
         <div class="pcb-step-panel">
           <img v-if="selectedProject.image" class="pcb-image" :src="selectedProject.image" :alt="`Placa ${selectedProject.name}`">
-          <span class="pcb-step-actions">
+          <span v-if="inventory.signedIn" class="pcb-step-actions">
             <label class="text-button">
               {{ imageBusy ? 'A enviar…' : selectedProject.image ? 'Substituir imagem' : 'Anexar imagem' }}
               <input type="file" class="sr-only" accept="image/*" aria-label="Anexar imagem da PCB" :disabled="imageBusy" @change="attachImage($event.target.files?.[0]); $event.target.value = ''" />
@@ -316,7 +335,7 @@ function removeProject(projectId) {
             <strong v-if="selectedProject.step">{{ selectedProject.step.name }}</strong>
             <span class="pcb-step-actions">
               <a v-if="selectedProject.step" class="text-button" :href="selectedProject.step.url" :download="selectedProject.step.name">Descarregar STEP</a>
-              <label class="text-button">
+              <label v-if="inventory.signedIn" class="text-button">
                 {{ stepBusy ? 'A enviar…' : selectedProject.step ? 'Substituir STEP' : 'Anexar STEP' }}
                 <input type="file" class="sr-only" accept=".step,.stp" aria-label="Anexar ficheiro STEP" :disabled="stepBusy" @change="attachStep" />
               </label>

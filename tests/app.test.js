@@ -2,6 +2,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import App from '../frontend/src/App.vue'
 import LabelScanner from '../frontend/src/components/LabelScanner.vue'
+import { pcbServer } from './pcb-server.js'
 
 // O WASM do zxing não carrega no jsdom; o SVG falso guarda o texto do QR para os testes o lerem.
 vi.mock('zxing-wasm/writer', () => ({ writeBarcode: async text => ({ svg: `<svg width="1" height="1"><title>${text}</title></svg>` }) }))
@@ -115,7 +116,7 @@ it('handles an empty stock without opening an invalid movement', async () => {
   fetch.mockResolvedValue({ ok: true, json: async () => ({ categories: [], items: [] }) })
   wrapper = mount(App)
   await flushPromises()
-  expect(wrapper.find('.top .primary').attributes('disabled')).toBeDefined()
+  expect(wrapper.find('.top .primary').exists()).toBe(false)
   expect(wrapper.find('.empty').text()).toContain('Nada encontrado')
 })
 
@@ -848,7 +849,7 @@ it('explains the inventory in a step-by-step tutorial that reads a real label ph
 
 it('replaces the BOM of a saved PCB project and keeps its name and STEP', async () => {
   const step = { name: 'placa.step', url: '/uploads/placa.step' }
-  localStorage.setItem('stocklart-pcb-projects', JSON.stringify([{ id: 'p1', name: 'Placa', fileName: 'v1.csv', step, items: [{ reference: 'R1', value: '10k', description: '—', footprint: '—', partNumber: '—', quantity: 1 }] }]))
+  const server = pcbServer([{ id: 'p1', name: 'Placa', fileName: 'v1.csv', step, items: [{ reference: 'R1', value: '10k', description: '—', footprint: '—', partNumber: '—', quantity: 1 }] }])
   window.history.replaceState(null, '', '/#/pcbs')
   vi.stubGlobal('confirm', () => true)
   wrapper = mount(App)
@@ -858,7 +859,7 @@ it('replaces the BOM of a saved PCB project and keeps its name and STEP', async 
   Object.defineProperty(input.element, 'files', { value: [{ name: 'v2.csv', text: async () => 'Reference,Value,Qty\nC1,100nF,3' }] })
   await input.trigger('change')
   await flushPromises()
-  const [saved] = JSON.parse(localStorage.getItem('stocklart-pcb-projects'))
+  const [saved] = server
   expect(saved).toMatchObject({ name: 'Placa', fileName: 'v2.csv', step, items: [{ reference: 'C1', value: '100nF', quantity: 3 }] })
   expect(wrapper.find('.pcb-project-detail').text()).toContain('v2.csv')
 })
