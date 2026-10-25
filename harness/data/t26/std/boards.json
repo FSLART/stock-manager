@@ -1,0 +1,14 @@
+{
+  "_help": "Placa (PCB) a que pertence cada conector, para abrir o projeto no Altium 365. 'match' = expressão regular sobre o nome do conector; 'harness' opcional limita a um harness. A ficha do harness liga ao header desta placa.",
+  "folder": "https://ipl.365.altium.com/designs/folder-7D774A8C-512F-4F4E-8518-0403C2316421",
+  "boards": [
+    { "name": "AMS", "match": "^AMS J", "url": "https://ipl.365.altium.com/designs/28ED1897-F95D-4CA8-85A5-C448980D3043?activeView=SCH&activeDocumentId=BMS_PwrMng.SchDoc&variant=[No+Variations]&location=[1,95.84,20.02,31.62]#design" },
+    { "name": "ACU", "match": "^ACU J", "url": "https://ipl.365.altium.com/designs/B2E0A038-14DF-46B0-9419-019B934C0D14#design" },
+    { "name": "VCU", "match": "^VCU J", "url": "https://ipl.365.altium.com/designs/A8AD2951-F4BB-4EB7-8F1B-5B52397B0AF5?activeView=SCH&activeDocumentId=Power.SchDoc&variant=[No+Variations]&location=[1,96.12,24.24,32.04]#design" },
+    { "name": "PDM", "match": "^PDM( J\\d+)?$", "url": "https://ipl.365.altium.com/designs/0B749B55-DA3D-44FA-A03C-9053537E9958#design" },
+    { "name": "BSPD", "match": "^BSPD J", "url": "https://ipl.365.altium.com/designs/E0A7FBA7-509F-4017-B827-A2F85BEBAB3B?activeDocumentId=BSPD_2.1_SCH.SchDoc&variant=[No+Variations]&activeView=SCH&location=[1,96.37,31.62,40.05]#design" },
+    { "name": "Acquisition", "match": "^ACQUISITION", "url": "https://ipl.365.altium.com/designs/2B0D0A42-E397-41CA-91AA-64512EB54F8F#design" },
+    { "name": "TSAL Green", "harness": "ACCU", "match": "^TSAL (D2|J1)$", "url": "https://ipl.365.altium.com/designs/4356F158-707F-44C6-876A-8D4F5D66A2E6?activeDocumentId=TSAL_V2.3.1_Green_SCH_Cheap.SchDoc&variant=[No+Variations]&activeView=SCH&location=[1,95.05,47.3,64.71]#design" },
+    { "name": "TSAL Red", "match": "^TSAL RED", "url": "https://ipl.365.altium.com/designs/0DD83EA4-23A1-49D2-ABFE-164BA44308E1#design" }
+  ]
+}

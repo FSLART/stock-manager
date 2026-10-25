@@ -1,0 +1,63 @@
+harness,ref,anchor_3d,x_m,y_m,z_m,notes
+LVBOX,LVBOX J1,RTS718N32S03.stp-2,,,,RTS718N32S03 de cima da LV box
+LVBOX,LVBOX J2,RTS718N32S03.stp-1,,,,RTS718N32S03 de baixo da LV box
+JBOX,JBOX J1,RTS714N19S03-1,,,,"no CAD é um RTS714N19S03 (19 vias), mas o pinout do CAR usa W, X, a, b, f (só existem no 32 vias): confirmar"
+ADBOX,ADBOX J10,c3d-rts714n19s03-01-000.stp-1,,,,RTS714N19S03 da AD box
+CAR,ADBOX J1,c3d-rts714n19s03-01-000.stp-1,,,,RTS714N19S03 da AD box (no Excel do ADBOX chama-se ADBOX J10)
+SIDEPANEL,SIDEPANEL J1,c3d-rts714n19s03-01-000.stp-2,,,,RTS714N19S03 do side panel
+CAR,PDM,T26_29Nov_PDM 4.0.Assem-1,,,,aproximado: centro do PDM (dentro da AD box)
+CAR,INERTIA,MTi-6x0G,,,,aproximado: centro da Xsens MTi-680G (dentro da AD box)
+CAR,BOTS,T26_Jan15-BOTS_ASSEMB,,,,aproximado: centro do BOTS
+PEDALBOX,BOTS,T26_Jan15-BOTS_ASSEMB,,,,aproximado: centro do BOTS
+CAR,APPS1,T26_Jan15-Assembly_Sensor_rfd-4021-836-224-421___z-rfc-p03,,,,aproximado: centro do sensor RFD-4021 do acelerador
+CAR,APPS2,T26_Jan15-Assembly_Sensor_rfd-4021-836-224-421___z-rfc-p03,,,,aproximado: centro do sensor RFD-4021 do acelerador
+PEDALBOX,APPS1,T26_Jan15-Assembly_Sensor_rfd-4021-836-224-421___z-rfc-p03,,,,aproximado: centro do sensor RFD-4021 do acelerador
+PEDALBOX,APPS2,T26_Jan15-Assembly_Sensor_rfd-4021-836-224-421___z-rfc-p03,,,,aproximado: centro do sensor RFD-4021 do acelerador
+PEDALBOX,PEDALBOX J1,T26_Jan15-Assem_Base-1/Pedal_Base_T26e-1,,,,aproximado: centro da base dos pedais
+DATABOX,LCD,T26_Jan15-NHD-4.3-HDMI-HR-RSXP-CTU-1,,,,LCD NHD-4.3 do dashboard
+DATABOX,EMERGENCY J1,T26_Jan15-Shutdown_Button-1,,,,botão de emergência do dashboard
+DATABOX,DATABOX J1,T26_Jan15-RASPBERRY_PI_5-2,,,,aproximado: centro do Raspberry Pi 5 (DATABOX J1/J2 = Raspberry Pi)
+DATABOX,DATABOX J2,T26_Jan15-RASPBERRY_PI_5-2,,,,aproximado: centro do Raspberry Pi 5 (DATABOX J1/J2 = Raspberry Pi)
+DATABOX,RASPBERRY J1,T26_Jan15-RASPBERRY_PI_5-2,,,,aproximado: centro do Raspberry Pi 5
+DATABOX,RASPBERRY J2,T26_Jan15-RASPBERRY_PI_5-2,,,,aproximado: centro do Raspberry Pi 5
+DATABOX,RASPBERRY J3,T26_Jan15-RASPBERRY_PI_5-2,,,,aproximado: centro do Raspberry Pi 5
+DATABOX,RASPBERRY J4,T26_Jan15-RASPBERRY_PI_5-2,,,,aproximado: centro do Raspberry Pi 5
+DATABOX,RASPBERRY J5,T26_Jan15-RASPBERRY_PI_5-2,,,,aproximado: centro do Raspberry Pi 5
+DATABOX,RASPBERRY J6,T26_Jan15-RASPBERRY_PI_5-2,,,,aproximado: centro do Raspberry Pi 5
+DATABOX,RASPBERRY PI,T26_Jan15-RASPBERRY_PI_5-2,,,,aproximado: centro do Raspberry Pi 5
+JBOX,TSAL RED J1,TSAL_RED20260413-1,,,,aproximado: centro da placa TSAL vermelha (JBox)
+JBOX,TSAL RED D2,TSAL_RED20260413-1,,,,aproximado: centro da placa TSAL vermelha (JBox)
+JBOX,FUSE 1,Fuse_Holder-1,,,,porta-fusível da JBox
+JBOX,INVERTER L1,T26_15janCooling_Jacket_Assembly_V6-1/DTI_F-MOT-A-1,,,,aproximado: centro do inversor DTI
+JBOX,INVERTER L2,T26_15janCooling_Jacket_Assembly_V6-1/DTI_F-MOT-A-1,,,,aproximado: centro do inversor DTI
+LVBOX,VCU J3,VCU20260413-1,,,,aproximado: centro da VCU (LV box)
+LVBOX,VCU J4,VCU20260413-1,,,,aproximado: centro da VCU (LV box)
+LVBOX,BSPD J1,BSPD20260413-1,,,,aproximado: centro da BSPD (LV box)
+LVBOX,DC-DC J1,Traco Power-1,,,,aproximado: centro do DC-DC Traco (LV box)
+LVBOX,RES J1,RES20260413-1,,,,aproximado: centro do recetor RES (LV box)
+LVBOX,RES J2,RES20260413-1,,,,aproximado: centro do recetor RES (LV box)
+LVBOX,RES J3,RES20260413-1,,,,aproximado: centro do recetor RES (LV box)
+ADBOX,JETSON J1,9Okt_Jetson,,,,aproximado: centro da Jetson (AD box)
+ADBOX,JETSON U2C,9Okt_Jetson,,,,aproximado: centro da Jetson (AD box)
+ADBOX,SWITCH J1,Switch-1,,,,aproximado: centro do switch de rede (AD box)
+ADBOX,ZED J1,9Okt_Jetson-1/[ZEDLink] ZEDLink Mono Rev1-1,,,,aproximado: centro da placa ZEDLink (AD box)
+ADBOX,ZED J2,9Okt_Jetson-1/[ZEDLink] ZEDLink Mono Rev1-1,,,,aproximado: centro da placa ZEDLink (AD box)
+CAR,ASSI WING LEFT J1,,-0.469,0.818,1.924,pick 2026-10-23
+CAR,ASSI WING RIGHT J1,,0.471,0.810,1.924,pick 2026-10-23
+CAR,TSAL J1,,-0.009,1.126,1.505,pick 2026-10-23
+ACQ7,GROUND POINT,,-0.337,0.032,1.441,pick 2026-10-23
+ACQ7,ACQUISITION 7 J1,,0.010,0.333,2.433,pick 2026-10-23
+ACQ7,ACQUISITION 7 J2,,0.010,0.333,2.433,pick 2026-10-23
+ACQ7,ACQUISITION 7 J3,,0.010,0.333,2.433,pick 2026-10-23 (no browser ficou como AUXFRONT · ACQUISITION 1 J3; é o mesmo ponto do J1/J2)
+CAR,ASSI REAR J1,,0.012,0.365,2.425,pick 2026-10-23
+CAR,BRAKE LIGHT J1,,0.010,0.352,2.434,pick 2026-10-23
+CAR,PDM J1,,0.086,0.369,1.643,pick 2026-10-23: conector J1 do PDM
+ACQ7,PDM J1,,0.086,0.369,1.643,pick 2026-10-23: conector J1 do PDM
+TEST-CAR,PDM J1,,0.086,0.369,1.643,pick 2026-10-23: conector J1 do PDM
+CAR,PDM J2,,0.021,0.370,1.647,pick 2026-10-23: conector J2 do PDM
+TEST-CAR,PDM J2,,0.021,0.370,1.647,pick 2026-10-23: conector J2 do PDM
+CAR,GROUND POINT,,-0.337,0.032,1.441,pick 2026-10-23: o mesmo ground point para todos os harnesses
+JBOX,GROUND POINT,,-0.337,0.032,1.441,pick 2026-10-23: o mesmo ground point para todos os harnesses
+DATABOX,ACQUISITION J3,,-0.012,0.547,0.773,pick 2026-10-23 · T26_Jan15-RASPBERRY_PI_5-2
+LVBOX,ACU J3,,-0.200,0.311,2.091,pick 2026-10-23 · PCB-1
+ADBOX,DC-DC J1,,-0.058,0.243,1.561,pick 2026-10-23 · Part2-1

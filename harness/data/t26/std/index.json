@@ -1,0 +1,358 @@
+{
+ "car": "T26e",
+ "hub": "CAR",
+ "generated": "2026-10-23",
+ "harnesses": [
+  {
+   "code": "ADBOX",
+   "name": "AD Box",
+   "folder": "ADBox_Harness",
+   "category": "car",
+   "file": "ADBOX.xlsx",
+   "interface": [
+    "ADBOX"
+   ],
+   "sources": [
+    "ADBox_Harnes_Pinouts.xlsx",
+    "ADBox_Harnes_Pinouts.docx",
+    "AD_Box_Harnes_RapidHarness.pdf"
+   ],
+   "curated": true,
+   "wires": 23,
+   "connectors": 11,
+   "pins": 50,
+   "issues": 13
+  },
+  {
+   "code": "ACCU",
+   "name": "Acumulador",
+   "folder": "Accu_Harness",
+   "category": "car",
+   "file": "ACCU.xlsx",
+   "interface": [
+    "ACCU"
+   ],
+   "sources": [
+    "Accu_Harnes_Pinouts.xlsx",
+    "Accu_Harnes_Pinouts.docx",
+    "Accu_Harnes_RapidHarness.pdf"
+   ],
+   "curated": true,
+   "wires": 66,
+   "connectors": 33,
+   "pins": 160,
+   "issues": 17
+  },
+  {
+   "code": "ACQ7",
+   "name": "Acquisition 7",
+   "folder": "Acquisition 7",
+   "category": "car",
+   "file": "ACQ7.xlsx",
+   "interface": [
+    "ACQUISITION 7"
+   ],
+   "sources": [
+    "Acquisition 7.xlsx"
+   ],
+   "curated": false,
+   "wires": 6,
+   "connectors": 7,
+   "pins": 36,
+   "issues": 2
+  },
+  {
+   "code": "ACQ2",
+   "name": "Acquisition 2",
+   "folder": "Acquisition_2",
+   "category": "car",
+   "file": "ACQ2.xlsx",
+   "interface": [
+    "ACQUISITION 2"
+   ],
+   "sources": [
+    "Acquisition_2.xlsx"
+   ],
+   "curated": false,
+   "wires": 0,
+   "connectors": 3,
+   "pins": 30,
+   "issues": 0
+  },
+  {
+   "code": "AUXFRONT",
+   "name": "Aux Front Data",
+   "folder": "Aux_Front_Data",
+   "category": "car",
+   "file": "AUXFRONT.xlsx",
+   "interface": [],
+   "sources": [
+    "Front_Aux_Data_Harnes_Pinouts.xlsx"
+   ],
+   "curated": false,
+   "wires": 26,
+   "connectors": 9,
+   "pins": 60,
+   "issues": 14
+  },
+  {
+   "code": "CAR",
+   "name": "Car harness (principal)",
+   "folder": "Car_Harness",
+   "category": "car",
+   "file": "CAR.xlsx",
+   "interface": [],
+   "sources": [
+    "Car_Harnes_Pinouts.xlsx"
+   ],
+   "curated": false,
+   "wires": 132,
+   "connectors": 69,
+   "pins": 450,
+   "issues": 17
+  },
+  {
+   "code": "DATABOX",
+   "name": "Data Box",
+   "folder": "Data_Box",
+   "category": "car",
+   "file": "DATABOX.xlsx",
+   "interface": [
+    "DATABOX"
+   ],
+   "sources": [
+    "DataBox_Harness_Pinout.xlsx"
+   ],
+   "curated": false,
+   "wires": 82,
+   "connectors": 29,
+   "pins": 181,
+   "issues": 23
+  },
+  {
+   "code": "HANDCART",
+   "name": "Handcart (carregamento)",
+   "folder": "Handcart",
+   "category": "offboard",
+   "file": "HANDCART.xlsx",
+   "interface": [],
+   "sources": [
+    "Handcart_Harness_Pinout.xlsx",
+    "Handcart Harness T26.pdf"
+   ],
+   "curated": true,
+   "wires": 27,
+   "connectors": 4,
+   "pins": 59,
+   "issues": 6
+  },
+  {
+   "code": "JBOX",
+   "name": "Junction Box",
+   "folder": "JunctionBox_Harness",
+   "category": "car",
+   "file": "JBOX.xlsx",
+   "interface": [
+    "JBOX"
+   ],
+   "sources": [
+    "JunctionBox_Harnes_Pinouts.xlsx"
+   ],
+   "curated": false,
+   "wires": 6,
+   "connectors": 9,
+   "pins": 67,
+   "issues": 4
+  },
+  {
+   "code": "LVBOX",
+   "name": "LV Box",
+   "folder": "LVBox_Harness",
+   "category": "car",
+   "file": "LVBOX.xlsx",
+   "interface": [
+    "LVBOX"
+   ],
+   "sources": [
+    "LVBox_Harnes_Pinouts.xlsx",
+    "LVBox Harness Pinout.docx"
+   ],
+   "curated": false,
+   "wires": 88,
+   "connectors": 18,
+   "pins": 261,
+   "issues": 7
+  },
+  {
+   "code": "PEDALBOX",
+   "name": "Pedal Box",
+   "folder": "Pedal_Box",
+   "category": "car",
+   "file": "PEDALBOX.xlsx",
+   "interface": [
+    "PEDALBOX"
+   ],
+   "sources": [
+    "PedalBox_Harnes_Pinouts.xlsx"
+   ],
+   "curated": false,
+   "wires": 28,
+   "connectors": 9,
+   "pins": 60,
+   "issues": 14
+  },
+  {
+   "code": "SIDEPANEL",
+   "name": "Side Panel",
+   "folder": "Side Panel",
+   "category": "car",
+   "file": "SIDEPANEL.xlsx",
+   "interface": [
+    "SIDEPANEL"
+   ],
+   "sources": [
+    "SidePanel_Harnes_Pinouts.xlsx",
+    "SidePanel_Harnes_Pinouts.docx",
+    "SidePanel_Harnes_RapidHarness.pdf"
+   ],
+   "curated": true,
+   "wires": 37,
+   "connectors": 23,
+   "pins": 52,
+   "issues": 19
+  },
+  {
+   "code": "TEST-CAR",
+   "name": "Teste: car harness DASH/RASPBOX",
+   "folder": "TESTE_BOXES",
+   "category": "test",
+   "file": "TEST-CAR.xlsx",
+   "interface": [],
+   "sources": [
+    "Car_Harnes_DASH_RASPBOX_Pinouts.xlsx"
+   ],
+   "curated": false,
+   "wires": 45,
+   "connectors": 31,
+   "pins": 123,
+   "issues": 3
+  },
+  {
+   "code": "TEST-DASHBOX",
+   "name": "Teste: DataBox DASHBOX",
+   "folder": "TESTE_BOXES",
+   "category": "test",
+   "file": "TEST-DASHBOX.xlsx",
+   "interface": [],
+   "sources": [
+    "DataBox_DASHBOX_Harness_Pinout.xlsx"
+   ],
+   "curated": false,
+   "wires": 75,
+   "connectors": 20,
+   "pins": 192,
+   "issues": 11
+  }
+ ],
+ "mates": [
+  {
+   "ref": "ACCU J1",
+   "a": "CAR",
+   "b": "ACCU"
+  },
+  {
+   "ref": "ACQUISITION 7 J1",
+   "a": "CAR",
+   "b": "ACQ7"
+  },
+  {
+   "ref": "ACQUISITION 7 J2",
+   "a": "CAR",
+   "b": "ACQ7"
+  },
+  {
+   "ref": "ACQUISITION 7 J3",
+   "a": "CAR",
+   "b": "ACQ7"
+  },
+  {
+   "ref": "DATABOX J1",
+   "a": "CAR",
+   "b": "DATABOX"
+  },
+  {
+   "ref": "DATABOX J2",
+   "a": "CAR",
+   "b": "DATABOX"
+  },
+  {
+   "ref": "JBOX J1",
+   "a": "CAR",
+   "b": "JBOX"
+  },
+  {
+   "ref": "LVBOX J1",
+   "a": "CAR",
+   "b": "LVBOX"
+  },
+  {
+   "ref": "LVBOX J2",
+   "a": "CAR",
+   "b": "LVBOX"
+  },
+  {
+   "ref": "SIDEPANEL J1",
+   "a": "CAR",
+   "b": "SIDEPANEL"
+  }
+ ],
+ "copies": [
+  {
+   "a": "AUXFRONT",
+   "b": "PEDALBOX",
+   "refs": [
+    "ACQUISITION 1 J1",
+    "ACQUISITION 1 J2",
+    "ACQUISITION 1 J3",
+    "PEDALBOX J1"
+   ]
+  }
+ ],
+ "lonely": [
+  {
+   "ref": "ADBOX J1",
+   "has": "CAR",
+   "missing": "ADBOX"
+  },
+  {
+   "ref": "ADBOX J10",
+   "has": "ADBOX",
+   "missing": "CAR"
+  },
+  {
+   "ref": "ACCU J2",
+   "has": "ACCU",
+   "missing": "CAR"
+  },
+  {
+   "ref": "ACQUISITION 2 J1",
+   "has": "ACQ2",
+   "missing": "CAR"
+  },
+  {
+   "ref": "ACQUISITION 2 J2",
+   "has": "ACQ2",
+   "missing": "CAR"
+  },
+  {
+   "ref": "ACQUISITION 2 J3",
+   "has": "ACQ2",
+   "missing": "CAR"
+  },
+  {
+   "ref": "PEDALBOX J1",
+   "has": "PEDALBOX",
+   "missing": "CAR"
+  }
+ ]
+}

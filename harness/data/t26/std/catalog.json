@@ -1,0 +1,530 @@
+{
+  "_help": "Catálogo de fichas e crimps. housings: cada ficha (P/N exato ou regex em 'match'), nº de posições, género (M/F) e os contactos que leva. contacts: P/N do crimp, género, gama AWG (vazia = por confirmar), vedante por fio. price = €/unidade (1 un., ver fonte). Um contact_pn escrito em Connectors tem prioridade.",
+  "sources": {
+    "notion": "Notion · LART Central / Electronics / Inventory Management / BOM Management / Connectors Harness (2026-10-22)",
+    "handcart": "Handcart Harness T26.pdf (BOM e tabela de ligações)"
+  },
+  "families": [
+    {
+      "name": "Amphenol Sine RTS (ecomate, circular)",
+      "housings": [
+        {
+          "pn": "RTS718N32S03",
+          "positions": 32,
+          "gender": "F",
+          "contacts": [
+            "MS20W23F-10"
+          ],
+          "price": 12.73,
+          "use": "conector principal das caixas: Rasp Box, Data Box, LV Box ×2, Junction Box, Acumulador",
+          "source": "notion"
+        },
+        {
+          "pn": "RTS714N19S03",
+          "positions": 19,
+          "gender": "F",
+          "contacts": [
+            "MS20W23F-10"
+          ],
+          "price": 9.24,
+          "use": "conector principal do AD Box e do Side Panel",
+          "source": "notion"
+        },
+        {
+          "pn": "RTS6BS18N32PHEC03",
+          "positions": 32,
+          "gender": "M",
+          "contacts": [
+            "MP20W23F-10",
+            "MP20W23F"
+          ],
+          "price": 14.32,
+          "use": "lado do car harness das caixas de 32 vias (e Handcart)",
+          "source": "notion"
+        },
+        {
+          "pn": "RTS6BS14N19PHEC03",
+          "positions": 19,
+          "gender": "M",
+          "contacts": [
+            "MP20W23F-10"
+          ],
+          "price": 9.54,
+          "use": "lado do car harness do AD Box e do Side Panel",
+          "source": "notion"
+        }
+      ],
+      "contacts": [
+        {
+          "pn": "MS20W23F-10",
+          "gender": "F",
+          "awg": [
+            20,
+            22
+          ],
+          "price": 1.12,
+          "description": "contacto fêmea tamanho 20, crimp",
+          "source": "notion"
+        },
+        {
+          "pn": "MP20W23F-10",
+          "gender": "M",
+          "awg": [
+            20,
+            22
+          ],
+          "price": 0.86,
+          "description": "contacto macho tamanho 20, crimp",
+          "source": "notion"
+        },
+        {
+          "pn": "MP20W23F",
+          "gender": "M",
+          "awg": [
+            20,
+            22
+          ],
+          "description": "contacto macho tamanho 20, crimp (variante do desenho do Handcart)",
+          "source": "handcart"
+        }
+      ],
+      "confirmed": false
+    },
+    {
+      "name": "TE Micro MATE-N-LOK",
+      "housings": [
+        {
+          "pn": "794617-8",
+          "positions": 8,
+          "gender": "F",
+          "contacts": [
+            "794611-1"
+          ],
+          "use": "Acquisition (8 vias)",
+          "source": "notion"
+        },
+        {
+          "pn": "1-794617-0",
+          "positions": 10,
+          "gender": "F",
+          "contacts": [
+            "794611-1"
+          ],
+          "use": "Acquisition, BSPD, Latch (10 vias)",
+          "source": "notion"
+        },
+        {
+          "pn": "1-794617-2",
+          "positions": 12,
+          "gender": "F",
+          "contacts": [
+            "794611-1"
+          ],
+          "use": "Acquisition, TSAL Green (12 vias)",
+          "source": "notion"
+        },
+        {
+          "pn": "1-794617-4",
+          "positions": 14,
+          "gender": "F",
+          "contacts": [
+            "794611-1"
+          ],
+          "use": "CAN Splitter (14 vias, confirmar)",
+          "source": "notion"
+        },
+        {
+          "pn": "1-794615-8",
+          "positions": 18,
+          "gender": "F",
+          "contacts": [
+            "794611-1"
+          ],
+          "use": "CAN Splitter (18 vias, confirmar)",
+          "source": "notion"
+        },
+        {
+          "pn": "2-794617-0",
+          "positions": 20,
+          "gender": "F",
+          "contacts": [
+            "794611-1"
+          ],
+          "use": "ACU, VCU, DC-DC, CAN Splitter (20 vias)",
+          "source": "notion"
+        },
+        {
+          "pn": "2-794617-4",
+          "positions": 24,
+          "gender": "F",
+          "contacts": [
+            "794611-1"
+          ],
+          "use": "ACU, VCU (24 vias)",
+          "source": "notion"
+        },
+        {
+          "pn": "1445022-2",
+          "positions": 2,
+          "gender": "F",
+          "contacts": [
+            "794611-1"
+          ],
+          "use": "ACU (2 vias)",
+          "source": "notion"
+        }
+      ],
+      "contacts": [
+        {
+          "pn": "794611-1",
+          "gender": "F",
+          "awg": [],
+          "description": "contacto fêmea Micro MATE-N-LOK (AWG por confirmar)",
+          "source": "notion"
+        }
+      ],
+      "confirmed": false
+    },
+    {
+      "name": "Molex Micro-Fit 3.0",
+      "housings": [
+        {
+          "pn": "43025-0200",
+          "positions": 2,
+          "gender": "F",
+          "contacts": [
+            "43030-0001"
+          ],
+          "price": 0.294,
+          "use": "BMS (2 vias)",
+          "source": "notion"
+        },
+        {
+          "pn": "43025-1600",
+          "positions": 16,
+          "gender": "F",
+          "contacts": [
+            "43030-0001"
+          ],
+          "use": "BMS (16 vias)",
+          "source": "notion"
+        },
+        {
+          "match": "^43020-",
+          "gender": "M",
+          "contacts": [
+            "43031-0001"
+          ],
+          "use": "ficha macho Micro-Fit"
+        }
+      ],
+      "contacts": [
+        {
+          "pn": "43030-0001",
+          "gender": "F",
+          "awg": [
+            20,
+            24
+          ],
+          "description": "série 43030, fêmea estanhado — a variante depende da secção; confirmar"
+        },
+        {
+          "pn": "43031-0001",
+          "gender": "M",
+          "awg": [
+            20,
+            24
+          ],
+          "description": "série 43031, macho estanhado — confirmar"
+        }
+      ],
+      "tool": "63819-0000",
+      "confirmed": false
+    },
+    {
+      "name": "TE Mini IP67 (3 vias)",
+      "housings": [
+        {
+          "match": "^(1-)?2834074-3$",
+          "positions": 3,
+          "contacts": [
+            "1-2834067-2"
+          ],
+          "use": "sensores e atuadores: suspensão, ventoinhas do acumulador, APPS, direção, EBS, brake light, TSAL, NTCs",
+          "source": "notion"
+        },
+        {
+          "match": "^(1-)?2834075-3$",
+          "positions": 3,
+          "contacts": [
+            "1-2834068-2"
+          ],
+          "use": "a outra metade das fichas 2834074-3",
+          "source": "notion"
+        }
+      ],
+      "contacts": [
+        {
+          "pn": "1-2834067-2",
+          "awg": [],
+          "description": "contacto para 2834074-3 (confirmar no datasheet TE)",
+          "source": "notion"
+        },
+        {
+          "pn": "1-2834068-2",
+          "awg": [
+            22,
+            22
+          ],
+          "description": "contacto para 2834075-3, 22 AWG (confirmar no datasheet TE)",
+          "source": "notion"
+        }
+      ],
+      "confirmed": false
+    },
+    {
+      "name": "TE Superseal (282xxx)",
+      "housings": [
+        {
+          "pn": "282087-1",
+          "positions": 3,
+          "contacts": [
+            "282110-1"
+          ],
+          "use": "bomba de água",
+          "source": "notion"
+        },
+        {
+          "pn": "282105-1",
+          "positions": 3,
+          "contacts": [
+            "282109-1"
+          ],
+          "use": "bomba de água",
+          "source": "notion"
+        },
+        {
+          "pn": "282080-1",
+          "positions": 2,
+          "contacts": [
+            "282110-1"
+          ],
+          "use": "ventoinha do radiador",
+          "source": "notion"
+        },
+        {
+          "pn": "282104-1",
+          "positions": 2,
+          "contacts": [
+            "282109-1"
+          ],
+          "use": "ventoinha do radiador",
+          "source": "notion"
+        }
+      ],
+      "contacts": [
+        {
+          "pn": "282110-1",
+          "awg": [],
+          "seal": "281934-2",
+          "description": "contacto + vedante de fio 281934-2",
+          "source": "notion"
+        },
+        {
+          "pn": "282109-1",
+          "awg": [],
+          "seal": "281934-2",
+          "description": "contacto + vedante de fio 281934-2",
+          "source": "notion"
+        }
+      ],
+      "confirmed": false
+    },
+    {
+      "name": "TE 770680 (PDM)",
+      "housings": [
+        {
+          "pn": "770680-1",
+          "positions": 23,
+          "contacts": [
+            "770520-3"
+          ],
+          "use": "PDM",
+          "source": "notion"
+        }
+      ],
+      "contacts": [
+        {
+          "pn": "770520-3",
+          "awg": [],
+          "description": "contacto do PDM — 'not sure' na lista da equipa",
+          "source": "notion"
+        }
+      ],
+      "confirmed": false
+    },
+    {
+      "name": "Por identificar",
+      "housings": [
+        {
+          "pn": "EEG.3B.312.CRLV",
+          "positions": 12,
+          "contacts": [],
+          "use": "LV Box (12 vias) — contacto por identificar",
+          "source": "notion"
+        },
+        {
+          "pn": "538-560123-0400",
+          "contacts": [],
+          "use": "IMD — série e contacto por identificar",
+          "source": "notion"
+        }
+      ],
+      "contacts": [],
+      "confirmed": false
+    }
+  ],
+  "_photos": "Fotos dos fabricantes servidas pela Digi-Key (mm.digikey.com, aceita ser mostrada noutros sites); nada é copiado para o servidor. url = página do produto (te.com para TE, senão Digi-Key).",
+  "photos": {
+    "1-2834067-2": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/300/280/511/1-2834067-2_sml.jpg",
+      "url": "https://www.te.com/en/product-1-2834067-2.html"
+    },
+    "1-2834068-2": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/300/310/137/1-2834068-2_sml.jpg",
+      "url": "https://www.te.com/en/product-1-2834068-2.html"
+    },
+    "1-2834074-3": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/300/314/798/1-2834074-3_sml.jpg",
+      "url": "https://www.te.com/en/product-1-2834074-3.html"
+    },
+    "1-2834075-3": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/300/270/429/1-2834075-3_sml.jpg",
+      "url": "https://www.te.com/en/product-1-2834075-3.html"
+    },
+    "1-794615-8": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/003/284/392/1-794615-8_sml%28200x200%29.jpg",
+      "url": "https://www.te.com/en/product-1-794615-8.html"
+    },
+    "1-794617-0": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/003/274/425/1-794617-0_sml%28200x200%29.jpg",
+      "url": "https://www.te.com/en/product-1-794617-0.html"
+    },
+    "1-794617-2": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/003/328/034/1-794617-2_sml%28200x200%29.jpg",
+      "url": "https://www.te.com/en/product-1-794617-2.html"
+    },
+    "1-794617-4": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/003/302/232/1-794617-4_sml%28200x200%29.jpg",
+      "url": "https://www.te.com/en/product-1-794617-4.html"
+    },
+    "1445022-2": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/003/246/647/1445022-2_sml%28200x200%29.jpg",
+      "url": "https://www.te.com/en/product-1445022-2.html"
+    },
+    "2-794617-0": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/003/232/804/2-79617-0_sml%28200x200%29.jpg",
+      "url": "https://www.te.com/en/product-2-794617-0.html"
+    },
+    "2-794617-4": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/003/300/326/2-794617-4_sml%28200x200%29.jpg",
+      "url": "https://www.te.com/en/product-2-794617-4.html"
+    },
+    "281934-2": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/300/372/702/281934-2_sml.jpg",
+      "url": "https://www.te.com/en/product-281934-2.html"
+    },
+    "282080-1": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/200/143/646/282080-1_sml.jpg",
+      "url": "https://www.te.com/en/product-282080-1.html"
+    },
+    "282087-1": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/200/147/619/282087-1_sml.jpg",
+      "url": "https://www.te.com/en/product-282087-1.html"
+    },
+    "282104-1": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/200/147/631/282104-1_sml.jpg",
+      "url": "https://www.te.com/en/product-282104-1.html"
+    },
+    "282105-1": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/200/147/630/282105-1_sml%28200x200%29.jpg",
+      "url": "https://www.te.com/en/product-282105-1.html"
+    },
+    "282110-1": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/200/143/497/282110-1_sml.jpg",
+      "url": "https://www.te.com/en/product-282110-1.html"
+    },
+    "2834074-3": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/300/314/798/1-2834074-3_sml.jpg",
+      "url": "https://www.te.com/en/product-1-2834074-3.html"
+    },
+    "2834075-3": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/300/270/429/1-2834075-3_sml.jpg",
+      "url": "https://www.te.com/en/product-1-2834075-3.html"
+    },
+    "43025-0200": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/003/278/879/43025-0200_sml%28200x200%29.jpg",
+      "url": "https://www.digikey.com/en/products/result?keywords=43025-0200"
+    },
+    "43025-1600": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/010/161/736/43025-1600_sml.jpg",
+      "url": "https://www.digikey.com/en/products/result?keywords=43025-1600"
+    },
+    "43030-0001": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/002/363/695/0430300001_sml%28200x200%29.jpg",
+      "url": "https://www.digikey.com/en/products/result?keywords=43030-0001"
+    },
+    "43031-0001": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/002/343/822/0430310001_sml%28200x200%29.jpg",
+      "url": "https://www.digikey.com/en/products/result?keywords=43031-0001"
+    },
+    "538-560123-0400": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/100/894/5601230400_sml%28200x200%29.jpg",
+      "url": "https://www.digikey.com/en/products/result?keywords=538-560123-0400"
+    },
+    "770520-3": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/030/178/679/770520-3_sml.jpg",
+      "url": "https://www.te.com/en/product-770520-3.html"
+    },
+    "770680-1": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/200/301/618/770680-1_sml.jpg",
+      "url": "https://www.te.com/en/product-770680-1.html"
+    },
+    "794611-1": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/003/242/614/794611-1_sml%28200x200%29.jpg",
+      "url": "https://www.te.com/en/product-794611-1.html"
+    },
+    "794617-8": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/003/298/378/794617-8_sml%28200x200%29.jpg",
+      "url": "https://www.te.com/en/product-794617-8.html"
+    },
+    "MP20W23F": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/200/313/351/MP20W23F-10_sml.jpg",
+      "url": "https://www.digikey.com/en/products/result?keywords=MP20W23F"
+    },
+    "MP20W23F-10": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/200/313/351/MP20W23F-10_sml.jpg",
+      "url": "https://www.digikey.com/en/products/result?keywords=MP20W23F-10"
+    },
+    "MS20W23F-10": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/300/370/983/MFG_MS20W23F_sml.jpg",
+      "url": "https://www.digikey.com/en/products/result?keywords=MS20W23F-10"
+    },
+    "RTS6BS14N19PHEC03": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/300/094/590/RTS6BS14N19PHEC03_sml.jpg",
+      "url": "https://www.digikey.com/en/products/result?keywords=RTS6BS14N19PHEC03"
+    },
+    "RTS6BS18N32PHEC03": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/010/104/020/RTS6BS18N32PHEC03_sml.jpg",
+      "url": "https://www.digikey.com/en/products/result?keywords=RTS6BS18N32PHEC03"
+    },
+    "RTS714N19S03": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/300/326/829/MFG_RTS714N19S03_sml.jpg",
+      "url": "https://www.digikey.com/en/products/result?keywords=RTS714N19S03"
+    },
+    "RTS718N32S03": {
+      "image": "https://mm.digikey.com/Volume0/opasdata/d220001/derivates/1/200/473/879/MFG_RTS718N32S03_sml.jpg",
+      "url": "https://www.digikey.com/en/products/result?keywords=RTS718N32S03"
+    }
+  }
+}
