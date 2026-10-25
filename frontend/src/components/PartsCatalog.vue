@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { euros } from '../prices.js'
 import { partNumberOf } from '../stockText.js'
-const props = defineProps({ parts: Array, items: Array, categories: { type: Array, default: () => [] }, busy: Boolean, error: String })
+const props = defineProps({ parts: Array, items: Array, categories: { type: Array, default: () => [] }, busy: Boolean, canEdit: Boolean, error: String })
 const emit = defineEmits(['save', 'clear-error'])
 const dialog = ref(null), query = ref('')
 // draft é a peça no formulário; original é a peça como estava, para enviar só o que mudou.
@@ -34,7 +34,7 @@ defineExpose({ open: () => { query.value = ''; draft.value = null; dialog.value.
     <div class="catalog-head">
       <h2 id="catalog-title">Catálogo de peças</h2>
       <span class="sub">{{ shown.length === parts.length ? `${parts.length} peças` : `${shown.length} de ${parts.length}` }}</span>
-      <button type="button" class="primary add-part" :disabled="busy" @click="openForm()">Adicionar peça</button>
+      <button v-if="canEdit" type="button" class="primary add-part" :disabled="busy" @click="openForm()">Adicionar peça</button>
       <button type="button" class="ghost" aria-label="Fechar catálogo" @click="dialog.close()">✕</button>
     </div>
     <form v-if="draft" class="catalog-form" @submit.prevent="save">
@@ -52,8 +52,8 @@ defineExpose({ open: () => { query.value = ''; draft.value = null; dialog.value.
       <table class="stock-table">
         <thead><tr><th scope="col">P/N</th><th scope="col">Fabricante</th><th scope="col">Descrição</th><th scope="col">Categoria</th><th scope="col">Preço</th><th scope="col">Em stock</th></tr></thead>
         <tbody>
-          <!-- Clicar numa linha abre a peça no formulário para a corrigir. -->
-          <tr v-for="part in shown" :key="part.mpn" :title="part.source" class="catalog-row" tabindex="0" @click="openForm(part)" @keydown.enter="openForm(part)">
+          <!-- Clicar numa linha abre a peça no formulário para a corrigir (só quem pode mudar o stock). -->
+          <tr v-for="part in shown" :key="part.mpn" :title="part.source" :class="{ 'catalog-row': canEdit }" :tabindex="canEdit ? 0 : undefined" @click="canEdit && openForm(part)" @keydown.enter="canEdit && openForm(part)">
             <td>{{ part.mpn }}</td>
             <td>{{ part.manufacturer || '—' }}</td>
             <td class="catalog-desc">{{ part.description || '—' }} <a v-if="part.datasheet" :href="part.datasheet" target="_blank" rel="noopener" @click.stop>Datasheet</a></td>

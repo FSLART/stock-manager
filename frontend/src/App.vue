@@ -561,7 +561,7 @@ onUnmounted(() => {
   <CategoryForm ref="categoryForm" :categories="categories" :busy="busy" :error="categoryError" @submit="submitCategory" @delete="deleteFromForm" />
   <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
   <LoginDialog ref="loginDialog" @login="user => { auth.user = user; toast(`Sessão iniciada: ${user.name}`) }" />
-  <PartsCatalog v-if="parts.length" ref="partsCatalog" :parts="parts" :items="items" :categories="categories" :busy="busy" :error="partError" @save="guarded.savePart" @clear-error="partError = ''" />
+  <PartsCatalog v-if="parts.length" ref="partsCatalog" :parts="parts" :items="items" :categories="categories" :busy="busy" :can-edit="electronicsEditor" :error="partError" @save="guarded.savePart" @clear-error="partError = ''" />
   <InventoryTutorial ref="inventoryTutorial" />
   <LabelScanner ref="labelScanner" :items="items" :parts="parts" action="Adicionar ao stock" @use="useLabel" />
   <div id="toast" role="status" :class="{ on: toastMessage }">{{ toastMessage }}<button v-if="toastUndo" class="toast-undo" @click="toastUndo()">Desfazer</button></div>
