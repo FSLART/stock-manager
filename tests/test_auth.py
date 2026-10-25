@@ -81,6 +81,9 @@ class AuthTest(unittest.TestCase):
         # Harness e nao consumiveis tambem sao do departamento de Electronics.
         self.assertEqual(self.client.post('/api/move', json=cable).status_code, 403)
         self.assertEqual(self.client.post('/api/categories', json={'name': 'Cabos', 'props': ['x'], 'section': 'Harness'}).status_code, 403)
+        # O catalogo de pecas tambem: nem acrescentar a mao nem pela pesquisa nas APIs (que guarda a peca).
+        self.assertEqual(self.client.post('/api/parts', json={'mpn': 'NE555', 'price': 1}).status_code, 403)
+        self.assertEqual(self.client.get('/api/parts/lookup?mpn=NE555').status_code, 403)
         # Etiquetas seguem a regra do stock eletronico; /api/auth/me diz ao site da cablagem quem tem sessao.
         self.assertEqual(self.client.post('/api/labels', json={'title': 'A1', 'width': 55, 'height': 25}).status_code, 403)
         self.assertEqual(self.client.delete('/api/labels', json={'ids': [1]}).status_code, 403)

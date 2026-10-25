@@ -1891,6 +1891,8 @@ def apagar_projeto_pcb(project_id):
 @app.post("/api/parts")
 def guardar_peca():
     # Acrescenta ou corrige uma peca do catalogo. So os campos enviados mudam; o preco pode ficar vazio.
+    if (denied := electronics_denied()):
+        return denied
     data = request.get_json(silent=True) or {}
     mpn = str(data.get("mpn", "")).strip()
     if not mpn or mpn == "-":
@@ -2049,8 +2051,12 @@ def digikey_mates(product, description, headers):
 def procurar_peca():
     # Depois de ler uma etiqueta: descricao, categoria, datasheet, imagem e preco atual pelo P/N, guardados no catalogo.
     # E GET para o bloqueio de escrita nao ficar preso durante os pedidos as APIs; por isso o login e verificado aqui.
-    if current_person() is None:
+    g.person = current_person()
+    if g.person is None:
         return jsonify(error="Inicia sessão para procurar a peça", login=True), 401
+    # A peca encontrada fica no catalogo: mesma regra que mudar o stock.
+    if (denied := electronics_denied()):
+        return denied
     mpn = request.args.get("mpn", "").strip()
     if not mpn or mpn == "-" or len(mpn) > 100:
         return erro("Indica o P/N da peça")

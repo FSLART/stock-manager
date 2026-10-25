@@ -167,12 +167,14 @@ it('shows the movement history stored on the server with who made each change', 
   expect(wrapper.find('.movement-row').exists()).toBe(false)
 })
 it('hides electronics stock changes until someone from Electronics signs in', async () => {
-  const signedOut = { ...structuredClone(data), auth: true, user: null, notion_login: true }
+  const signedOut = { ...structuredClone(data), parts: [{ mpn: 'NE555', manufacturer: 'TI', description: '', category: 'LEDs', props: {}, price: 1 }], auth: true, user: null, notion_login: true }
   fetch.mockImplementation(async url => ({ ok: true, json: async () => url === '/api/data' ? structuredClone(signedOut) : { msg: 'ok' } }))
   wrapper = mount(App)
   await flushPromises()
   await open('Inventário')
   expect(wrapper.find('.session-box').text()).toBe('Entrar')
+  expect(wrapper.find('.catalog-btn').exists()).toBe(true)
+  for (const selector of ['.add-part', '.catalog-row']) expect(wrapper.find(selector).exists()).toBe(false)
   for (const selector of ['button[aria-label="Adicionar 1"]', 'tbody .del', 'tbody .edit', '.top .primary', 'tbody input[type=checkbox]', '.new-category', '.stock-content .tutorial-button', '.actions-cell']) expect(wrapper.find(selector).exists()).toBe(false)
   expect(wrapper.find('thead').text()).not.toContain('Ações')
   await wrapper.find('.session-box button').trigger('click')
@@ -201,6 +203,7 @@ it('hides electronics stock changes until someone from Electronics signs in', as
   expect(wrapper.find('button[aria-label="Adicionar 1"]').exists()).toBe(true)
   expect(wrapper.find('tbody .del').exists()).toBe(true)
   expect(wrapper.find('thead').text()).toContain('Ações')
+  expect(wrapper.find('.add-part').exists()).toBe(true)
 })
 it('previews a CSV before importing its components through the backend', async () => {
   wrapper = mount(App)
