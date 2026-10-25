@@ -51,11 +51,9 @@ const normalize = value => String(value).toLowerCase().replace(/\s+/g, '')
 const propertyFilters = ref({}), filterSearch = ref({}), stockFilter = ref(''), imageFilter = ref(''), locationFilter = ref('')
 const filtersOpen = ref(false), sortKey = ref(''), sortDirection = ref(1)
 const sectionOf = computed(() => Object.fromEntries(categories.value.map(c => [c.name, c.section])))
-// Igual a electronics_denied no Flask: só Electronics (ou um admin) mexe no stock eletrónico; categoria desconhecida conta como eletrónica.
+// Igual a electronics_denied no Flask: só Electronics (ou um admin) mexe no stock, em todas as secções.
 const signedIn = computed(() => !auth.enabled || Boolean(auth.user))
 const electronicsEditor = computed(() => !auth.enabled || Boolean(auth.user?.admin || auth.user?.department?.split(', ').includes('Electronics')))
-const mayChange = cat => signedIn.value && (electronicsEditor.value || (sectionOf.value[cat] ?? 'Componentes eletrónicos') !== 'Componentes eletrónicos')
-const editableCategories = computed(() => categories.value.filter(c => mayChange(c.name)))
 // Subcategorias: uma categoria mostra o seu stock e o de todas as que estão dentro dela.
 const childrenOf = computed(() => {
   const names = new Set(categories.value.map(c => c.name)), map = new Map()
@@ -162,7 +160,7 @@ const locked = computed(() => busy.value || queues.size > 0)
 const locations = computed(() => [...new Set([...items.value.map(item => item.location), ...Object.keys(locationImages.value)].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true })))
 const selected = ref(new Set()), locationName = ref('')
 let lastPicked = null
-const selectable = computed(() => shown.value.filter(item => mayChange(item.cat)))
+const selectable = computed(() => electronicsEditor.value ? shown.value : [])
 const allShownSelected = computed(() => selectable.value.length > 0 && selectable.value.every(item => selected.value.has(item.id)))
 function pick(item, shift) {
   const on = !selected.value.has(item.id), list = selectable.value
@@ -464,7 +462,7 @@ onUnmounted(() => {
   <aside class="sidebar">
     <!-- O fundo da barra vai até ao fim da página; o conteúdo fica fixo no topo enquanto a lista desce. -->
     <div class="sidebar-inner">
-    <div class="sidebar-heading"><h2>Categorias</h2><button v-if="signedIn" class="new-category" aria-label="Nova categoria" :disabled="locked" @click="guarded.openCategory()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nova</button></div>
+    <div class="sidebar-heading"><h2>Categorias</h2><button v-if="electronicsEditor" class="new-category" aria-label="Nova categoria" :disabled="locked" @click="guarded.openCategory()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nova</button></div>
     <nav class="category-nav" aria-label="Categorias" tabindex="-1">
       <div class="cat-row"><button :aria-current="!current && !section" @click="current = null; section = null">Tudo <span class="n">{{ total() }}</span></button></div>
       <template v-for="group in sections" :key="group.name">
@@ -472,7 +470,7 @@ onUnmounted(() => {
       <div v-for="category in group.categories" :key="category.name" class="cat-row">
         <button :aria-current="current === category.name" :style="{ '--depth': category.depth }" @click="current = category.name; section = null"><span><i class="dot" :style="{ background: color(category.name) }"></i>{{ category.name }}</span><span class="n">{{ total(category.name) }}</span></button>
         <!-- Um só botão discreto por categoria; apagar fica dentro do formulário de edição. -->
-        <template v-if="mayChange(category.name)">
+        <template v-if="electronicsEditor">
         <button v-if="canEdit" class="cat-edit" :aria-label="`Editar categoria ${category.name}`" title="Editar categoria" :disabled="locked" @click="guarded.openCategory(category)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg></button>
         <button v-else class="cat-del" :aria-label="`Apagar categoria ${category.name}`" title="Apagar categoria" :disabled="locked" @click="guarded.deleteCategory(category)">✕</button>
         </template>
@@ -489,8 +487,8 @@ onUnmounted(() => {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input v-model="query" type="search" aria-label="Pesquisar componentes" placeholder="Pesquisar componentes…" autocomplete="off">
       </div>
-      <button v-if="signedIn" class="text-button tutorial-button" @click="inventoryTutorial.open()"><span aria-hidden="true">?</span> Tutorial</button>
-      <template v-if="editableCategories.length">
+      <button v-if="electronicsEditor" class="text-button tutorial-button" @click="inventoryTutorial.open()"><span aria-hidden="true">?</span> Tutorial</button>
+      <template v-if="electronicsEditor && categories.length">
       <button v-if="canEdit" class="text-button import-csv-button" aria-label="Importar CSV" :disabled="locked" @click="guarded.importCsv()">Importar CSV</button>
       <button class="text-button" :disabled="locked" @click="guarded.scanLabel()">Ler etiqueta</button>
       <button class="primary" :disabled="locked" @click="guarded.openMovement()">Adicionar</button>
@@ -551,7 +549,7 @@ onUnmounted(() => {
             </th>
             <th v-if="selectable.length" scope="col">Ações</th>
           </tr></thead>
-          <tbody><StockItem v-for="item in shown" :key="item.id" :item="item" :price="priceOf(item)" :property-keys="showCategory ? [] : propertyKeys" :show-category="showCategory" :busy="busy" :locked="locked" :can-edit="canEdit && selectable.length > 0" :can-change="mayChange(item.cat)" :actions="selectable.length > 0" :selected="selected.has(item.id)" @select="shift => pick(item, shift)" @edit="guarded.editItem(item)" @step="delta => guarded.step(item, delta)" @delete="guarded.deleteItem(item)" /></tbody>
+          <tbody><StockItem v-for="item in shown" :key="item.id" :item="item" :price="priceOf(item)" :property-keys="showCategory ? [] : propertyKeys" :show-category="showCategory" :busy="busy" :locked="locked" :can-edit="canEdit && selectable.length > 0" :can-change="electronicsEditor" :actions="selectable.length > 0" :selected="selected.has(item.id)" @select="shift => pick(item, shift)" @edit="guarded.editItem(item)" @step="delta => guarded.step(item, delta)" @delete="guarded.deleteItem(item)" /></tbody>
         </table>
         <div v-if="!shown.length" class="empty"><b>Nada encontrado.</b><br>Tenta outra pesquisa ou adiciona um item novo.</div>
       </template>
@@ -559,9 +557,9 @@ onUnmounted(() => {
   </main>
   </div>
   </div>
-  <StockMovement ref="movement" :categories="editableCategories" :items="items" :parts="parts" :busy="busy" :error="formError" @submit="submitMovement" @clear-error="formError = ''" @part="updatePart" />
+  <StockMovement ref="movement" :categories="categories" :items="items" :parts="parts" :busy="busy" :error="formError" @submit="submitMovement" @clear-error="formError = ''" @part="updatePart" />
   <CategoryForm ref="categoryForm" :categories="categories" :busy="busy" :error="categoryError" @submit="submitCategory" @delete="deleteFromForm" />
-  <InventoryCsvImport ref="csvImport" :categories="editableCategories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
+  <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
   <LoginDialog ref="loginDialog" @login="user => { auth.user = user; toast(`Sessão iniciada: ${user.name}`) }" />
   <PartsCatalog v-if="parts.length" ref="partsCatalog" :parts="parts" :items="items" :categories="categories" :busy="busy" :error="partError" @save="guarded.savePart" @clear-error="partError = ''" />
   <InventoryTutorial ref="inventoryTutorial" />

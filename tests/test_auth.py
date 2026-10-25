@@ -67,7 +67,7 @@ class AuthTest(unittest.TestCase):
                          [('Ana', 'delete', 0, 0, 0), ('Ana', 'out', -4, 4, 0), ('Ana', 'in', 4, 0, 4)])
         self.assertEqual(movements[-1]['props']['cor'], 'azul')
 
-    def test_only_electronics_change_electronic_stock(self):
+    def test_only_electronics_change_the_stock(self):
         led = {'cat': 'LEDs', 'props': {'cor': 'azul', 'tamanho (mm)': '5', 'tensão direta (V)': '3'}, 'qty': 1, 'mode': 'in'}
         cable = {'cat': 'Fios', 'props': {'cor': 'preto'}, 'qty': 1, 'mode': 'in'}
         self.notion_login(self.client, 'notion-ana')
@@ -78,7 +78,9 @@ class AuthTest(unittest.TestCase):
         self.assertEqual(self.client.post('/api/items/1/step', json={'delta': -1}).status_code, 403)
         self.assertEqual(self.client.delete('/api/categories/LEDs').status_code, 403)
         self.assertEqual(self.client.post('/api/categories', json={'name': 'Novos', 'props': ['x']}).status_code, 403)
-        self.assertEqual(self.client.post('/api/move', json=cable).status_code, 200)
+        # Harness e nao consumiveis tambem sao do departamento de Electronics.
+        self.assertEqual(self.client.post('/api/move', json=cable).status_code, 403)
+        self.assertEqual(self.client.post('/api/categories', json={'name': 'Cabos', 'props': ['x'], 'section': 'Harness'}).status_code, 403)
         # Etiquetas seguem a regra do stock eletronico; /api/auth/me diz ao site da cablagem quem tem sessao.
         self.assertEqual(self.client.post('/api/labels', json={'title': 'A1', 'width': 55, 'height': 25}).status_code, 403)
         self.assertEqual(self.client.delete('/api/labels', json={'ids': [1]}).status_code, 403)

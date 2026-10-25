@@ -187,6 +187,8 @@ it('hides electronics stock changes until someone from Electronics signs in', as
   expect(wrapper.text()).toContain('Inicia sessão para criar um.')
   wrapper.unmount()
   signedOut.user = { id: 1, name: 'Ana', admin: false, department: 'Powertrain' }
+  // Harness (e não consumíveis) também são só do departamento de Electronics.
+  signedOut.categories[0].section = 'Harness'
   wrapper = mount(App)
   await flushPromises()
   await open('Inventário')

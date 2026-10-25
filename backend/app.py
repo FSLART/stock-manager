@@ -336,14 +336,11 @@ def current_person():
             "role": row["role"], "department": row["department"]} if row else None
 
 
-def electronics_denied(cat_names, *sections):
-    # Stock eletrónico: so o departamento de Electronics (ou um admin) o altera. Categoria nova conta como eletrónica.
+def electronics_denied():
+    # Todo o stock (eletronico, Harness e nao consumiveis) e do departamento de Electronics; um admin tambem o altera.
     if g.person["admin"] or "Electronics" in g.person.get("department", "").split(", "):
         return None
-    by_name = {category["name"].casefold(): category["section"] for category in db_categories()}
-    if SECTIONS[0] in {by_name.get(str(name).casefold(), SECTIONS[0]) for name in cat_names} | set(sections):
-        return erro("Só o departamento de Electronics pode alterar o stock eletrónico", 403)
-    return None
+    return erro("Só o departamento de Electronics pode alterar o stock", 403)
 
 
 def start_session(person_id):
@@ -1470,7 +1467,7 @@ def import_items():
     rows = data.get("items") if isinstance(data, dict) else None
     if not isinstance(rows, list) or not rows or len(rows) > 5000:
         return erro("Envia entre 1 e 5000 componentes para importar")
-    if (denied := electronics_denied(item.get("cat") for item in rows if isinstance(item, dict))):
+    if (denied := electronics_denied()):
         return denied
     try:
         with EXCEL_LOCK:
@@ -1545,7 +1542,7 @@ def mover():
             return erro("Preenche a categoria e todas as propriedades")
         if not category_config:
             return erro("Categoria não encontrada", 404)
-        if (denied := electronics_denied([category])):
+        if (denied := electronics_denied()):
             return denied
         if image and not category_config["image"]:
             return erro("Esta categoria não aceita imagens")
@@ -1605,7 +1602,7 @@ def consumir():
             movements.append({"type": "out", "item_id": item["id"], "cat": item["cat"], "props": item["props"],
                               "delta": -line["qty"], "before": item["qty"], "note": note.strip()})
             item["qty"] -= line["qty"]
-        if (denied := electronics_denied(movement["cat"] for movement in movements)):
+        if (denied := electronics_denied()):
             return denied
         save_items(items, movements)
         return jsonify(msg=f"{sum(line['qty'] for line in lines)} unidade(s) retiradas para {note.strip()}")
@@ -1622,7 +1619,7 @@ def ajustar(item_id):
         item = next((current for current in items if current["id"] == item_id), None)
         if not item:
             return erro("Item não encontrado", 404)
-        if (denied := electronics_denied([item["cat"]])):
+        if (denied := electronics_denied()):
             return denied
         before = item["qty"]
         item["qty"] = max(0, item["qty"] + delta)
@@ -1645,7 +1642,7 @@ def apagar(item_id):
         item = next((current for current in items if current["id"] == item_id), None)
         if not item:
             return erro("Item não encontrado", 404)
-        if (denied := electronics_denied([item["cat"]])):
+        if (denied := electronics_denied()):
             return denied
         save_items([current for current in items if current["id"] != item_id],
                    [{"type": "delete", "item_id": item_id, "cat": item["cat"], "props": item["props"], "delta": -item["qty"], "before": item["qty"]}])
@@ -1666,7 +1663,7 @@ def editar_item(item_id):
             if row is None:
                 return erro("Item não encontrado", 404)
             category = connection.execute("SELECT * FROM categories WHERE id = ?", (row["cat_id"],)).fetchone()
-            if (denied := electronics_denied([category["name"]])):
+            if (denied := electronics_denied()):
                 return denied
             raw_props = data.get("props")
             raw_qty = data.get("qty")
@@ -1714,8 +1711,7 @@ def mudar_localizacao():
         init_db()
         with EXCEL_LOCK, db_connection() as connection:
             placeholders = ",".join("?" for _ in ids)
-            names = connection.execute(f"SELECT DISTINCT c.name FROM items i JOIN categories c ON c.id = i.cat_id WHERE i.id IN ({placeholders})", ids).fetchall()
-            if (denied := electronics_denied(row["name"] for row in names)):
+            if (denied := electronics_denied()):
                 return denied
             changed = connection.execute(f"SELECT COUNT(*) AS n FROM items WHERE id IN ({placeholders})", ids).fetchone()["n"]
             connection.execute(f"UPDATE items SET location = ? WHERE id IN ({placeholders})", (location, *ids))
@@ -1780,7 +1776,7 @@ def guardar_etiqueta():
     if STORAGE_MODE != "local":
         return erro("A edição está disponível no modo local")
     # As etiquetas sao das gavetas do stock eletronico: mesma regra.
-    if (denied := electronics_denied([], SECTIONS[0])):
+    if (denied := electronics_denied()):
         return denied
     data = request.get_json(silent=True) or {}
     # {"labels": [...]} cria várias de uma vez (ex.: parafusos de vários tamanhos): ou ficam todas ou nenhuma.
@@ -1827,7 +1823,7 @@ def apagar_etiquetas():
     if STORAGE_MODE != "local":
         return erro("A edição está disponível no modo local")
     # As etiquetas sao das gavetas do stock eletronico: mesma regra.
-    if (denied := electronics_denied([], SECTIONS[0])):
+    if (denied := electronics_denied()):
         return denied
     ids = (request.get_json(silent=True) or {}).get("ids")
     if not isinstance(ids, list) or not 1 <= len(ids) <= 500 or not all(isinstance(label_id, int) and not isinstance(label_id, bool) for label_id in ids):
@@ -2145,7 +2141,7 @@ def editar_categoria(original_name):
     section = data.get("section", SECTIONS[0])
     if section not in SECTIONS:
         return erro("Secção desconhecida")
-    if (denied := electronics_denied([original_name], section)):
+    if (denied := electronics_denied()):
         return denied
     try:
         init_db()
@@ -2199,7 +2195,7 @@ def nova_categoria():
         return erro("Indica o nome e pelo menos uma propriedade")
     if section not in SECTIONS:
         return erro("Secção desconhecida")
-    if (denied := electronics_denied([], section)):
+    if (denied := electronics_denied()):
         return denied
     try:
         init_db()
@@ -2222,7 +2218,7 @@ def nova_categoria():
 def apagar_categoria(name):
     # DELETE /api/categories/<name> remove a categoria e, pela chave estrangeira,
     # os componentes ligados a ela; depois atualiza tambem o Excel.
-    if (denied := electronics_denied([name])):
+    if (denied := electronics_denied()):
         return denied
     try:
         init_db()
