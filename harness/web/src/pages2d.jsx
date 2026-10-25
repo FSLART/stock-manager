@@ -138,7 +138,7 @@ export function BomPage({ data, code }) {
 }
 
 // ---------------------------------------------------------------- diagrama de ligações 2D
-export function DiagramPage({ data, code }) {
+export function DiagramPage({ data, code, refName }) {
   const h = data.byCode.get(code) || data.list.find((x) => x.code === data.index.hub) || data.list[0]
   // largura disponível → quantas colunas cabem (o desenho nunca passa a largura da página)
   const box = useRef(null)
@@ -164,7 +164,7 @@ export function DiagramPage({ data, code }) {
     if (mate && byWire.get(mate)) {
       const t = twist(l.pts, byWire.get(mate).pts)
       strands.push({ w: l.w, d: t.a, c }, { w: mate, d: t.b, c: can.info.get(mate) })
-      strands.push({ label: c.bus, at: t.mid, key: `${txt(l.w.wire_id)}-tag` })
+      strands.push({ label: c.bus, at: t.mid, key: `${txt(l.w.wire_id)}-tag`, tw: l.w })
       drawn.add(mate)
     } else strands.push({ w: l.w, d: l.d, c })
     drawn.add(l.w)
@@ -172,11 +172,18 @@ export function DiagramPage({ data, code }) {
   const buses = CAN_BUSES.map((b) => ({ ...b, n: [...can.partner.keys()].filter((w) => can.info.get(w).bus === b.id).length / 2 })).filter((b) => b.n)
   const loose = [...can.info].filter(([w, c]) => c.side !== 'S' && (!c.bus || !can.partner.has(w))).length
   const dim = (c) => bus && c?.bus !== bus
+  // ficha em destaque (escolhida no formboard): a caixa fica marcada e os outros fios esbatidos
+  const focus = refName && d.boxes.some((b) => b.ref === refName && !b.placeholder) ? refName : null
+  const away = (w) => focus && !ends(w).some((e) => e.ref === focus)
+  const faded = (w, c) => (dim(c) || away(w) ? { opacity: 0.1 } : undefined)
+  useEffect(() => {
+    if (focus) document.querySelector('[data-focus="true"]')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [focus, d])
   return (
     <Stack gap="md" mt="xl">
       <Group justify="space-between" wrap="wrap">
         <Title order={2}>Diagrama 2D · {h.meta.name}</Title>
-        <Group gap="sm"><HarnessSelect data={data} code={h.code} page="diagram" /><View2D code={h.code} page="diagram" /></Group>
+        <Group gap="sm"><HarnessSelect data={data} code={h.code} page="diagram" /><View2D code={h.code} page="diagram" refName={focus} /></Group>
       </Group>
       <Text size="sm" c="dimmed">Cada caixa é uma ficha com os pinos que têm fio; cada linha é um fio, na sua cor. Clica num fio para o circuito completo, ou no nome da ficha para o pinout.</Text>
       {/* linha reservada para o fio debaixo do rato: tem sempre a mesma altura, para o diagrama não saltar */}
@@ -192,28 +199,34 @@ export function DiagramPage({ data, code }) {
           {loose > 0 && <Anchor href={href('validate', h.code)} size="sm" c="yellow.4">{loose} fio(s) CAN sem par →</Anchor>}
         </Group>
       )}
+      {focus && (
+        <Group gap="xs">
+          <Text size="sm">Em destaque: <Text span fw={600} c="blue.3">{focus}</Text> e os seus fios (escolhida no formboard)</Text>
+          <Button size="compact-sm" variant="default" onClick={() => go(href('diagram', h.code))}>Tirar destaque</Button>
+        </Group>
+      )}
       {!d.boxes.length ? <Alert color="gray">Este harness ainda não tem ligações.</Alert> : (
         <div className="glass">
           <div className="diagram" ref={box}>
             <svg width={d.width} height={d.height} role="img" aria-label={`Diagrama de ligações do harness ${h.code}`} style={{ margin: '0 auto' }}>
               {strands.map((s) => s.label ? (
-                <g key={s.key} transform={`translate(${s.at[0]},${s.at[1]})`} opacity={bus && bus !== s.label ? 0.15 : 1} pointerEvents="none">
+                <g key={s.key} transform={`translate(${s.at[0]},${s.at[1]})`} opacity={(bus && bus !== s.label) || away(s.tw) ? 0.15 : 1} pointerEvents="none">
                   <rect x="-17" y="-8" width="34" height="16" rx="8" fill="#14161d" stroke={busById.get(s.label).colour} />
                   <text textAnchor="middle" y="4" className="bus2d" fill={busById.get(s.label).colour}>{s.label}</text>
                 </g>
               ) : (
-                <path key={txt(s.w.wire_id)} d={s.d} className="wire2d" stroke={wireColour(s.w)} fill="none" style={dim(s.c) ? { opacity: 0.1 } : undefined}
+                <path key={txt(s.w.wire_id)} d={s.d} className="wire2d" stroke={wireColour(s.w)} fill="none" style={faded(s.w, s.c)}
                   onMouseEnter={() => setHover(`${txt(s.w.wire_id)} · ${txt(s.w.net)}${s.c?.bus ? ` · CAN ${busById.get(s.c.bus).name} ${s.c.side || ''}` : ''} · ${txt(s.w.from_ref)}:${txt(s.w.from_pin)} → ${txt(s.w.to_ref)}:${txt(s.w.to_pin)}`)}
                   onMouseLeave={() => setHover(null)} onClick={() => go(href('t', h.code, txt(s.w.wire_id)))}>
                   <title>{`${txt(s.w.wire_id)} · ${txt(s.w.net)}`}</title>
                 </path>
               ))}
               {d.lines.flatMap((l) => [l.pts[0], l.pts[3]].map((p, i) => (
-                <circle key={`${txt(l.w.wire_id)}-${i}`} cx={p[0]} cy={p[1]} r="2.6" fill={wireColour(l.w)} className="pin2d-dot" style={dim(can.info.get(l.w)) ? { opacity: 0.1 } : undefined} />
+                <circle key={`${txt(l.w.wire_id)}-${i}`} cx={p[0]} cy={p[1]} r="2.6" fill={wireColour(l.w)} className="pin2d-dot" style={faded(l.w, can.info.get(l.w))} />
               )))}
               {d.boxes.map((b) => (
-                <g key={b.ref} transform={`translate(${b.x},${b.y})`}>
-                  <rect width={b.w} height={b.h} rx="8" className={b.placeholder ? 'box2d box2d-missing' : 'box2d'} />
+                <g key={b.ref} transform={`translate(${b.x},${b.y})`} data-focus={b.ref === focus} opacity={focus && b.ref !== focus && !d.lines.some((l) => !away(l.w) && ends(l.w).some((e) => e.ref === b.ref)) ? 0.4 : 1}>
+                  <rect width={b.w} height={b.h} rx="8" className={b.placeholder ? 'box2d box2d-missing' : b.ref === focus ? 'box2d box2d-focus' : 'box2d'} />
                   {/* cabeçalho e linhas como no harness.design; a ficha vista de cima, com a face de encaixe escura */}
                   {!b.placeholder && <path d={`M0 8a8 8 0 0 1 8 -8H${b.w - 8}a8 8 0 0 1 8 8V${D.head - 4}H0Z`} className="box2d-head" />}
                   {!b.placeholder && (
@@ -252,8 +265,9 @@ export function DiagramPage({ data, code }) {
 
 // ---------------------------------------------------------------- formboard 2D (troços à escala, desenho como no harness.design)
 // as duas vistas 2D do mesmo harness, lado a lado no cabeçalho
-function View2D({ code, page }) {
-  return <SegmentedControl value={page} onChange={(v) => go(href(v, code))} data={[{ value: 'diagram', label: 'Ligações' }, { value: 'formboard', label: 'Formboard' }]} />
+// a ficha selecionada passa de uma vista para a outra (fica no endereço: #/formboard/ACCU/ACCU J1)
+function View2D({ code, page, refName }) {
+  return <SegmentedControl value={page} onChange={(v) => go(href(v, code, refName || ''))} data={[{ value: 'diagram', label: 'Ligações' }, { value: 'formboard', label: 'Formboard' }]} />
 }
 
 const PX_MM = 25.4 / 96 // 1 px CSS em mm (escala 1:1)
@@ -304,25 +318,25 @@ function Pinout({ h, n, k, round, onPin }) {
   )
 }
 
-export function FormboardPage({ data, code }) {
+export function FormboardPage({ data, code, refName }) {
   const h = data.byCode.get(code) || data.list.find((x) => x.code === 'ACCU') || data.list[0]
   const f = useMemo(() => formboard(h), [h])
   const [real, setReal] = useState(false)
-  const [sel, setSel] = useState(null) // ficha selecionada: face de encaixe e os seus fios a cores
+  const [sel, setSel] = useState(refName || null) // ficha selecionada: face de encaixe e os seus fios a cores
   const [hover, setHover] = useState(null)
   const [view, setView] = useState(null) // { cx, cy, k (mm por px) }; null = desenho inteiro
-  const [size, setSize] = useState([1200, 640])
+  const [size, setSize] = useState(null) // null até o ResizeObserver medir a caixa
   const box = useRef(null)
   const svg = useRef(null)
   const cur = useRef(null)
   const drag = useRef({ pts: new Map(), moved: 0 })
-  useEffect(() => (setSel(null), setView(null)), [h])
+  useEffect(() => history.replaceState(null, '', href('formboard', h.code, sel || '')), [h, sel]) // outro harness remonta a página (key no App)
   useEffect(() => {
     const ro = new ResizeObserver(([e]) => setSize([Math.max(200, e.contentRect.width), Math.max(200, e.contentRect.height)]))
     if (box.current) ro.observe(box.current)
     return () => ro.disconnect()
   }, [f, real])
-  const [W, H] = size
+  const [W, H] = size || [1200, 640]
   const pad = f ? 0.06 * Math.max(f.bbox.w, f.bbox.h) + 60 : 0
   const all = f && { x: f.bbox.x - pad, y: f.bbox.y - pad, w: f.bbox.w + 2 * pad, h: f.bbox.h + 2 * pad }
   const v = view || (f && { cx: all.x + all.w / 2, cy: all.y + all.h / 2, k: Math.max(all.w / W, all.h / H) })
@@ -350,10 +364,17 @@ export function FormboardPage({ data, code }) {
     return () => removeEventListener('keydown', esc)
   }, [])
 
+  // ficha que veio no endereço (da vista Ligações): mostra-a com a face quando a caixa já tiver tamanho
+  const came = useRef(Boolean(refName))
+  const pickRef = useRef(null)
+  useEffect(() => {
+    if (came.current && size && f?.nodes.some((n) => n.id === sel)) (came.current = false), pickRef.current(sel)
+  })
+
   const header = (
     <Group justify="space-between" wrap="wrap">
       <Title order={2}>Formboard · {h.meta.name}</Title>
-      <Group gap="sm"><HarnessSelect data={data} code={h.code} page="formboard" /><View2D code={h.code} page="formboard" /></Group>
+      <Group gap="sm"><HarnessSelect data={data} code={h.code} page="formboard" /><View2D code={h.code} page="formboard" refName={sel} /></Group>
     </Group>
   )
   if (!f)
@@ -418,6 +439,7 @@ export function FormboardPage({ data, code }) {
     const fitIn = (lo, hi, mid, half) => (hi - lo > 2 * half ? (lo + hi) / 2 : Math.min(Math.max(mid, hi - half), lo + half))
     setView({ cx: fitIn(x0, x1, c.cx / zoom, W / 2) * zoom, cy: fitIn(y0, y1, c.cy / zoom, H / 2) * zoom, k: zoom })
   }
+  pickRef.current = pick
   const jump = (id) => (id ? pick(id, Math.min(v.k, 0.6)) : setSel(null))
   const splices = [...h.H.conns.values()].filter((c) => txt(c.type).toUpperCase() === 'SPLICE')
   const deg = (r) => (r * 180) / Math.PI

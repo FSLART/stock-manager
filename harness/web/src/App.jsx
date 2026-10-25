@@ -79,8 +79,8 @@ export default function App() {
   else if (page === 't') body = <Trace data={data} code={a} wireId={b} />
   else if (page === 'issues') body = <Issues data={data} code={a} />
   else if (page === 'bom') body = <BomPage data={data} code={a} />
-  else if (page === 'diagram') body = <DiagramPage data={data} code={a} />
-  else if (page === 'formboard') body = <FormboardPage data={data} code={a} />
+  else if (page === 'diagram') body = <DiagramPage data={data} code={a} refName={b} />
+  else if (page === 'formboard') body = <FormboardPage key={a} data={data} code={a} refName={b} />
   else if (page === '3d' || page === 'pick') body = <Suspense fallback={<Loader size="sm" mt="xl" />}><Viewer3D key={page} data={data} mode={a} code={b} id={c} pickPage={page === 'pick'} /></Suspense>
   else body = <CarOverview data={data} />
 

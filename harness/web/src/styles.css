@@ -80,6 +80,10 @@ body {
   stroke-width: 1.5;
   pointer-events: none;
 }
+.box2d-focus {
+  stroke: #74c0fc;
+  stroke-width: 2;
+}
 .box2d-missing {
   fill: transparent;
   stroke: #ffffff40;
