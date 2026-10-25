@@ -138,7 +138,8 @@ def init_mysql_schema(connection):
             name VARCHAR(255) COLLATE utf8mb4_0900_as_ci UNIQUE NOT NULL,
             props LONGTEXT NOT NULL,
             image_enabled INTEGER NOT NULL DEFAULT 0,
-            section VARCHAR(64) NOT NULL DEFAULT 'Componentes eletrónicos'
+            section VARCHAR(64) NOT NULL DEFAULT 'Componentes eletrónicos',
+            parent_id BIGINT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
         """CREATE TABLE IF NOT EXISTS items (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -199,6 +200,11 @@ def init_mysql_schema(connection):
             image VARCHAR(1000) NOT NULL DEFAULT '',
             code VARCHAR(16) NOT NULL DEFAULT ''
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
+        # Etiquetas da pagina Etiquetas, partilhadas pela equipa; data e o JSON validado por label_from_json.
+        """CREATE TABLE IF NOT EXISTS labels (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            data LONGTEXT NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
     ):
         if mariadb:
             sql = sql.replace("utf8mb4_0900_as_ci", "utf8mb4_uca1400_as_ci").replace("utf8mb4_0900_bin", "utf8mb4_bin")
@@ -217,6 +223,8 @@ def init_mysql_schema(connection):
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'categories' AND COLUMN_NAME = 'section'").fetchone():
         connection.execute("ALTER TABLE categories ADD COLUMN section VARCHAR(64) NOT NULL DEFAULT 'Componentes eletrónicos'")
         split_sections(connection)
+    if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'categories' AND COLUMN_NAME = 'parent_id'").fetchone():
+        connection.execute("ALTER TABLE categories ADD COLUMN parent_id BIGINT NULL")
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'parts' AND COLUMN_NAME = 'datasheet'").fetchone():
         connection.execute("ALTER TABLE parts ADD COLUMN datasheet VARCHAR(1000) NOT NULL DEFAULT ''")
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'locations' AND COLUMN_NAME = 'code'").fetchone():
@@ -440,7 +448,9 @@ def init_sqlite_schema(connection):
             name TEXT UNIQUE NOT NULL COLLATE NOCASE,
             props TEXT NOT NULL,
             image_enabled INTEGER NOT NULL DEFAULT 0,
-            section TEXT NOT NULL DEFAULT 'Componentes eletrónicos'
+            section TEXT NOT NULL DEFAULT 'Componentes eletrónicos',
+            -- Subcategorias: sem FK porque apagar a mãe passa as filhas para o nível de cima.
+            parent_id INTEGER
         );
         CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY,
@@ -498,6 +508,10 @@ def init_sqlite_schema(connection):
             image TEXT NOT NULL DEFAULT '',
             code TEXT NOT NULL DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS labels (
+            id INTEGER PRIMARY KEY,
+            data TEXT NOT NULL
+        );
         """
     )
     category_columns = {
@@ -510,6 +524,8 @@ def init_sqlite_schema(connection):
     if "section" not in category_columns:
         connection.execute("ALTER TABLE categories ADD COLUMN section TEXT NOT NULL DEFAULT 'Componentes eletrónicos'")
         split_sections(connection)
+    if "parent_id" not in category_columns:
+        connection.execute("ALTER TABLE categories ADD COLUMN parent_id INTEGER")
     item_columns = {
         row["name"] for row in connection.execute("PRAGMA table_info(items)")
     }
@@ -611,14 +627,16 @@ def db_categories():
     init_db()
     with db_connection() as connection:
         rows = connection.execute(
-            "SELECT name, props, image_enabled, section FROM categories ORDER BY id"
+            "SELECT id, name, props, image_enabled, section, parent_id FROM categories ORDER BY id"
         ).fetchall()
+    names = {row["id"]: row["name"] for row in rows}
     return [
         {
             "name": row["name"],
             "props": json.loads(row["props"]),
             "image": bool(row["image_enabled"]),
             "section": row["section"],
+            "parent": names.get(row["parent_id"]),
         }
         for row in rows
     ]
@@ -654,6 +672,49 @@ def db_locations():
                 connection.execute("INSERT INTO locations (name, image, code) VALUES (?, '', ?)", (name, code))
             rows[name] = {"name": name, "image": rows.get(name, {}).get("image", ""), "code": code}
     return rows.values()
+
+
+def db_labels():
+    init_db()
+    with db_connection() as connection:
+        return [{**json.loads(row["data"]), "id": row["id"]} for row in connection.execute("SELECT id, data FROM labels ORDER BY id")]
+
+
+def label_from_json(data):
+    # Etiqueta vinda do browser: so ficam os campos conhecidos, com os limites do editor.
+    text = lambda value, limit: value.strip()[:limit] if isinstance(value, str) else ""
+    fields, width, height = data.get("fields"), data.get("width"), data.get("height")
+    if not isinstance(fields, list) or len(fields) > 4 or not all(isinstance(field, dict) for field in fields):
+        raise ValueError("Uma etiqueta tem no máximo 4 campos")
+    if data.get("code") not in {"DataMatrix", "QRCode", ""}:
+        raise ValueError("Código inválido")
+    if not all(isinstance(size, (int, float)) and not isinstance(size, bool) for size in (width, height)) or not (20 <= width <= 150 and 10 <= height <= 100):
+        raise ValueError("O tamanho vai de 20 x 10 a 150 x 100 mm")
+    item = data.get("item")
+    if item is not None and (not isinstance(item, int) or isinstance(item, bool)):
+        raise ValueError("Componente inválido")
+    layout = data.get("layout") or "drawer"
+    if layout not in {"drawer", "bin"}:
+        raise ValueError("Formato inválido")
+    # Tamanho da letra em pontos; vazio deixa a letra acompanhar a altura da etiqueta.
+    sizes = {key: data.get(key) if data.get(key) != "" else None for key in ("titleSize", "fieldSize")}
+    if not all(size is None or (isinstance(size, (int, float)) and not isinstance(size, bool) and 4 <= size <= 72) for size in sizes.values()):
+        raise ValueError("A letra vai de 4 a 72 pt")
+    return {
+        "title": text(data.get("title"), 40),
+        "fields": [{"name": text(field.get("name"), 20), "value": text(field.get("value"), 30)} for field in fields],
+        "code": data["code"],
+        "location": text(data.get("location"), 255),
+        "width": width,
+        "height": height,
+        # O ícone e uma chave de labelIcons.js; o browser so desenha as que conhece.
+        "icon": text(data.get("icon"), 40),
+        "item": item,
+        "layout": layout,
+        # Cabeça do parafuso desenhado no formato caixa, uma chave de labelIcons.js.
+        "screw": text(data.get("screw"), 40),
+        **sizes,
+    }
 
 
 def save_parts(parts):
@@ -1208,6 +1269,7 @@ def data_from_items(items):
         "parts": db_parts(),
         "locations": {row["name"]: image_path(row["image"]) for row in locations},
         "location_codes": {row["name"]: row["code"] for row in locations},
+        "labels": db_labels(),
         "can_edit": STORAGE_MODE == "local",
         "auth": True,
         "user": current_person(),
@@ -1673,6 +1735,67 @@ def apagar_localizacao():
         return erro(str(exc), 500)
 
 
+@app.post("/api/labels")
+def guardar_etiqueta():
+    # Sem id cria uma etiqueta nova; com id substitui a guardada.
+    if STORAGE_MODE != "local":
+        return erro("A edição está disponível no modo local")
+    data = request.get_json(silent=True) or {}
+    # {"labels": [...]} cria várias de uma vez (ex.: parafusos de vários tamanhos): ou ficam todas ou nenhuma.
+    batch = data.get("labels")
+    if batch is not None:
+        if not isinstance(batch, list) or not 1 <= len(batch) <= 100 or not all(isinstance(entry, dict) for entry in batch):
+            return erro("Envia entre 1 e 100 etiquetas")
+        try:
+            labels = [label_from_json(entry) for entry in batch]
+        except ValueError as exc:
+            return erro(str(exc))
+        try:
+            init_db()
+            with EXCEL_LOCK, db_connection() as connection:
+                ids = [connection.execute("INSERT INTO labels (data) VALUES (?)", (json.dumps(label, ensure_ascii=False),)).lastrowid for label in labels]
+            return jsonify(msg=f"{len(ids)} etiqueta(s) guardada(s)", ids=ids)
+        except Exception as exc:
+            return erro(str(exc), 500)
+    label_id = data.get("id")
+    if label_id is not None and (not isinstance(label_id, int) or isinstance(label_id, bool)):
+        return erro("Etiqueta inválida")
+    try:
+        label = label_from_json(data)
+    except ValueError as exc:
+        return erro(str(exc))
+    try:
+        init_db()
+        with EXCEL_LOCK, db_connection() as connection:
+            stored = json.dumps(label, ensure_ascii=False)
+            if label_id is None:
+                label_id = connection.execute("INSERT INTO labels (data) VALUES (?)", (stored,)).lastrowid
+            elif connection.execute("SELECT 1 FROM labels WHERE id = ?", (label_id,)).fetchone():
+                connection.execute("UPDATE labels SET data = ? WHERE id = ?", (stored, label_id))
+            else:
+                return erro("Etiqueta não encontrada", 404)
+        return jsonify(msg=f"Etiqueta {label['title'] or 'sem título'} guardada", id=label_id)
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.delete("/api/labels")
+def apagar_etiquetas():
+    # Apaga uma ou várias etiquetas de uma vez: {"ids": [1, 2, 3]}.
+    if STORAGE_MODE != "local":
+        return erro("A edição está disponível no modo local")
+    ids = (request.get_json(silent=True) or {}).get("ids")
+    if not isinstance(ids, list) or not 1 <= len(ids) <= 500 or not all(isinstance(label_id, int) and not isinstance(label_id, bool) for label_id in ids):
+        return erro("Indica as etiquetas a apagar")
+    try:
+        init_db()
+        with EXCEL_LOCK, db_connection() as connection:
+            connection.executemany("DELETE FROM labels WHERE id = ?", [(label_id,) for label_id in ids])
+        return jsonify(msg=f"{len(ids)} etiqueta(s) apagada(s)")
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
 @app.post("/api/parts")
 def guardar_peca():
     # Acrescenta ou corrige uma peca do catalogo. So os campos enviados mudam; o preco pode ficar vazio.
@@ -1882,6 +2005,33 @@ def procurar_peca():
     return jsonify(part=part, image=first("image"))
 
 
+def descendant_ids(connection, category_id):
+    children = {}
+    for row in connection.execute("SELECT id, parent_id FROM categories"):
+        children.setdefault(row["parent_id"], []).append(row["id"])
+    found, stack = [], [category_id]
+    while stack:
+        for child in children.get(stack.pop(), []):
+            if child not in found:
+                found.append(child)
+                stack.append(child)
+    return found
+
+
+def resolve_parent(connection, parent, section, own_id=None):
+    # Devolve (id da categoria-mãe, erro). A filha fica sempre na secção da mãe.
+    if not parent:
+        return None, None
+    row = connection.execute("SELECT id, section FROM categories WHERE name = ? COLLATE NOCASE", (str(parent),)).fetchone()
+    if row is None:
+        return None, "Categoria-mãe não encontrada"
+    if own_id is not None and (row["id"] == own_id or row["id"] in descendant_ids(connection, own_id)):
+        return None, "Uma categoria não pode ficar dentro de si própria"
+    if row["section"] != section:
+        return None, "Uma subcategoria fica na secção da categoria-mãe"
+    return row["id"], None
+
+
 @app.patch("/api/categories/<path:original_name>")
 def editar_categoria(original_name):
     if STORAGE_MODE != "local":
@@ -1907,6 +2057,9 @@ def editar_categoria(original_name):
             category = connection.execute("SELECT * FROM categories WHERE name = ? COLLATE NOCASE", (original_name,)).fetchone()
             if category is None:
                 return erro("Categoria não encontrada", 404)
+            parent_id, problem = resolve_parent(connection, data["parent"], section, category["id"]) if "parent" in data else (category["parent_id"], None)
+            if problem:
+                return erro(problem)
             old_names = json.loads(category["props"])
             sources = [field.get("source") for field in fields if field.get("source") is not None]
             if any(not isinstance(source, str) or source not in old_names for source in sources) or len(set(sources)) != len(sources):
@@ -1920,8 +2073,11 @@ def editar_categoria(original_name):
                     return erro("Esta alteração criaria componentes duplicados. Mantém uma propriedade que os distinga.", 409)
                 keys.add(key)
                 updates.append((json.dumps(props, ensure_ascii=False), key, item["id"]))
-            connection.execute("UPDATE categories SET name = ?, props = ?, image_enabled = ?, section = ? WHERE id = ?",
-                               (name, json.dumps(names, ensure_ascii=False), int(bool(data.get("image"))), section, category["id"]))
+            connection.execute("UPDATE categories SET name = ?, props = ?, image_enabled = ?, section = ?, parent_id = ? WHERE id = ?",
+                               (name, json.dumps(names, ensure_ascii=False), int(bool(data.get("image"))), section, parent_id, category["id"]))
+            # As subcategorias mudam de secção com a mãe.
+            for child_id in descendant_ids(connection, category["id"]):
+                connection.execute("UPDATE categories SET section = ? WHERE id = ?", (section, child_id))
             # Temporary keys let fields be reordered without transient uniqueness collisions.
             for _, _, item_id in updates:
                 connection.execute("UPDATE items SET `key` = ? WHERE id = ?", (uuid4().hex, item_id))
@@ -1954,9 +2110,12 @@ def nova_categoria():
         if any(category["name"].casefold() == name.casefold() for category in db_categories()):
             return erro("Essa categoria já existe")
         with db_connection() as connection:
+            parent_id, problem = resolve_parent(connection, data.get("parent"), section)
+            if problem:
+                return erro(problem)
             connection.execute(
-                "INSERT INTO categories (name, props, image_enabled, section) VALUES (?, ?, ?, ?)",
-                (name, json.dumps(props, ensure_ascii=False), int(image_enabled), section),
+                "INSERT INTO categories (name, props, image_enabled, section, parent_id) VALUES (?, ?, ?, ?, ?)",
+                (name, json.dumps(props, ensure_ascii=False), int(image_enabled), section, parent_id),
             )
         return jsonify(msg="Categoria pronta para receber o primeiro item")
     except Exception as exc:
@@ -1973,7 +2132,7 @@ def apagar_categoria(name):
         init_db()
         with db_connection() as connection:
             row = connection.execute(
-                "SELECT id, name FROM categories WHERE name = ? COLLATE NOCASE", (name,)
+                "SELECT id, name, parent_id FROM categories WHERE name = ? COLLATE NOCASE", (name,)
             ).fetchone()
             if not row:
                 return erro("Categoria não encontrada", 404)
@@ -1983,6 +2142,8 @@ def apagar_categoria(name):
             n_itens = len(removed)
             record_movements(connection, [{"type": "delete", "item_id": item["id"], "cat": row["name"], "props": json.loads(item["props"]),
                                            "delta": -item["qty"], "before": item["qty"]} for item in removed])
+            # As subcategorias e o seu stock ficam: sobem um nível.
+            connection.execute("UPDATE categories SET parent_id = ? WHERE parent_id = ?", (row["parent_id"], row["id"]))
             connection.execute("DELETE FROM categories WHERE id = ?", (row["id"],))
         # read_items obtem os restantes itens e save_items reconstrui as folhas,
         # deixando de criar a folha da categoria apagada.

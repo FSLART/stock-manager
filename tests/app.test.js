@@ -56,6 +56,24 @@ it('folds sidebar sections and hides empty categories until asked', async () => 
   expect(names()).toEqual(['Tudo', 'LEDs', 'R&D', 'Vazia'])
 })
 
+it('nests subcategories under their parent and counts them in the parent', async () => {
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), categories: [
+    { name: 'Passivos', props: ['x'], image: false, section: 'Componentes eletrónicos', parent: null },
+    { ...data.categories[1], section: 'Componentes eletrónicos', parent: 'Passivos' },
+    { ...data.categories[0], section: 'Componentes eletrónicos', parent: null },
+  ] }) })
+  wrapper = mount(App)
+  await flushPromises()
+  const rows = () => wrapper.findAll('nav .cat-row > button:first-child')
+  // A mãe vazia aparece porque a filha tem stock, e a filha vem logo a seguir, um nível dentro.
+  expect(rows().map(button => button.text().replace(/\d+$/, '').trim())).toEqual(['Tudo', 'Passivos', 'R&D', 'LEDs'])
+  expect(rows()[2].attributes('style')).toContain('--depth: 1')
+  await rows()[1].trigger('click')
+  expect(wrapper.find('.sub').text()).toBe('1 referência · 20 unidades')
+  await rows()[2].trigger('click')
+  expect(wrapper.find('.trail').text()).toBe('Passivos›')
+})
+
 it('clamps a decrement at zero and sends only the actual stock change', async () => {
   vi.useFakeTimers()
   wrapper = mount(App)
@@ -238,7 +256,7 @@ it('edits category and field names while sending the original field identity', a
   await form.trigger('submit')
   await flushPromises()
   const request = fetch.mock.calls.find(([url, options]) => url === '/api/categories/LEDs' && options.method === 'PATCH')
-  expect(JSON.parse(request[1].body)).toEqual({ originalName: 'LEDs', name: 'Luzes', fields: [{ source: 'cor', name: 'tonalidade' }], image: true, section: 'Componentes eletrónicos' })
+  expect(JSON.parse(request[1].body)).toEqual({ originalName: 'LEDs', name: 'Luzes', fields: [{ source: 'cor', name: 'tonalidade' }], image: true, section: 'Componentes eletrónicos', parent: null })
 })
 
 it('creates a category with one input per property, like the edit form', async () => {
@@ -253,7 +271,7 @@ it('creates a category with one input per property, like the edit form', async (
   await form.trigger('submit')
   await flushPromises()
   const request = fetch.mock.calls.find(([url, options]) => url === '/api/categories' && options.method === 'POST')
-  expect(JSON.parse(request[1].body)).toEqual({ name: 'Díodos', props: ['tipo', 'tensão'], image: false, section: 'Componentes eletrónicos' })
+  expect(JSON.parse(request[1].body)).toEqual({ name: 'Díodos', props: ['tipo', 'tensão'], image: false, section: 'Componentes eletrónicos', parent: null })
 })
 
 it('reorders category properties and sends them in the new order', async () => {
@@ -707,6 +725,125 @@ it('prints one QR label per selected box with its fixed code', async () => {
   await print().trigger('click')
   await vi.waitFor(() => expect(printed).toEqual([['/stock?box=K7Q2MX', 'K7Q2MX', 'Caixa 1'], ['/stock?box=ABC234', 'ABC234', 'Vazia']]))
   expect(document.querySelector('.qr-labels')).toBeNull()
+})
+
+it('creates a drawer label, saves it on the server and prints it with its Data Matrix', async () => {
+  const saved = { id: 7, title: 'Armário 2', fields: [{ name: 'Posição', value: 'A3' }], code: 'QRCode', location: '', width: 60, height: 25 }
+  const labels = [saved]
+  fetch.mockImplementation(async (url, options) => {
+    const body = url === '/api/labels' && JSON.parse(options.body)
+    if (body?.ids) labels.splice(0, labels.length, ...labels.filter(entry => !body.ids.includes(entry.id)))
+    const added = body && !body.ids ? (body.labels || [body]).map((entry, index) => ({ ...entry, id: 7 + labels.length + index })) : []
+    labels.push(...added)
+    return { ok: true, json: async () => body ? { msg: 'Etiqueta guardada', ids: added.map(entry => entry.id) }
+      : { ...structuredClone(data), items: [data.items[0], { ...data.items[1], location: 'Caixa 1' }], locations: { 'Caixa 1': '' }, location_codes: { 'Caixa 1': 'K7Q2MX' }, labels: structuredClone(labels) } }
+  })
+  window.history.replaceState(null, '', '/#/labels')
+  vi.stubGlobal('confirm', () => true)
+  let printed
+  vi.stubGlobal('print', () => { printed = [...document.querySelectorAll('.qr-labels .drawer-label')].map(label => [label.querySelector('title')?.textContent, label.querySelector('.drawer-label-text').textContent]) })
+  wrapper = mount(App, { attachTo: document.body })
+  await flushPromises()
+  const button = text => wrapper.findAll('button').find(button => button.text() === text)
+  // A página abre na lista das etiquetas da equipa; carregar numa abre o editor, sem nada para guardar.
+  expect(wrapper.findAll('.label-card-title').map(title => title.text())).toEqual(['Armário 2'])
+  expect(wrapper.find('.drawer-label-editor').exists()).toBe(false)
+  await wrapper.find('.label-card-title').trigger('click')
+  expect(wrapper.find('input[placeholder="Armário 1"]').element.value).toBe('Armário 2')
+  expect(button('Guardar').attributes('disabled')).toBeDefined()
+  await button('+ Gaveta').trigger('click')
+  await wrapper.find('input[placeholder="Armário 1"]').setValue('Armário 1')
+  await wrapper.find('input[aria-label="Valor do campo 2"]').setValue('D20')
+  await flushPromises()
+  expect(wrapper.find('.drawer-label-preview .drawer-label-text').text()).toBe('Armário 1ModeloPosiçãoD20')
+  expect(wrapper.find('.drawer-label-preview title').text()).toBe('Armário 1\nPosição: D20')
+  // Ligar um componente preenche a etiqueta; sem localização própria, o código abre a gaveta do componente.
+  const linked = wrapper.find('input[list="drawer-label-items"]')
+  await linked.setValue('R&D · 10 Ω')
+  await linked.trigger('change')
+  expect(wrapper.find('input[placeholder="Armário 1"]').element.value).toBe('R&D')
+  expect(wrapper.find('.drawer-label-icon').attributes('title')).toBe('Circuito integrado')
+  await wrapper.find('.label-icon[aria-label="Porca sextavada"]').trigger('click')
+  expect(wrapper.find('.drawer-label-icon').attributes('title')).toBe('Porca sextavada')
+  await button('Guardar').trigger('click')
+  await flushPromises()
+  const post = fetch.mock.calls.find(([url]) => url === '/api/labels')
+  expect(post[1].method).toBe('POST')
+  expect(JSON.parse(post[1].body)).toEqual({ title: 'R&D', fields: [{ name: 'valor', value: '10 Ω' }], code: 'DataMatrix', location: '', width: 55, height: 25, icon: 'nut', item: 2, layout: 'drawer', screw: '', titleSize: null, fieldSize: null })
+  // Guardar volta à lista, onde a etiqueta nova já aparece e se imprime.
+  const titles = () => wrapper.findAll('.label-card-title').map(title => title.text())
+  expect(titles()).toEqual(['Armário 2', 'R&D'])
+  await wrapper.findAll('.label-card')[1].findAll('button').find(button => button.text() === 'Imprimir').trigger('click')
+  await vi.waitFor(() => expect(printed).toEqual([[expect.stringMatching(/#\/stock\?box=K7Q2MX$/), 'R&Dvalor10 Ω']]))
+  // Imprimir todas mistura tamanhos: cada etiqueta sai numa página do seu tamanho.
+  let pages
+  vi.stubGlobal('print', () => { pages = [[...document.querySelectorAll('.qr-labels .drawer-label')].map(label => label.className), [...document.head.querySelectorAll('style')].at(-1).textContent] })
+  await button('Imprimir todas (2)').trigger('click')
+  await vi.waitFor(() => expect(pages).toBeDefined())
+  expect(pages[0]).toEqual(['drawer-label label-60x25', 'drawer-label label-55x25'])
+  expect(pages[1]).toContain('@page label-60x25{size:60mm 25mm;margin:0}')
+  expect(pages[1]).toContain('@page label-55x25{size:55mm 25mm;margin:0}')
+  expect(document.querySelector('.qr-labels')).toBeNull()
+  // O ponto de partida "Parafuso" é uma etiqueta de caixa com o desenho do parafuso, que cresce com o título.
+  await button('+ Parafuso').trigger('click')
+  const drawing = () => wrapper.find('.drawer-label-preview .bin-screw svg').attributes('viewBox')
+  expect(wrapper.find('.drawer-label-preview .drawer-label.bin strong').text()).toBe('M3x10')
+  const short = drawing()
+  await wrapper.find('input[placeholder="M3x10"]').setValue('M5x30')
+  expect(Number(drawing().split(' ')[2])).toBeGreaterThan(Number(short.split(' ')[2]))
+  await wrapper.find('input[aria-label="Letra do título (pt)"]').setValue(14)
+  expect(wrapper.find('.drawer-label-preview .drawer-label').attributes('style')).toContain('--title: 14pt')
+  // Várias de uma vez: um título por linha cria uma etiqueta para cada, iguais no resto.
+  await button('Várias de uma vez').trigger('click')
+  await wrapper.find('textarea').setValue('M3x10\nM4x16\n\n M5x20 ')
+  expect(wrapper.findAll('.drawer-label-preview strong').map(title => title.text())).toEqual(['M3x10', 'M4x16', 'M5x20'])
+  await button('Guardar 3').trigger('click')
+  await flushPromises()
+  const batch = JSON.parse(fetch.mock.calls.filter(([url]) => url === '/api/labels').at(-1)[1].body).labels
+  expect(batch.map(entry => [entry.title, entry.screw, entry.titleSize])).toEqual([['M3x10', 'screw-countersunk', 14], ['M4x16', 'screw-countersunk', 14], ['M5x20', 'screw-countersunk', 14]])
+  expect(titles()).toEqual(['Armário 2', 'R&D', 'M3x10', 'M4x16', 'M5x20'])
+  await wrapper.find('.label-card-title').trigger('click')
+  await button('Apagar').trigger('click')
+  await flushPromises()
+  const deleted = () => fetch.mock.calls.filter(([url, options]) => url === '/api/labels' && options.method === 'DELETE').map(([, options]) => JSON.parse(options.body).ids)
+  expect(deleted()).toEqual([[7]])
+  // Na lista seleciona-se várias e apagam-se de uma vez.
+  await wrapper.find('button[aria-label="Selecionar M4x16"]').trigger('click')
+  await wrapper.find('button[aria-label="Selecionar M5x20"]').trigger('click')
+  pages = undefined
+  await button('Imprimir selecionadas (2)').trigger('click')
+  await vi.waitFor(() => expect(pages?.[0]).toHaveLength(2))
+  await button('Apagar selecionadas (2)').trigger('click')
+  await flushPromises()
+  expect(deleted().at(-1)).toEqual([10, 11])
+  expect(titles()).toEqual(['R&D', 'M3x10'])
+})
+
+it('explains how to make labels in an illustrated step-by-step tutorial', async () => {
+  window.history.replaceState(null, '', '/#/labels')
+  wrapper = mount(App, { attachTo: document.body })
+  await flushPromises()
+  await wrapper.find('.label-heading-actions .tutorial-button').trigger('click')
+  const dialog = wrapper.findAll('.tutorial-dialog').find(found => found.element.open)
+  expect(dialog.element.open).toBe(true)
+  expect(dialog.find('.eyebrow').text()).toBe('Passo 1 de 8')
+  expect(dialog.find('h2').text()).toBe('Começa por um modelo')
+  expect(dialog.findAll('.tutorial-figure .drawer-label')).toHaveLength(3)
+  for (let step = 1; step < 8; step++) await dialog.findAll('button').find(button => button.text() === 'Seguinte').trigger('click')
+  expect(dialog.find('h2').text()).toBe('Guardar e imprimir')
+  await dialog.findAll('button').find(button => button.text() === 'Concluir').trigger('click')
+  expect(dialog.element.open).toBe(false)
+})
+
+it('explains the inventory in a step-by-step tutorial that reads a real label photo', async () => {
+  wrapper = mount(App, { attachTo: document.body })
+  await flushPromises()
+  await wrapper.find('.stock-content .tutorial-button').trigger('click')
+  const dialog = wrapper.findAll('.tutorial-dialog').find(found => found.element.open)
+  expect(dialog.find('.eyebrow').text()).toBe('Passo 1 de 7')
+  await dialog.findAll('.tutorial-dot')[2].trigger('click')
+  expect(dialog.find('h2').text()).toBe('Ler a etiqueta da encomenda')
+  expect(dialog.find('.tut-photo img').attributes('src')).toBe('/static/tutorial/mouser-label.webp')
 })
 
 it('replaces the BOM of a saved PCB project and keeps its name and STEP', async () => {

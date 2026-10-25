@@ -1,0 +1,216 @@
+/* linguagem visual inspirada em harness.design: fundo escuro, brilho azul-marinho, grelha subtil */
+:root[data-mantine-color-scheme='dark'] {
+  --mantine-color-body: #0f1117;
+}
+body {
+  background: #0f1117;
+}
+.bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(ellipse 70% 50% at 50% -10%, #0a1949 0%, transparent 70%);
+}
+.bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 20%, #000 20%, transparent 75%);
+}
+.glass {
+  padding: 7px;
+  border-radius: 15px;
+  background: linear-gradient(180deg, #ffffff1a, #ffffff06 40%, #ffffff0a);
+  box-shadow: 0 0 0 1px #ffffff14 inset, 0 0 0 1px #0009, 0 12px 30px #0a1948;
+}
+.grad {
+  background: linear-gradient(90deg, var(--mantine-color-teal-5), var(--mantine-color-blue-5));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.drop[data-over='true'] {
+  outline: 2px dashed var(--mantine-color-blue-5);
+  outline-offset: -6px;
+}
+.viewer {
+  height: min(72vh, 760px);
+  touch-action: none;
+}
+.viewer canvas {
+  display: block;
+}
+/* vistas 2D: diagrama de ligações e formboard */
+/* sem scroll dentro da caixa: o desenho cabe na largura e cresce para baixo (scroll só da página) */
+.diagram {
+  overflow-x: auto;
+  background: #14161d;
+  border-radius: 10px;
+}
+.diagram svg {
+  display: block;
+}
+.wire2d {
+  stroke-width: 2;
+  opacity: 0.85;
+  cursor: pointer;
+}
+.wire2d:hover {
+  stroke-width: 4.5;
+  opacity: 1;
+}
+.bus2d {
+  font: 700 9px Inter, sans-serif;
+}
+.box2d {
+  fill: #1f2230;
+  stroke: #ffffff26;
+}
+.box2d-head {
+  fill: #272a37;
+}
+.box2d-row {
+  stroke: #ffffff0f;
+}
+.pin2d-dot {
+  stroke: #14161d;
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+.box2d-missing {
+  fill: transparent;
+  stroke: #ffffff40;
+  stroke-dasharray: 6 4;
+}
+.box2d-title {
+  fill: #74c0fc;
+  font: 600 13px Inter, sans-serif;
+  cursor: pointer;
+}
+.box2d-sub {
+  fill: #868e96;
+  font: 11px monospace;
+}
+.pin2d {
+  fill: #e9ecef;
+  font: 600 11px monospace;
+}
+.pin2d-label {
+  fill: #adb5bd;
+  font: 11px Inter, sans-serif;
+}
+.board2d {
+  height: min(72vh, 760px);
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+.board2d:active {
+  cursor: grabbing;
+}
+.grid2d {
+  stroke: #ffffff0d;
+}
+/* formboard como no harness.design: troços cinzentos, sem comprimento a amarelo tracejado, fichas vistas de cima */
+.seg2d {
+  stroke: #b4b7bd;
+  stroke-linecap: round;
+}
+.seg2d-unknown {
+  stroke: #fab005;
+}
+.seg2d-dash {
+  stroke: #1a1b1e;
+  stroke-linecap: round;
+}
+.seg2d-label {
+  fill: #c1c2c5;
+  font-family: Inter, sans-serif;
+}
+.seg2d-count {
+  fill: #6a6e76;
+}
+.node2d-label {
+  fill: #e9ecef;
+  font-family: Inter, sans-serif;
+  font-weight: 600;
+  pointer-events: none;
+}
+.node2d-sel {
+  fill: #fff;
+}
+.bp2d {
+  fill: #5c5f66;
+}
+.spl2d {
+  fill: #cc5de8;
+}
+.conn2d-g {
+  cursor: pointer;
+}
+.conn2d {
+  fill: #b4b7bd;
+}
+.conn2d-g:hover .conn2d,
+.conn2d-sel {
+  fill: #f1f3f5;
+}
+.conn2d-odd {
+  fill: #fa5252;
+}
+.conn2d-face {
+  fill: #5c5f66;
+}
+.tether2d {
+  stroke: #ffffff59;
+}
+.face2d {
+  fill: #232428;
+  stroke: #3d3f45;
+  stroke-width: 3;
+}
+.face2d-key {
+  fill: #3d3f45;
+}
+.face2d-title {
+  fill: #e9ecef;
+  font: 600 12px Inter, sans-serif;
+  cursor: pointer;
+}
+.cav2d text {
+  font: 600 11px Inter, sans-serif;
+  pointer-events: none;
+}
+.cav2d-on {
+  cursor: pointer;
+}
+.cav2d-on:hover circle {
+  stroke: #fff;
+  stroke-width: 2;
+}
+/* trace: pino — fio — pino; no telemóvel empilha */
+.trace-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(110px, 220px) minmax(0, 1fr);
+  gap: var(--mantine-spacing-sm);
+  align-items: center;
+}
+@media (max-width: 640px) {
+  .trace-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    padding-bottom: var(--mantine-spacing-sm);
+    border-bottom: 1px solid #ffffff14;
+  }
+  .viewer {
+    height: 60vh;
+  }
+  .glass {
+    padding: 4px;
+    border-radius: 12px;
+  }
+}

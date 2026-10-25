@@ -10,6 +10,7 @@ const movementFilter = inject('movementFilter', null)
 
 // Menu da sessão: quem és, o que fizeste ultimamente e os atalhos que interessam.
 const menuOpen = ref(false), navOpen = ref(false), box = ref(null), chip = ref(null), mine = ref(null)
+const moreOpen = ref(false), moreBox = ref(null), moreToggle = ref(null)
 const firstName = computed(() => auth?.user?.name.split(/\s+/)[0] || '')
 const sameDay = timestamp => new Date(timestamp).toDateString() === new Date().toDateString()
 const ago = timestamp => {
@@ -31,13 +32,20 @@ function go(route, filter = '') {
   router.push(route)
 }
 function logout() { menuOpen.value = false; auth.logout() }
-const closeOutside = event => { if (menuOpen.value && !box.value?.contains(event.target)) menuOpen.value = false }
+const closeOutside = event => {
+  if (menuOpen.value && !box.value?.contains(event.target)) menuOpen.value = false
+  if (moreOpen.value && !moreBox.value?.contains(event.target)) moreOpen.value = false
+}
 // Esc fecha o menu e devolve o foco ao botão que o abriu, para o teclado não ficar perdido no corpo da página.
-const closeOnEscape = event => { if (event.key === 'Escape' && menuOpen.value) { menuOpen.value = false; chip.value?.focus() } }
+const closeOnEscape = event => {
+  if (event.key !== 'Escape') return
+  if (menuOpen.value) { menuOpen.value = false; chip.value?.focus() }
+  if (moreOpen.value) { moreOpen.value = false; moreToggle.value?.focus() }
+}
 onMounted(() => { document.addEventListener('pointerdown', closeOutside); document.addEventListener('keydown', closeOnEscape) })
 onUnmounted(() => { document.removeEventListener('pointerdown', closeOutside); document.removeEventListener('keydown', closeOnEscape) })
 
-defineProps({
+const props = defineProps({
   active: {
     type: String,
     default: ''
@@ -48,12 +56,18 @@ const links = [
   { label: 'Início', route: '/', key: 'home' },
   { label: 'Inventário', route: '/stock', key: 'stock' },
   { label: 'Localizações', route: '/locations', key: 'locations' },
-  { label: 'Simulação analógica', route: '/analog-simulation', key: 'analog-simulation' },
+  { label: 'Etiquetas', route: '/labels', key: 'labels' },
   { label: 'Movimentos', route: '/movements', key: 'movements' },
   { label: 'PCB e os seus BOMs', route: '/pcbs', key: 'pcbs' },
-  { label: 'Cablagem', route: '/harness', key: 'harness' },
-  { label: 'Definições', route: '/settings', key: 'settings' }
 ]
+// Menos usadas: ficam no "Mais" do computador; no telemóvel o menu recolhido mostra-as junto das outras.
+const more = [
+  { label: 'Simulação analógica', route: '/analog-simulation', key: 'analog-simulation' },
+  { label: 'Cablagem', route: '/harness', key: 'harness' },
+  { label: 'Definições', route: '/settings', key: 'settings' },
+]
+const moreActive = computed(() => more.some(link => link.key === props.active))
+function goTo(link) { navOpen.value = false; moreOpen.value = false; router.push(link.route) }
 </script>
 
 <template>
@@ -72,10 +86,18 @@ const links = [
         :key="link.key"
         :class="['menu-link', { active: active === link.key }]"
         :aria-current="active === link.key ? 'page' : undefined"
-        @click="navOpen = false; router.push(link.route)"
+        @click="goTo(link)"
       >
         {{ link.label }}
       </button>
+      <div ref="moreBox" class="more-box">
+        <button ref="moreToggle" class="menu-link more-toggle" :class="{ active: moreActive }" :aria-expanded="moreOpen" aria-controls="more-menu" @click="moreOpen = !moreOpen">
+          Mais <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div v-show="moreOpen" id="more-menu" class="more-menu">
+          <button v-for="link in more" :key="link.key" :class="['menu-link', { active: active === link.key }]" :aria-current="active === link.key ? 'page' : undefined" @click="goTo(link)">{{ link.label }}</button>
+        </div>
+      </div>
     </nav>
     <div v-if="auth?.enabled" ref="box" class="session-box">
       <button v-if="!auth.user" class="text-button" @click="auth.login()">Entrar</button>

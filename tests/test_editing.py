@@ -127,6 +127,20 @@ class EditingTest(unittest.TestCase):
         self.assertEqual(self.module.db_items(), original)
         self.assertTrue(any(c['name'] == 'Test' for c in self.module.db_categories()))
 
+    def test_subcategories_nest_follow_section_and_move_up_on_delete(self):
+        parents = lambda: {c['name']: (c['parent'], c['section']) for c in self.module.db_categories()}
+        self.assertEqual(self.client.post('/api/categories', json={'name': 'Child', 'props': ['v'], 'parent': 'Test'}).status_code, 200)
+        self.assertEqual(self.client.post('/api/categories', json={'name': 'Leaf', 'props': ['v'], 'parent': 'Child'}).status_code, 200)
+        self.assertEqual(self.client.post('/api/categories', json={'name': 'X', 'props': ['v'], 'parent': 'Missing'}).status_code, 400)
+        self.assertEqual(self.client.post('/api/categories', json={'name': 'X', 'props': ['v'], 'parent': 'Test', 'section': 'Harness'}).status_code, 400)
+        fields = [{'source': 'code', 'name': 'code'}, {'source': 'size', 'name': 'size'}]
+        # Uma categoria não pode ir para dentro de uma descendente.
+        self.assertEqual(self.client.patch('/api/categories/Test', json={'name': 'Test', 'fields': fields, 'parent': 'Leaf'}).status_code, 400)
+        self.assertEqual(self.client.patch('/api/categories/Test', json={'name': 'Test', 'fields': fields, 'section': 'Harness'}).status_code, 200)
+        self.assertEqual(parents()['Leaf'], ('Child', 'Harness'))
+        self.client.delete('/api/categories/Child')
+        self.assertEqual(parents()['Leaf'], ('Test', 'Harness'))
+
     def test_category_name_conflict_and_missing_targets(self):
         self.client.post('/api/categories', json={'name': 'Other', 'props': ['code']})
         body = {'name': 'Other', 'image': True, 'fields': [{'source': 'code', 'name': 'code'}, {'source': 'size', 'name': 'size'}]}

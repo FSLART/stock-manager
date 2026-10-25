@@ -1,0 +1,51 @@
+{
+  "_help": "Disposição das fichas no diagrama 2D, por harness: colunas da esquerda para a direita, como estão no carro. Cada entrada tem um nome e as fichas que lhe correspondem (expressões regulares sobre o nome da ficha). As fichas que não estão aqui vão para a coluna da ficha com que partilham mais fios.",
+  "CAR": {
+    "columns": [
+      [
+        { "label": "BOTS", "refs": ["^BOTS$"] },
+        { "label": "PEDAL BOX", "refs": ["^PEDAL ?BOX", "^ACQUISITION 1 J"] },
+        { "label": "APPS", "refs": ["^APPS"] }
+      ],
+      [
+        { "label": "RASPBERRY PI", "refs": ["^RASP", "^DATABOX J[12]$"] },
+        { "label": "ACQUISITION 2", "refs": ["^ACQUISITION 2"] },
+        { "label": "INERTIA", "refs": ["^INERTIA$"] },
+        { "label": "LCD", "refs": ["^LCD"] }
+      ],
+      [
+        { "label": "TSAL", "refs": ["^TSAL"] },
+        { "label": "F SOLENOID", "refs": ["^F SOLENOID$"] },
+        { "label": "R SOLENOID", "refs": ["^R SOLENOID$"] },
+        { "label": "EBS SOLENOIDS X2", "refs": ["^EBS SOLENOIDS?"] },
+        { "label": "AD BOX", "refs": ["^AD ?BOX"] },
+        { "label": "PDM J1", "refs": ["^PDM J1$"] },
+        { "label": "PDM J2", "refs": ["^PDM J2$"] },
+        { "label": "LEFT EMERGENCY", "refs": ["^LEFT EMERGENCY$"] },
+        { "label": "RIGHT EMERGENCY", "refs": ["^RIGHT EMERGENCY$"] }
+      ],
+      [
+        { "label": "GROUND POINT", "refs": ["^GR?OUND POINT$"] },
+        { "label": "SIDE PANEL", "refs": ["^SIDE ?PANEL"] },
+        { "label": "ACCU J2", "refs": ["^ACCU J2$"] }
+      ],
+      [
+        { "label": "ACCU J1", "refs": ["^ACCU J1$"] },
+        { "label": "JBOX J1", "refs": ["^JBOX( J1)?$"] },
+        { "label": "FAN 1", "refs": ["FRONT FANS?$", "FANS FRONT$"] },
+        { "label": "FAN 2", "refs": ["REAR FANS?$", "FANS REAR$"] }
+      ],
+      [
+        { "label": "LVBOX J1", "refs": ["^LVBOX J1$"] },
+        { "label": "LVBOX J2", "refs": ["^LVBOX J2$"] },
+        { "label": "ASSI 1", "refs": ["^ASSI WING LEFT"] },
+        { "label": "ASSI 2", "refs": ["^ASSI WING RIGHT"] }
+      ],
+      [
+        { "label": "BRAKE LIGHT", "refs": ["^BRAKE LIGHT"] },
+        { "label": "ACQUISITION 7", "refs": ["^ACQUISITION 7"] },
+        { "label": "ASSI 3", "refs": ["^ASSI REAR"] }
+      ]
+    ]
+  }
+}
