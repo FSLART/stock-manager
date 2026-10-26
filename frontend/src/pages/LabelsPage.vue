@@ -8,8 +8,8 @@ import { ICON_GROUPS, iconFor } from '../labelIcons.js'
 import { useInventoryContext } from '../composables/useInventoryContext.js'
 const inventory = useInventoryContext()
 const tutorial = ref(null)
-// Só Electronics (ou um admin) cria e muda etiquetas; os outros veem e imprimem.
-const canChange = computed(() => inventory.canEdit && inventory.electronicsEditor)
+// Qualquer pessoa com sessão cria e muda etiquetas; sem sessão só se veem e imprimem.
+const canChange = computed(() => inventory.canEdit && inventory.signedIn)
 
 // Etiquetas em dois formatos: gaveta (código 2D à esquerda, título e campos à direita) e caixa (ícones em cima e texto
 // centrado, como as etiquetas Gridfinity). Ficam no servidor, partilhadas pela equipa. Edita-se uma cópia (label) e só "Guardar" a envia.

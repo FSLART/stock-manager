@@ -99,3 +99,17 @@ class PcbProjectsTest(unittest.TestCase):
             self.assertEqual(self.client.post('/api/pcb-projects', json={'projects': [bad]}).status_code, 400, bad)
         self.assertEqual(self.client.post('/api/pcb-projects', json={'projects': []}).status_code, 400)
         self.assertEqual(self.projects(), [])
+
+    def test_only_the_creator_or_an_admin_changes_a_project(self):
+        project = {'id': 'p1', 'name': 'Motor', 'items': [], 'createdBy': {'id': 99, 'name': 'Falso'}}
+        saved = self.client.post('/api/pcb-projects', json={'projects': [project]}).get_json()['projects'][0]
+        # O dono vem da sessao (Tester, id 1), nunca do que o browser manda.
+        self.assertEqual(saved['createdBy'], {'id': 1, 'name': 'Tester'})
+        as_person(self, self.module, {'id': 2, 'name': 'Rui', 'admin': False, 'notion': False})
+        self.assertEqual(self.client.post('/api/pcb-projects', json={'projects': [{**project, 'step': {'name': 'x.step', 'url': '/uploads/x.step'}}]}).status_code, 403)
+        self.assertEqual(self.client.delete('/api/pcb-projects/p1').status_code, 403)
+        mine = self.client.post('/api/pcb-projects', json={'projects': [{**project, 'id': 'p2', 'name': 'BMS'}]}).get_json()['projects'][0]
+        self.assertEqual(mine['createdBy'], {'id': 2, 'name': 'Rui'})
+        self.assertEqual(self.client.post('/api/pcb-projects', json={'projects': [{**mine, 'name': 'BMS V2'}]}).status_code, 200)
+        self.assertEqual(self.client.delete('/api/pcb-projects/p2').status_code, 200)
+        self.assertEqual([p['name'] for p in self.projects()], ['Motor'])

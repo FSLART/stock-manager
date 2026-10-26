@@ -187,6 +187,8 @@ it('hides electronics stock changes until someone from Electronics signs in', as
   await open('PCB e os seus BOMs')
   expect(wrapper.text()).not.toContain('Novo projeto PCB')
   expect(wrapper.text()).toContain('Inicia sessão para criar um.')
+  await open('Etiquetas')
+  expect(wrapper.find('[aria-label="Nova etiqueta"]').exists()).toBe(false)
   wrapper.unmount()
   signedOut.user = { id: 1, name: 'Ana', admin: false, department: 'Powertrain' }
   // Harness (e não consumíveis) também são só do departamento de Electronics.
@@ -195,6 +197,9 @@ it('hides electronics stock changes until someone from Electronics signs in', as
   await flushPromises()
   await open('Inventário')
   expect(wrapper.find('button[aria-label="Adicionar 1"]').exists()).toBe(false)
+  // Etiquetas são de qualquer pessoa com sessão.
+  await open('Etiquetas')
+  expect(wrapper.find('[aria-label="Nova etiqueta"]').exists()).toBe(true)
   wrapper.unmount()
   signedOut.user.department = 'Powertrain, Electronics'
   wrapper = mount(App)
@@ -204,6 +209,22 @@ it('hides electronics stock changes until someone from Electronics signs in', as
   expect(wrapper.find('tbody .del').exists()).toBe(true)
   expect(wrapper.find('thead').text()).toContain('Ações')
   expect(wrapper.find('.add-part').exists()).toBe(true)
+})
+it('lets only the creator or an admin change a PCB project', async () => {
+  const signedIn = { ...structuredClone(data), auth: true, user: { id: 2, name: 'Rui', admin: false, department: 'Powertrain' } }
+  fetch.mockImplementation(async url => ({ ok: true, json: async () => url === '/api/data' ? structuredClone(signedIn) : { msg: 'ok' } }))
+  pcbServer([{ id: 'a', name: 'Da Ana', items: [], createdBy: { id: 1, name: 'Ana' } }, { id: 'b', name: 'Do Rui', items: [], createdBy: { id: 2, name: 'Rui' } }])
+  wrapper = mount(App)
+  await flushPromises()
+  await open('PCB e os seus BOMs')
+  const cards = wrapper.findAll('.saved-project')
+  expect(cards.map(card => card.find('.saved-project-delete').exists())).toEqual([false, true])
+  expect(cards[0].text()).toContain('Ana')
+  await cards[0].find('.saved-project-open').trigger('click')
+  expect(wrapper.find('input[aria-label="Anexar ficheiro STEP"]').exists()).toBe(false)
+  expect(wrapper.find('input[aria-label="Substituir ficheiro BOM"]').exists()).toBe(false)
+  await cards[1].find('.saved-project-open').trigger('click')
+  expect(wrapper.find('input[aria-label="Anexar ficheiro STEP"]').exists()).toBe(true)
 })
 it('previews a CSV before importing its components through the backend', async () => {
   wrapper = mount(App)

@@ -1775,9 +1775,6 @@ def guardar_etiqueta():
     # Sem id cria uma etiqueta nova; com id substitui a guardada.
     if STORAGE_MODE != "local":
         return erro("A edição está disponível no modo local")
-    # As etiquetas sao das gavetas do stock eletronico: mesma regra.
-    if (denied := electronics_denied()):
-        return denied
     data = request.get_json(silent=True) or {}
     # {"labels": [...]} cria várias de uma vez (ex.: parafusos de vários tamanhos): ou ficam todas ou nenhuma.
     batch = data.get("labels")
@@ -1822,9 +1819,6 @@ def apagar_etiquetas():
     # Apaga uma ou várias etiquetas de uma vez: {"ids": [1, 2, 3]}.
     if STORAGE_MODE != "local":
         return erro("A edição está disponível no modo local")
-    # As etiquetas sao das gavetas do stock eletronico: mesma regra.
-    if (denied := electronics_denied()):
-        return denied
     ids = (request.get_json(silent=True) or {}).get("ids")
     if not isinstance(ids, list) or not 1 <= len(ids) <= 500 or not all(isinstance(label_id, int) and not isinstance(label_id, bool) for label_id in ids):
         return erro("Indica as etiquetas a apagar")
@@ -1835,6 +1829,19 @@ def apagar_etiquetas():
         return jsonify(msg=f"{len(ids)} etiqueta(s) apagada(s)")
     except Exception as exc:
         return erro(str(exc), 500)
+
+
+def pcb_project_owner(connection, project_id):
+    # (existe, createdBy guardado); os projetos de antes desta regra nao tem dono.
+    row = connection.execute("SELECT data FROM pcb_projects WHERE id = ?", (project_id,)).fetchone()
+    return (True, json.loads(row["data"]).get("createdBy")) if row else (False, None)
+
+
+def pcb_project_denied(exists, owner):
+    # So quem criou o projeto (ou um admin) o muda ou apaga; um sem dono fica so para os admins.
+    if not exists or g.person["admin"] or (owner or {}).get("id") == g.person["id"]:
+        return None
+    return erro("Só quem criou o projeto (ou um admin) o pode alterar", 403)
 
 
 @app.get("/api/pcb-projects")
@@ -1864,9 +1871,19 @@ def guardar_projetos_pcb():
     try:
         init_db()
         with EXCEL_LOCK, db_connection() as connection:
+            saved = {project["id"]: pcb_project_owner(connection, project["id"]) for project in projects}
+            # Verifica todos antes de escrever: ou ficam todos ou nenhum.
             for project in projects:
+                if (denied := pcb_project_denied(*saved[project["id"]])):
+                    return denied
+            for project in projects:
+                exists, owner = saved[project["id"]]
+                # O dono vem do servidor, nunca do browser: quem cria fica dono.
+                project["createdBy"] = owner if exists else {"id": g.person["id"], "name": g.person["name"]}
+                if not project["createdBy"]:
+                    del project["createdBy"]
                 stored = json.dumps(project, ensure_ascii=False)
-                if connection.execute("SELECT 1 FROM pcb_projects WHERE id = ?", (project["id"],)).fetchone():
+                if exists:
                     connection.execute("UPDATE pcb_projects SET data = ? WHERE id = ?", (stored, project["id"]))
                 else:
                     connection.execute("INSERT INTO pcb_projects (id, data) VALUES (?, ?)", (project["id"], stored))
@@ -1882,6 +1899,9 @@ def apagar_projeto_pcb(project_id):
     try:
         init_db()
         with EXCEL_LOCK, db_connection() as connection:
+            exists, owner = pcb_project_owner(connection, project_id)
+            if (denied := pcb_project_denied(exists, owner)):
+                return denied
             connection.execute("DELETE FROM pcb_projects WHERE id = ?", (project_id,))
         return jsonify(msg="Projeto apagado")
     except Exception as exc:
