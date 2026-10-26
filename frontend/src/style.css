@@ -1626,6 +1626,14 @@ div.location-image{background:var(--bg);border:1px dashed var(--line-strong)}
 .drawer-label-field .del{grid-area:auto}
 .drawer-label-size{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .drawer-label-side{display:grid;gap:12px;min-width:0}
+/* A pré-visualização acompanha o scroll: no computador a coluna fica presa ao topo; no telemóvel a coluna desfaz-se
+   (display:contents) e só o quadro da etiqueta sobe para cima do formulário e fica preso, com os botões no fim. */
+@media(min-width:861px){.drawer-label-side{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto}}
+@media(max-width:860px){
+ .drawer-label-side{display:contents}
+ .drawer-label-side>.editor-label{order:-2}
+ .drawer-label-layout .drawer-label-preview{order:-1;position:sticky;top:0;z-index:2;min-height:0;max-height:40vh;box-shadow:0 8px 20px #0008}
+}
 .drawer-label-side .editor-label{margin:0}
 .drawer-label-side .primary{min-height:44px}
 .drawer-label-preview{display:grid;place-items:center;min-height:200px;padding:24px;overflow:auto;border:1px dashed var(--line-strong);border-radius:12px;background:var(--bg)}
