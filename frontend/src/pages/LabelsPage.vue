@@ -3,11 +3,12 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { writeBarcode } from 'zxing-wasm/writer'
 import DrawerLabel from '../components/DrawerLabel.vue'
 import LabelTutorial from '../components/LabelTutorial.vue'
+import PhomemoDialog from '../components/PhomemoDialog.vue'
 import WorkspacePage from '../components/WorkspacePage.vue'
 import { ICON_GROUPS, iconFor } from '../labelIcons.js'
 import { useInventoryContext } from '../composables/useInventoryContext.js'
 const inventory = useInventoryContext()
-const tutorial = ref(null)
+const tutorial = ref(null), phomemoDialog = ref(null)
 // Qualquer pessoa com sessão cria e muda etiquetas; sem sessão só se veem e imprimem.
 const canChange = computed(() => inventory.canEdit && inventory.signedIn)
 
@@ -144,6 +145,13 @@ watch(() => labels.value.map(entry => `${entry.id}\n${entry.code}\n${codeText(en
 // Miniatura: a etiqueta em mm reais, reduzida para caber no cartão (1 mm ≈ 3,78 px).
 const fit = entry => Math.min(1.3, 230 / (entry.width * 3.78), 100 / (entry.height * 3.78))
 
+// Phomemo M110: o diálogo mostra como sai e imprime por Bluetooth ou dá o PNG para a app.
+async function phomemo(entries) {
+  error.value = ''
+  try { phomemoDialog.value.open(await Promise.all(entries.map(async entry => ({ ...entry, svg: await codeSvg(entry) })))) }
+  catch { error.value = 'Não foi possível gerar o código' }
+}
+
 const pageName = entry => `label-${entry.width}x${entry.height}`.replaceAll('.', '_')
 const printing = ref([])
 async function print(entries) {
@@ -197,6 +205,7 @@ async function print(entries) {
           <button type="button" class="toggle-chip" :aria-pressed="allPicked" @click="picked = new Set(allPicked ? [] : labels.map(entry => entry.id))">Selecionar todas</button>
           <template v-if="picked.size">
             <button type="button" class="text-button" @click="print(pickedLabels)">Imprimir selecionadas ({{ picked.size }})</button>
+            <button type="button" class="text-button" @click="phomemo(pickedLabels)">Phomemo ({{ picked.size }})</button>
             <button v-if="canChange" type="button" class="text-button danger" @click="removePicked">Apagar selecionadas ({{ picked.size }})</button>
             <button type="button" class="text-button" @click="picked = new Set()">Limpar seleção</button>
           </template>
@@ -213,6 +222,7 @@ async function print(entries) {
             <div class="location-actions">
               <button v-if="canChange" class="text-button" @click="open(entry)">Editar</button>
               <button class="text-button" @click="print([entry])">Imprimir</button>
+              <button class="text-button" @click="phomemo([entry])">Phomemo</button>
               <button type="button" class="toggle-chip" :aria-pressed="picked.has(entry.id)" :aria-label="`Selecionar ${entry.title || 'Sem título'}`" @click="togglePick(entry.id)">{{ picked.has(entry.id) ? '✓ Selecionada' : 'Selecionar' }}</button>
             </div>
           </li>
@@ -305,6 +315,7 @@ async function print(entries) {
           <div class="location-actions">
             <button v-if="canChange" class="primary" :disabled="!dirty || (many && !titleLines.length)" @click="save">{{ many ? `Guardar ${titleLines.length}` : 'Guardar' }}</button>
             <button class="text-button" :disabled="!drafts.length" @click="print(drafts)">{{ many ? `Imprimir ${drafts.length}` : 'Imprimir' }}</button>
+            <button class="text-button" :disabled="!drafts.length" @click="phomemo(drafts)">Phomemo</button>
             <button class="text-button" @click="add(label)">Duplicar</button>
             <button v-if="canChange && templateName === null" class="text-button" @click="templateName = label.title">Guardar como modelo</button>
             <button class="text-button danger" @click="remove">Apagar</button>
@@ -318,6 +329,7 @@ async function print(entries) {
       </div>
     </section>
     <LabelTutorial ref="tutorial" />
+    <PhomemoDialog ref="phomemoDialog" />
     <!-- Só aparece na impressão, direto no body como os QR das Localizações. O SVG é gerado aqui pelo zxing. -->
     <Teleport to="body"><div v-if="printing.length" class="qr-labels">
       <DrawerLabel v-for="(entry, index) in printing" :key="index" :label="entry" :code="entry.svg" :class="pageName(entry)" />
