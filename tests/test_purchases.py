@@ -61,6 +61,16 @@ class PurchasesTest(unittest.TestCase):
         self.assertEqual(self.client.get('/api/purchases/files/a.csv').status_code, 200)
         self.assertEqual(self.client.get('/api/purchases/files/../stock.db').status_code, 404)
 
+    def test_only_admins_board_and_department_leaders_see_purchases(self):
+        member = {'id': 2, 'name': 'Membro', 'admin': False, 'role': 'Member'}
+        with patch.object(self.module, 'current_person', return_value=member):
+            self.assertEqual(self.client.get('/api/purchases').status_code, 403)
+            self.assertEqual(self.client.get('/api/purchases/files/a.csv').status_code, 403)
+        with patch.object(self.module, 'current_person', return_value={**member, 'role': 'Department Leader'}):
+            self.assertEqual(self.client.get('/api/purchases').status_code, 200)
+        with patch.object(self.module, 'current_person', return_value={**member, 'role': 'Board'}):
+            self.assertEqual(self.client.get('/api/purchases').status_code, 200)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -29,7 +29,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try { rows.value = (await api.direct('purchases')).purchases }
-  catch (cause) { error.value = cause.login ? 'Inicia sessão para ver as compras e encomendas.' : cause.message }
+  catch (cause) { rows.value = []; error.value = cause.login ? 'Inicia sessão para ver as compras e encomendas.' : cause.message }
   finally { loading.value = false }
 }
 // Carrega logo e outra vez depois do login (o 401 abre o popup).

@@ -2443,11 +2443,20 @@ def refresh_purchases():
     purchases_signature = files
 
 
+def purchases_denied():
+    # Precos, fornecedores e contactos: so admins, Board e lideres de departamento (cargo vindo do Notion). O 401 abre o popup de login.
+    person = current_person()
+    if person is None:
+        return jsonify(error="Inicia sessão para ver as compras", login=True), 401
+    if not (person["admin"] or person["role"] in ("Board", "Department Leader")):
+        return erro("Só admins, Board e líderes de departamento podem ver as compras", 403)
+    return None
+
+
 @app.get("/api/purchases")
 def compras():
-    # Precos, fornecedores e contactos: so para quem tem sessao (o 401 abre o popup de login).
-    if current_person() is None:
-        return jsonify(error="Inicia sessão para ver as compras", login=True), 401
+    if denied := purchases_denied():
+        return denied
     try:
         init_db()
         refresh_purchases()
@@ -2460,8 +2469,8 @@ def compras():
 
 @app.get("/api/purchases/files/<path:name>")
 def compra_ficheiro(name):
-    if current_person() is None:
-        return erro("Inicia sessão para ver as compras", 401)
+    if denied := purchases_denied():
+        return denied
     return send_from_directory(PURCHASES_DIR, name)
 
 

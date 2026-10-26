@@ -58,7 +58,7 @@ const links = [
   { label: 'Localizações', route: '/locations', key: 'locations' },
   { label: 'Etiquetas', route: '/labels', key: 'labels' },
   { label: 'Movimentos', route: '/movements', key: 'movements' },
-  { label: 'Batches', route: '/batches', key: 'batches' },
+  { label: 'Batches', route: '/batches', key: 'batches', leaders: true },
   { label: 'PCB e os seus BOMs', route: '/pcbs', key: 'pcbs' },
 ]
 // Menos usadas: ficam no "Mais" do computador; no telemóvel o menu recolhido mostra-as junto das outras.
@@ -67,6 +67,9 @@ const more = [
   { label: 'Cablagem', route: '/harness', key: 'harness' },
   { label: 'Definições', route: '/settings', key: 'settings' },
 ]
+// Batches (compras) so aparece a admins, Board e lideres de departamento; o servidor faz a mesma verificacao.
+const leader = computed(() => Boolean(auth?.user && (auth.user.admin || ['Board', 'Department Leader'].includes(auth.user.role))))
+const shownLinks = computed(() => links.filter(link => !link.leaders || leader.value))
 const moreActive = computed(() => more.some(link => link.key === props.active))
 function goTo(link) { navOpen.value = false; moreOpen.value = false; router.push(link.route) }
 </script>
@@ -83,7 +86,7 @@ function goTo(link) { navOpen.value = false; moreOpen.value = false; router.push
     </button>
     <nav id="main-menu" class="main-menu" :class="{ open: navOpen }" aria-label="Menu principal">
       <button
-        v-for="link in links"
+        v-for="link in shownLinks"
         :key="link.key"
         :class="['menu-link', { active: active === link.key }]"
         :aria-current="active === link.key ? 'page' : undefined"
