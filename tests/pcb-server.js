@@ -6,11 +6,12 @@ export function pcbServer(projects = []) {
   const reply = body => ({ ok: true, json: async () => structuredClone(body) })
   fetch.mockImplementation(vi.fn(async (url, options = {}) => {
     if (url === '/api/pcb-projects' && options.method === 'POST') {
-      for (const project of JSON.parse(options.body).projects) {
+      const saved = JSON.parse(options.body).projects
+      for (const project of saved) {
         const index = projects.findIndex(entry => entry.id === project.id)
         if (index < 0) projects.unshift(project); else projects[index] = project
       }
-      return reply({ msg: 'ok' })
+      return reply({ msg: 'ok', projects: saved })
     }
     if (url === '/api/pcb-projects') return reply({ projects })
     if (url.startsWith('/api/pcb-projects/')) {

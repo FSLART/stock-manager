@@ -84,9 +84,10 @@ class AuthTest(unittest.TestCase):
         # O catalogo de pecas tambem: nem acrescentar a mao nem pela pesquisa nas APIs (que guarda a peca).
         self.assertEqual(self.client.post('/api/parts', json={'mpn': 'NE555', 'price': 1}).status_code, 403)
         self.assertEqual(self.client.get('/api/parts/lookup?mpn=NE555').status_code, 403)
-        # Etiquetas seguem a regra do stock eletronico; /api/auth/me diz ao site da cablagem quem tem sessao.
-        self.assertEqual(self.client.post('/api/labels', json={'title': 'A1', 'width': 55, 'height': 25}).status_code, 403)
-        self.assertEqual(self.client.delete('/api/labels', json={'ids': [1]}).status_code, 403)
+        # Etiquetas: qualquer pessoa com sessao, seja qual for o departamento; /api/auth/me diz ao site da cablagem quem tem sessao.
+        label = self.client.post('/api/labels', json={'title': 'A1', 'fields': [], 'code': '', 'width': 55, 'height': 25})
+        self.assertEqual(label.status_code, 200)
+        self.assertEqual(self.client.delete('/api/labels', json={'ids': [label.json['id']]}).status_code, 200)
         self.assertIsNotNone(self.client.get('/api/auth/me').json['user'])
         self.assertIsNone(self.module.app.test_client().get('/api/auth/me').json['user'])
         # Nao encontrado (ou ambiguo) no Notion: fica como estava.
