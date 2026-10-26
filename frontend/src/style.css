@@ -1776,3 +1776,23 @@ button.label-card-title:hover{color:var(--accent)}
 .phomemo-previews figcaption{color:var(--muted);font-size:12px;text-align:center}
 .phomemo-warn{color:var(--warn)}
 .phomemo-sources{position:fixed;top:0;left:-10000px}
+/* Batches: tabela de compras com a segunda linha (fornecedor, notas) em texto pequeno. */
+.batches-page{display:grid;gap:14px}
+.batches-page .search input{padding:11px 14px 11px 42px;border-radius:12px;font-size:15px}
+.batches-list{max-height:70vh;border:1px solid var(--line)}
+.batches-list td{vertical-align:top}
+.batches-list td small{display:block;color:var(--muted);font-size:11px;white-space:normal;max-width:340px}
+.batches-list .batch-desc{white-space:normal;min-width:240px;max-width:420px}
+.batches-list .batch-files a{margin-right:8px}
+.batches-more{margin:10px 12px}
+.batches-list th{position:sticky;top:0;z-index:1}
+.batches-list a{color:var(--accent);font-weight:600}
+@media(max-width:820px){
+  /* No telemovel cada compra vira um cartao: P/N e descricao em cima, data/qt/preco/ficheiros numa linha. */
+  .batches-list{max-height:none;border:0}
+  .batches-list thead{display:none}
+  .batches-list tr{display:flex;flex-wrap:wrap;gap:4px 12px;padding:12px 4px;border-top:1px solid var(--line)}
+  .batches-list td{border:0;padding:0}
+  .batches-list .batch-pn,.batches-list .batch-desc,.batches-list td:nth-child(4){flex-basis:100%;max-width:none;min-width:0}
+  .batches-list td:first-child,.batches-list td:nth-child(5),.batches-list .price-cell{color:var(--muted);font-size:12px}
+}

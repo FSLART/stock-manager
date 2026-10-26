@@ -65,6 +65,7 @@ load_dotenv(BASE_DIR.parent / ".env", override=False, interpolate=False)
 # carts.py esta ao lado: o import funciona com "flask --app backend/app.py" e com "gunicorn backend.app:app".
 sys.path.insert(0, str(BASE_DIR))
 from carts import USD_TO_EUR, catalog_category, digikey_props, stock_fields  # noqa: E402
+from purchases import load_folder  # noqa: E402
 # SQLite local por defeito; sincronizacao externa apenas por opcao explicita.
 STORAGE_MODE = os.getenv("STORAGE_MODE", "local").strip().lower()
 if STORAGE_MODE not in {"local", "excel", "google"}:
@@ -208,6 +209,11 @@ def init_mysql_schema(connection):
         # Projetos da pagina PCB e os seus BOMs, partilhados pela equipa; o id vem do browser (UUID).
         """CREATE TABLE IF NOT EXISTS pcb_projects (
             id VARCHAR(64) PRIMARY KEY,
+            data LONGTEXT NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
+        # Compras e encomendas lidas de data/compras (pagina Batches); data e o JSON de purchases.parse_sheet.
+        """CREATE TABLE IF NOT EXISTS purchases (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
             data LONGTEXT NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
     ):
@@ -516,6 +522,10 @@ def init_sqlite_schema(connection):
         );
         CREATE TABLE IF NOT EXISTS pcb_projects (
             id TEXT PRIMARY KEY,
+            data TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS purchases (
+            id INTEGER PRIMARY KEY,
             data TEXT NOT NULL
         );
         """
@@ -2412,6 +2422,47 @@ def ler_etiqueta_texto():
     except subprocess.TimeoutExpired:
         return erro("A leitura do texto demorou demasiado. Tenta com uma imagem mais pequena.", 504)
     return jsonify(label=match_label_text(text, db_parts()), text=text)
+
+
+PURCHASES_DIR = Path(os.getenv("PURCHASES_DIR", BASE_DIR.parent / "data" / "compras"))
+purchases_signature = None
+
+
+def refresh_purchases():
+    # Rele a pasta so quando algum ficheiro mudou (nome, tamanho ou data); a leitura completa demora ~7 s.
+    global purchases_signature
+    files = sorted((str(path), stat.st_size, stat.st_mtime) for path in PURCHASES_DIR.rglob("*") if path.is_file() and (stat := path.stat()))
+    if files == purchases_signature:
+        return
+    rows, problems = load_folder(PURCHASES_DIR)
+    for problem in problems:
+        print(f"Batches: {problem}", file=sys.stderr)
+    with db_connection() as connection:
+        connection.execute("DELETE FROM purchases")
+        connection.executemany("INSERT INTO purchases (data) VALUES (?)", [(json.dumps(row, ensure_ascii=False, default=str),) for row in rows])
+    purchases_signature = files
+
+
+@app.get("/api/purchases")
+def compras():
+    # Precos, fornecedores e contactos: so para quem tem sessao (o 401 abre o popup de login).
+    if current_person() is None:
+        return jsonify(error="Inicia sessão para ver as compras", login=True), 401
+    try:
+        init_db()
+        refresh_purchases()
+        with db_connection() as connection:
+            rows = connection.execute("SELECT data FROM purchases ORDER BY id").fetchall()
+        return jsonify(purchases=[json.loads(row["data"]) for row in rows])
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.get("/api/purchases/files/<path:name>")
+def compra_ficheiro(name):
+    if current_person() is None:
+        return erro("Inicia sessão para ver as compras", 401)
+    return send_from_directory(PURCHASES_DIR, name)
 
 
 @app.get("/api/movements")

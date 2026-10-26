@@ -16,6 +16,7 @@ import LoginDialog from './components/LoginDialog.vue'
 import HomePage from './pages/HomePage.vue'
 import AnalogSimulationPage from './pages/AnalogSimulationPage.vue'
 import MovementsPage from './pages/MovementsPage.vue'
+import BatchesPage from './pages/BatchesPage.vue'
 import PcbBomPage from './pages/PcbBomPage.vue'
 import SettingsPage from './pages/SettingsPage.vue'
 import LocationsPage from './pages/LocationsPage.vue'
@@ -204,8 +205,8 @@ function setLocation(location) {
   act('setLocation', { ids: [...selected.value], location }, () => { selected.value = new Set(); locationName.value = '' })
 }
 
-const pages = { home: HomePage, 'analog-simulation': AnalogSimulationPage, movements: MovementsPage, pcbs: PcbBomPage, settings: SettingsPage, locations: LocationsPage, labels: LabelsPage, harness: HarnessPage }
-const routeKeys = { '/': 'home', '/stock': 'stock', '/analog-simulation': 'analog-simulation', '/movements': 'movements', '/pcbs': 'pcbs', '/settings': 'settings', '/locations': 'locations', '/labels': 'labels', '/harness': 'harness' }
+const pages = { home: HomePage, 'analog-simulation': AnalogSimulationPage, movements: MovementsPage, batches: BatchesPage, pcbs: PcbBomPage, settings: SettingsPage, locations: LocationsPage, labels: LabelsPage, harness: HarnessPage }
+const routeKeys = { '/': 'home', '/stock': 'stock', '/analog-simulation': 'analog-simulation', '/movements': 'movements', '/batches': 'batches', '/pcbs': 'pcbs', '/settings': 'settings', '/locations': 'locations', '/labels': 'labels', '/harness': 'harness' }
 const page = ref('home')
 // #/stock?location=Caixa%201 (o QR de cada caixa) abre o inventário só com essa localização.
 // Antes de os dados chegarem o código ainda não tem nome: load() volta a tentar.

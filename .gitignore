@@ -12,3 +12,4 @@ backend/Stock_sala.xlsx
 !.env.example
 data/backup-*.json
 data/notion-members.json
+data/compras/

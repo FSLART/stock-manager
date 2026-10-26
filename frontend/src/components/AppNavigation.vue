@@ -58,6 +58,7 @@ const links = [
   { label: 'Localizações', route: '/locations', key: 'locations' },
   { label: 'Etiquetas', route: '/labels', key: 'labels' },
   { label: 'Movimentos', route: '/movements', key: 'movements' },
+  { label: 'Batches', route: '/batches', key: 'batches' },
   { label: 'PCB e os seus BOMs', route: '/pcbs', key: 'pcbs' },
 ]
 // Menos usadas: ficam no "Mais" do computador; no telemóvel o menu recolhido mostra-as junto das outras.
