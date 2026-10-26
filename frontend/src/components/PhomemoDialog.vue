@@ -7,10 +7,9 @@ import { bluetoothAvailable, forPrinter, HEAD_DOTS, labelCommands, printOverBlue
 // e envia-a por Bluetooth, ou descarrega o PNG para a app do telemóvel. Recebe as etiquetas com o SVG do código (svg).
 const dialog = ref(null), entries = ref([]), rendered = ref([]), status = ref(''), busy = ref(false)
 const bluetooth = bluetoothAvailable()
-const settings = ref({ orientation: 'auto', media: 'gaps', ...readStored('stocklart-phomemo', {}) })
+const settings = ref({ orientation: 'auto', ...readStored('stocklart-phomemo', {}) })
 watch(settings, value => writeStored('stocklart-phomemo', value), { deep: true })
 const orientations = [['auto', 'Automática'], ['normal', 'Como está'], ['rotated', 'Rodada 90°']]
-const media = [['gaps', 'Etiquetas com espaço'], ['continuous', 'Rolo contínuo']]
 // Cópias das etiquetas sem zoom, fora do ecrã: é delas que sai a imagem.
 const sources = []
 const fileName = entry => `etiqueta-${(entry.title || 'sem-titulo').replace(/[^\w-]+/g, '-')}`
@@ -40,7 +39,7 @@ async function print() {
   busy.value = true
   status.value = 'Escolhe a impressora na janela do browser…'
   try {
-    await printOverBluetooth(rendered.value.map(({ canvas }) => labelCommands(canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height), { media: settings.value.media })))
+    await printOverBluetooth(rendered.value.map(({ canvas }) => labelCommands(canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height))))
     status.value = `${rendered.value.length} etiqueta(s) enviada(s) para a impressora.`
   } catch (error) {
     status.value = error.name === 'NotFoundError' ? 'Nenhuma impressora escolhida.' : `Não foi possível imprimir: ${error.message}`
@@ -56,17 +55,11 @@ defineExpose({ open })
       <button type="button" class="del" aria-label="Fechar" @click="dialog.close()">×</button>
     </div>
     <h2 id="phomemo-title">Phomemo M110</h2>
-    <p class="hint">Assim sai na impressora: preto e branco, a 203 dpi, até 55 mm de largura.</p>
+    <p class="hint">Assim sai na impressora: preto e branco, a 203 dpi, até 55 mm de largura, em rolo contínuo.</p>
     <div>
       <p id="phomemo-orientation" class="editor-label">Orientação</p>
       <div class="toggle-chips" role="group" aria-labelledby="phomemo-orientation">
         <button v-for="[key, name] in orientations" :key="key" type="button" class="toggle-chip" :aria-pressed="settings.orientation === key" @click="settings.orientation = key">{{ name }}</button>
-      </div>
-    </div>
-    <div>
-      <p id="phomemo-media" class="editor-label">Papel</p>
-      <div class="toggle-chips" role="group" aria-labelledby="phomemo-media">
-        <button v-for="[key, name] in media" :key="key" type="button" class="toggle-chip" :aria-pressed="settings.media === key" @click="settings.media = key">{{ name }}</button>
       </div>
     </div>
     <div class="phomemo-previews">

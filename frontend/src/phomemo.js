@@ -49,12 +49,12 @@ export function forPrinter(source, rotate) {
   return canvas
 }
 
-// Uma etiqueta em comandos para a M110: velocidade, densidade e tipo de papel, a imagem em blocos "GS v 0"
+// Uma etiqueta em comandos para a M110: velocidade, densidade e papel (sempre rolo contínuo, 0x0b), a imagem em blocos "GS v 0"
 // (1 bit por ponto, 1 = preto) centrada nos 440 pontos (55 mm), e no fim avança até à próxima etiqueta.
 // image é um ImageData já a preto e branco; mais larga do que isso é cortada dos dois lados.
-export function labelCommands(image, { media = 'gaps', density = 10 } = {}) {
+export function labelCommands(image, { density = 10 } = {}) {
   const bytesPerLine = HEAD_DOTS / 8, offset = Math.floor((HEAD_DOTS - image.width) / 2)
-  const out = [0x1b, 0x4e, 0x0d, 5, 0x1b, 0x4e, 0x04, density, 0x1f, 0x11, media === 'continuous' ? 0x0b : 0x0a]
+  const out = [0x1b, 0x4e, 0x0d, 5, 0x1b, 0x4e, 0x04, density, 0x1f, 0x11, 0x0b]
   for (let top = 0; top < image.height; top += 255) {
     const lines = Math.min(255, image.height - top)
     out.push(0x1d, 0x76, 0x30, 0x00, bytesPerLine & 0xff, bytesPerLine >> 8, lines & 0xff, lines >> 8)
