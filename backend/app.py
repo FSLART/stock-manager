@@ -706,6 +706,15 @@ def label_from_json(data):
     sizes = {key: data.get(key) if data.get(key) != "" else None for key in ("titleSize", "fieldSize")}
     if not all(size is None or (isinstance(size, (int, float)) and not isinstance(size, bool) and 4 <= size <= 72) for size in sizes.values()):
         raise ValueError("A letra vai de 4 a 72 pt")
+    # Borda preta opcional, em mm: espessura (vazia = sem borda), raio dos cantos e distancia ao corte.
+    border = {key: data.get(key) if data.get(key) != "" else None for key in ("borderWidth", "borderRadius", "borderInset")}
+    limits = {"borderWidth": (0.1, 5), "borderRadius": (0, 20), "borderInset": (0, 10)}
+    if not all(value is None or (isinstance(value, (int, float)) and not isinstance(value, bool) and limits[key][0] <= value <= limits[key][1]) for key, value in border.items()):
+        raise ValueError("A borda vai até 5 mm de espessura, 20 mm nos cantos e 10 mm de margem")
+    # Um modelo e uma etiqueta guardada como ponto de partida, com nome; nao aparece na lista de etiquetas.
+    template = data.get("template") is True
+    if template and not text(data.get("templateName"), 40):
+        raise ValueError("Dá um nome ao modelo")
     return {
         "title": text(data.get("title"), 40),
         "fields": [{"name": text(field.get("name"), 20), "value": text(field.get("value"), 30)} for field in fields],
@@ -720,6 +729,8 @@ def label_from_json(data):
         # Cabeça do parafuso desenhado no formato caixa, uma chave de labelIcons.js.
         "screw": text(data.get("screw"), 40),
         **sizes,
+        **border,
+        **({"template": True, "templateName": text(data.get("templateName"), 40)} if template else {}),
     }
 
 
@@ -1809,7 +1820,8 @@ def guardar_etiqueta():
                 connection.execute("UPDATE labels SET data = ? WHERE id = ?", (stored, label_id))
             else:
                 return erro("Etiqueta não encontrada", 404)
-        return jsonify(msg=f"Etiqueta {label['title'] or 'sem título'} guardada", id=label_id)
+        saved = f"Modelo {label['templateName']} guardado" if label.get("template") else f"Etiqueta {label['title'] or 'sem título'} guardada"
+        return jsonify(msg=saved, id=label_id)
     except Exception as exc:
         return erro(str(exc), 500)
 

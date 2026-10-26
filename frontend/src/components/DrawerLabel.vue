@@ -9,13 +9,15 @@ const style = computed(() => ({
   width: `${props.label.width}mm`, height: `${props.label.height}mm`, '--h': `${props.label.height}mm`,
   ...(props.label.titleSize && { '--title': `${props.label.titleSize}pt` }),
   ...(props.label.fieldSize && { '--value': `${props.label.fieldSize}pt` }),
+  ...(framed.value && { '--frame-width': `${props.label.borderWidth}mm`, '--frame-radius': `${props.label.borderRadius || 0}mm`, '--frame-inset': `${props.label.borderInset || 0}mm` }),
 }))
+const framed = computed(() => Number(props.label.borderWidth) > 0)
 const icon = computed(() => ICONS[props.label.icon])
 const screw = computed(() => props.label.layout === 'bin' ? screwDrawing(props.label.screw, props.label.title) : '')
 </script>
 
 <template>
-  <div class="drawer-label" :class="{ bin: label.layout === 'bin' }" :style="style">
+  <div class="drawer-label" :class="{ bin: label.layout === 'bin', framed }" :style="style">
     <div v-if="label.code" class="drawer-label-code" v-html="code"></div>
     <!-- Caixa: ícones em cima e texto centrado por baixo, como as etiquetas Gridfinity. -->
     <div v-if="label.layout === 'bin'" class="drawer-label-text">

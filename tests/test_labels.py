@@ -29,7 +29,7 @@ class LabelsTest(unittest.TestCase):
         response = self.client.post('/api/labels', json=label)
         self.assertEqual(response.status_code, 200, response.json)
         label_id = response.get_json()['id']
-        self.assertEqual(self.labels(), [{'id': label_id, 'title': 'Armário 1', 'fields': [{'name': 'Posição', 'value': 'D20'}], 'code': 'DataMatrix', 'location': 'Caixa 1', 'width': 60, 'height': 25, 'icon': 'nut', 'item': 3, 'layout': 'drawer', 'screw': '', 'titleSize': None, 'fieldSize': None}])
+        self.assertEqual(self.labels(), [{'id': label_id, 'title': 'Armário 1', 'fields': [{'name': 'Posição', 'value': 'D20'}], 'code': 'DataMatrix', 'location': 'Caixa 1', 'width': 60, 'height': 25, 'icon': 'nut', 'item': 3, 'layout': 'drawer', 'screw': '', 'titleSize': None, 'fieldSize': None, 'borderWidth': None, 'borderRadius': None, 'borderInset': None}])
         # Guardar sem mudar nada e depois mudar o título substitui a mesma etiqueta.
         self.assertEqual(self.client.post('/api/labels', json={**label, 'id': label_id}).status_code, 200)
         self.assertEqual(self.client.post('/api/labels', json={**label, 'id': label_id, 'title': 'Armário 2'}).status_code, 200)
@@ -62,13 +62,20 @@ class LabelsTest(unittest.TestCase):
 
     def test_rejects_invalid_labels(self):
         base = {'title': 'A', 'fields': [], 'code': 'QRCode', 'location': '', 'width': 60, 'height': 25}
-        for change in [{'code': 'Aztec'}, {'width': 5}, {'height': '25'}, {'fields': [{}] * 5}, {'fields': ['x']}, {'id': 'x'}, {'item': '3'}, {'layout': 'grid'}, {'titleSize': 2}, {'fieldSize': '12'}]:
+        for change in [{'code': 'Aztec'}, {'width': 5}, {'height': '25'}, {'fields': [{}] * 5}, {'fields': ['x']}, {'id': 'x'}, {'item': '3'}, {'layout': 'grid'}, {'titleSize': 2}, {'fieldSize': '12'},
+                       {'borderWidth': 0}, {'borderWidth': 6}, {'borderRadius': '2'}, {'borderInset': -1}, {'template': True}, {'template': True, 'templateName': ' '}]:
             self.assertEqual(self.client.post('/api/labels', json={**base, **change}).status_code, 400, change)
         self.assertEqual(self.labels(), [])
 
-
-if __name__ == '__main__':
-    unittest.main()
+    def test_saves_a_black_border_and_named_templates(self):
+        base = {'title': 'A1', 'fields': [], 'code': '', 'location': '', 'width': 55, 'height': 25}
+        self.assertEqual(self.client.post('/api/labels', json={**base, 'borderWidth': 0.5, 'borderRadius': 2, 'borderInset': ''}).status_code, 200)
+        self.assertEqual({key: self.labels()[0][key] for key in ('borderWidth', 'borderRadius', 'borderInset')}, {'borderWidth': 0.5, 'borderRadius': 2, 'borderInset': None})
+        self.assertNotIn('template', self.labels()[0])
+        # So template: true (e nao "true") faz um modelo, e o nome fica aparado.
+        self.assertEqual(self.client.post('/api/labels', json={**base, 'template': True, 'templateName': ' Gaveta grande '}).status_code, 200)
+        self.assertEqual(self.client.post('/api/labels', json={**base, 'template': 'true', 'templateName': 'X'}).status_code, 200)
+        self.assertEqual([(entry.get('template'), entry.get('templateName')) for entry in self.labels()], [(None, None), (True, 'Gaveta grande'), (None, None)])
 
 
 class PcbProjectsTest(unittest.TestCase):
@@ -113,3 +120,7 @@ class PcbProjectsTest(unittest.TestCase):
         self.assertEqual(self.client.post('/api/pcb-projects', json={'projects': [{**mine, 'name': 'BMS V2'}]}).status_code, 200)
         self.assertEqual(self.client.delete('/api/pcb-projects/p2').status_code, 200)
         self.assertEqual([p['name'] for p in self.projects()], ['Motor'])
+
+
+if __name__ == '__main__':
+    unittest.main()

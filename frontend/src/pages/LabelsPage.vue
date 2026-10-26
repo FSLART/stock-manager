@@ -24,7 +24,9 @@ const templates = [
 const layouts = [['drawer', 'Gaveta'], ['bin', 'Caixa (ícones em cima)']]
 const screwHeads = ICON_GROUPS.find(([group]) => group === 'Parafusos (cabeça)')[1]
 const copy = entry => JSON.parse(JSON.stringify(entry))
-const labels = computed(() => inventory.labels)
+// Os modelos da equipa guardam-se como etiquetas com template: true; não entram na lista de etiquetas.
+const labels = computed(() => inventory.labels.filter(entry => !entry.template))
+const customTemplates = computed(() => inventory.labels.filter(entry => entry.template))
 const label = ref(null)
 const saved = computed(() => labels.value.find(entry => entry.id === label.value?.id))
 const dirty = computed(() => Boolean(label.value) && JSON.stringify(label.value) !== JSON.stringify(saved.value ?? null))
@@ -37,7 +39,7 @@ watch(labels, () => { if (label.value?.id != null && !saved.value) label.value =
 // A pré-visualização mostra a primeira linha.
 const many = ref(false), titles = ref('')
 const titleLines = computed(() => titles.value.split('\n').map(line => line.trim()).filter(Boolean))
-watch(label, () => { many.value = false })
+watch(label, () => { many.value = false; templateName.value = null })
 watch(titleLines, lines => { if (many.value) label.value.title = lines[0] ?? '' })
 function toggleMany() {
   many.value = !many.value
@@ -69,8 +71,22 @@ function open(entry) { if (entry.id !== label.value?.id && discard()) select(ent
 function back() { if (discard()) label.value = null }
 function add(from) {
   if (!discard()) return
-  const { id, ...entry } = copy(from ?? blank())
+  const { id, template, templateName, ...entry } = copy(from ?? blank())
   label.value = entry
+}
+// Borda: liga com valores que se veem bem num rolo de 25 mm; desliga sem perder o resto da etiqueta.
+function toggleBorder(on) {
+  if (on) Object.assign(label.value, { borderWidth: label.value.borderWidth || 0.5, borderRadius: label.value.borderRadius ?? 1, borderInset: label.value.borderInset ?? 1 })
+  else Object.assign(label.value, { borderWidth: null, borderRadius: null, borderInset: null })
+}
+// Guardar como modelo: a etiqueta aberta, sem o componente e a localização (são de uma gaveta só), com um nome.
+const templateName = ref(null)
+function saveTemplate() {
+  const { id, item, location, ...entry } = copy(label.value)
+  inventory.saveLabel({ ...entry, item: null, location: '', template: true, templateName: templateName.value.trim() }, () => { templateName.value = null })
+}
+function removeTemplate(entry) {
+  if (confirm(`Apagar o modelo "${entry.templateName}" para toda a equipa?`)) inventory.deleteLabels([entry.id])
 }
 function save() {
   const payload = many.value ? { labels: drafts.value } : label.value
@@ -165,6 +181,10 @@ async function print(entries) {
         <div class="location-actions">
           <div v-if="canChange" class="location-actions" role="group" aria-label="Nova etiqueta">
             <button v-for="[name, template] in templates" :key="name" class="text-button" @click="add(blank(template))">+ {{ name }}</button>
+            <span v-for="entry in customTemplates" :key="entry.id" class="label-template">
+              <button class="text-button" :title="`Modelo da equipa: ${entry.templateName}`" @click="add(blank(entry))">+ {{ entry.templateName }}</button>
+              <button type="button" class="del" :aria-label="`Apagar modelo ${entry.templateName}`" @click="removeTemplate(entry)">×</button>
+            </span>
           </div>
           <button v-if="!label" class="text-button" :disabled="!labels.length" @click="print(labels)">Imprimir todas ({{ labels.length }})</button>
         </div>
@@ -263,6 +283,18 @@ async function print(entries) {
             <label>Largura (mm)<input v-model.number="label.width" type="number" min="20" max="150" required></label>
             <label>Altura (mm)<input v-model.number="label.height" type="number" min="10" max="100" required></label>
           </div>
+          <div>
+            <p id="drawer-label-border" class="editor-label">Borda</p>
+            <div class="toggle-chips" role="group" aria-labelledby="drawer-label-border">
+              <button type="button" class="toggle-chip" :aria-pressed="label.borderWidth == null" @click="toggleBorder(false)">Sem borda</button>
+              <button type="button" class="toggle-chip" :aria-pressed="label.borderWidth != null" @click="toggleBorder(true)">Borda preta</button>
+            </div>
+            <div v-if="label.borderWidth != null" class="drawer-label-border">
+              <label>Espessura (mm)<input v-model.number="label.borderWidth" type="number" min="0.1" max="5" step="0.1" required></label>
+              <label>Cantos (mm)<input v-model.number="label.borderRadius" type="number" min="0" max="20" step="0.5" placeholder="0"></label>
+              <label>Margem (mm)<input v-model.number="label.borderInset" type="number" min="0" max="10" step="0.5" placeholder="0" title="Distância da borda ao corte da etiqueta"></label>
+            </div>
+          </div>
         </form>
         <div class="drawer-label-side">
           <p class="editor-label">Pré-visualização</p>
@@ -274,8 +306,14 @@ async function print(entries) {
             <button v-if="canChange" class="primary" :disabled="!dirty || (many && !titleLines.length)" @click="save">{{ many ? `Guardar ${titleLines.length}` : 'Guardar' }}</button>
             <button class="text-button" :disabled="!drafts.length" @click="print(drafts)">{{ many ? `Imprimir ${drafts.length}` : 'Imprimir' }}</button>
             <button class="text-button" @click="add(label)">Duplicar</button>
+            <button v-if="canChange && templateName === null" class="text-button" @click="templateName = label.title">Guardar como modelo</button>
             <button class="text-button danger" @click="remove">Apagar</button>
           </div>
+          <form v-if="templateName !== null" class="label-template-form" @submit.prevent="saveTemplate">
+            <input v-model="templateName" aria-label="Nome do modelo" placeholder="Nome do modelo, ex.: Gaveta grande" maxlength="40" required autocomplete="off">
+            <button class="primary" :disabled="!templateName.trim()">Guardar modelo</button>
+            <button type="button" class="text-button" @click="templateName = null">Cancelar</button>
+          </form>
         </div>
       </div>
     </section>
