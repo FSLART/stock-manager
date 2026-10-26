@@ -40,6 +40,10 @@ class LabelsTest(unittest.TestCase):
         self.assertEqual(self.client.post('/api/labels', json={**label, 'id': 999}).status_code, 404)
         self.assertEqual(self.client.delete('/api/labels', json={'ids': [label_id]}).status_code, 200)
         self.assertEqual(self.labels(), [])
+        # Quem apagou e o quê fica no histórico de movimentos.
+        [movement] = self.client.get('/api/movements').get_json()['movements']
+        self.assertEqual((movement['type'], movement['person'], movement['props'], movement['note']),
+                         ('label', 'Tester', {'Etiqueta': 'Armário 1', 'Campos': 'Posição: D20'}, f'etiqueta #{label_id} apagada'))
 
     def test_creates_several_labels_at_once_or_none(self):
         screw = {'fields': [], 'code': '', 'location': '', 'width': 55, 'height': 12, 'icon': 'drive-hex', 'layout': 'bin', 'screw': 'screw-socket'}

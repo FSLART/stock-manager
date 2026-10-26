@@ -1836,6 +1836,17 @@ def guardar_etiqueta():
         return erro(str(exc), 500)
 
 
+def label_movement(label_id, label):
+    # Movimento sem quantidade (delta 0, nao reversivel); props e o que a pagina Movimentos mostra.
+    props = {"Etiqueta": label.get("title") or "Sem título"}
+    fields = " · ".join(f"{field['name']}: {field['value']}" for field in label.get("fields", []) if field.get("value"))
+    if fields:
+        props["Campos"] = fields
+    if label.get("templateName"):
+        props["Modelo"] = label["templateName"]
+    return {"type": "label", "cat": "Etiquetas", "props": props, "delta": 0, "before": 0, "note": f"etiqueta #{label_id} apagada"}
+
+
 @app.delete("/api/labels")
 def apagar_etiquetas():
     # Apaga uma ou várias etiquetas de uma vez: {"ids": [1, 2, 3]}.
@@ -1847,6 +1858,9 @@ def apagar_etiquetas():
     try:
         init_db()
         with EXCEL_LOCK, db_connection() as connection:
+            # Fica no historico de movimentos quem apagou e quais (titulo e campos), na mesma transacao.
+            found = [row for label_id in ids if (row := connection.execute("SELECT id, data FROM labels WHERE id = ?", (label_id,)).fetchone())]
+            record_movements(connection, [label_movement(row["id"], json.loads(row["data"])) for row in found])
             connection.executemany("DELETE FROM labels WHERE id = ?", [(label_id,) for label_id in ids])
         return jsonify(msg=f"{len(ids)} etiqueta(s) apagada(s)")
     except Exception as exc:

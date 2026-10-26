@@ -874,7 +874,8 @@ h2,
   color: #b9f1d4;
 }
 .movement-badge.out,
-.movement-badge.delete {
+.movement-badge.delete,
+.movement-badge.label {
   background: #713329;
   color: #ffd1c7;
 }

@@ -4,7 +4,7 @@ import WorkspacePage from '../components/WorkspacePage.vue'
 import { useInventoryContext } from '../composables/useInventoryContext.js'
 
 const api = inject('api'), auth = inject('auth'), inventory = useInventoryContext()
-const movementLabels = { in: 'Entrada', out: 'Saída', delete: 'Remoção', edit: 'Ajuste', revert: 'Reversão' }
+const movementLabels = { in: 'Entrada', out: 'Saída', delete: 'Remoção', edit: 'Ajuste', revert: 'Reversão', label: 'Etiqueta' }
 const movements = ref([]), loading = ref(true), error = ref(''), query = ref('')
 // "Os meus movimentos" no menu da sessão chega aqui com o nome já na pesquisa.
 const movementFilter = inject('movementFilter', null)
@@ -81,7 +81,7 @@ onMounted(async () => {
             <strong>{{ Object.values(movement.props).join(' · ') }}</strong>
             <span>{{ [movement.cat, movement.person, formatDate(movement.ts), movement.note, movement.reverted && 'revertido'].filter(Boolean).join(' · ') }}</span>
           </div>
-          <div class="movement-quantity">
+          <div v-if="movement.type !== 'label'" class="movement-quantity">
             <b :class="movement.delta > 0 ? 'positive' : movement.delta < 0 ? 'negative' : ''">
               {{ movement.delta > 0 ? '+' : '' }}{{ movement.delta }}
             </b>
