@@ -1,11 +1,11 @@
 // Phomemo M110 (e irmãs M120/M220): etiquetas a 203 dpi, a preto e branco, por Bluetooth (Web Bluetooth) ou como PNG
 // para a app do telemóvel. Comandos como no driver aberto phomemo-tools (rastertopm110).
 export const DPI = 203
-export const HEAD_DOTS = 440 // largura máxima de impressão: 55 mm (rolo de 55 mm), 55 bytes por linha
+export const HEAD_DOTS = 384 // cabeça de 48 mm: linhas mais largas a M110 não imprime (mesmo no rolo de 55 mm)
 const MM = DPI / 25.4
 export const dots = mm => Math.round(mm * MM)
 
-// Etiqueta mais larga do que os 55 mm mas que cabe deitada: roda 90° e sai ao comprido do rolo.
+// Etiqueta mais larga do que a cabeça mas que cabe deitada: roda 90° e sai ao comprido do rolo.
 export const shouldRotate = (label, orientation) => orientation === 'auto'
   ? dots(label.width) > HEAD_DOTS && dots(label.height) <= HEAD_DOTS
   : orientation === 'rotated'
@@ -33,11 +33,15 @@ export async function renderLabel(element, label) {
   return canvas
 }
 
-// Roda 90° (sentido dos ponteiros) e passa a preto e branco puro, que é o que a impressora térmica faz.
+// Roda 90° (sentido dos ponteiros), reduz o que for mais largo do que a cabeça para caber inteiro
+// e passa a preto e branco puro, que é o que a impressora térmica faz.
 export function forPrinter(source, rotate) {
-  const canvas = Object.assign(document.createElement('canvas'), rotate ? { width: source.height, height: source.width } : { width: source.width, height: source.height })
+  const [width, height] = rotate ? [source.height, source.width] : [source.width, source.height]
+  const scale = Math.min(1, HEAD_DOTS / width)
+  const canvas = Object.assign(document.createElement('canvas'), { width: Math.round(width * scale), height: Math.round(height * scale) })
   const context = canvas.getContext('2d')
-  if (rotate) { context.translate(canvas.width, 0); context.rotate(Math.PI / 2) }
+  context.scale(scale, scale)
+  if (rotate) { context.translate(source.height, 0); context.rotate(Math.PI / 2) }
   context.drawImage(source, 0, 0)
   const image = context.getImageData(0, 0, canvas.width, canvas.height)
   for (let i = 0; i < image.data.length; i += 4) {
@@ -50,8 +54,8 @@ export function forPrinter(source, rotate) {
 }
 
 // Uma etiqueta em comandos para a M110: velocidade, densidade e papel (sempre rolo contínuo, 0x0b), a imagem em blocos "GS v 0"
-// (1 bit por ponto, 1 = preto) centrada nos 440 pontos (55 mm), e no fim avança até à próxima etiqueta.
-// image é um ImageData já a preto e branco; mais larga do que isso é cortada dos dois lados.
+// (1 bit por ponto, 1 = preto) centrada na cabeça de 384 pontos, e no fim avança até à próxima etiqueta.
+// image é um ImageData já a preto e branco (forPrinter já o pôs à largura da cabeça).
 export function labelCommands(image, { density = 10 } = {}) {
   const bytesPerLine = HEAD_DOTS / 8, offset = Math.floor((HEAD_DOTS - image.width) / 2)
   const out = [0x1b, 0x4e, 0x0d, 5, 0x1b, 0x4e, 0x04, density, 0x1f, 0x11, 0x0b]

@@ -2,7 +2,7 @@
 import { nextTick, ref, watch } from 'vue'
 import DrawerLabel from './DrawerLabel.vue'
 import { readStored, writeStored } from '../api.js'
-import { bluetoothAvailable, forPrinter, HEAD_DOTS, labelCommands, printOverBluetooth, renderLabel, shouldRotate } from '../phomemo.js'
+import { bluetoothAvailable, dots, forPrinter, HEAD_DOTS, labelCommands, printOverBluetooth, renderLabel, shouldRotate } from '../phomemo.js'
 // Impressão na Phomemo M110: mostra cada etiqueta como sai (preto e branco, 203 dpi, já rodada se for preciso)
 // e envia-a por Bluetooth, ou descarrega o PNG para a app do telemóvel. Recebe as etiquetas com o SVG do código (svg).
 const dialog = ref(null), entries = ref([]), rendered = ref([]), status = ref(''), busy = ref(false)
@@ -19,8 +19,9 @@ async function render() {
   status.value = ''
   try {
     rendered.value = await Promise.all(entries.value.map(async (entry, index) => {
-      const canvas = forPrinter(await renderLabel(sources[index].$el, entry), shouldRotate(entry, settings.value.orientation))
-      return { name: fileName(entry), canvas, url: canvas.toDataURL('image/png'), tooWide: canvas.width > HEAD_DOTS }
+      const rotate = shouldRotate(entry, settings.value.orientation)
+      const canvas = forPrinter(await renderLabel(sources[index].$el, entry), rotate)
+      return { name: fileName(entry), canvas, url: canvas.toDataURL('image/png'), reduced: dots(rotate ? entry.height : entry.width) > HEAD_DOTS }
     }))
   } catch { rendered.value = []; status.value = 'Não foi possível preparar a imagem da etiqueta.' }
 }
@@ -55,7 +56,7 @@ defineExpose({ open })
       <button type="button" class="del" aria-label="Fechar" @click="dialog.close()">×</button>
     </div>
     <h2 id="phomemo-title">Phomemo M110</h2>
-    <p class="hint">Assim sai na impressora: preto e branco, a 203 dpi, até 55 mm de largura, em rolo contínuo.</p>
+    <p class="hint">Assim sai na impressora: preto e branco, a 203 dpi, em rolo contínuo. A cabeça imprime 48 mm: uma etiqueta mais larga é reduzida para caber inteira, ou roda-a para sair em tamanho real.</p>
     <div>
       <p id="phomemo-orientation" class="editor-label">Orientação</p>
       <div class="toggle-chips" role="group" aria-labelledby="phomemo-orientation">
@@ -65,7 +66,7 @@ defineExpose({ open })
     <div class="phomemo-previews">
       <figure v-for="entry in rendered" :key="entry.name + entry.url.length">
         <img :src="entry.url" :alt="`${entry.name} como sai na impressora`">
-        <figcaption>{{ entry.canvas.width }} × {{ entry.canvas.height }} pontos<span v-if="entry.tooWide" class="phomemo-warn"> · mais larga do que 55 mm: os lados ficam cortados</span></figcaption>
+        <figcaption>{{ entry.canvas.width }} × {{ entry.canvas.height }} pontos<span v-if="entry.reduced" class="phomemo-warn"> · reduzida para os 48 mm da cabeça</span></figcaption>
       </figure>
     </div>
     <p v-if="status" class="hint" role="status">{{ status }}</p>
