@@ -20,8 +20,8 @@ it('rotates a label only when it is wider than 55 mm and fits lying down', () =>
 
 it('builds M110 commands with the image centred on the 55 mm width, one bit per dot', () => {
   const bytes = [...labelCommands(image(8, 2, [[0, 0], [7, 1]]))]
-  // velocidade, densidade e papel com espaço entre etiquetas
-  expect(bytes.slice(0, 11)).toEqual([0x1b, 0x4e, 0x0d, 5, 0x1b, 0x4e, 0x04, 10, 0x1f, 0x11, 0x0a])
+  // velocidade, densidade e papel em rolo contínuo
+  expect(bytes.slice(0, 11)).toEqual([0x1b, 0x4e, 0x0d, 5, 0x1b, 0x4e, 0x04, 10, 0x1f, 0x11, 0x0b])
   // GS v 0: 55 bytes por linha, 2 linhas
   expect(bytes.slice(11, 19)).toEqual([0x1d, 0x76, 0x30, 0, 55, 0, 2, 0])
   const rows = bytes.slice(19, 19 + 110)
@@ -30,9 +30,8 @@ it('builds M110 commands with the image centred on the 55 mm width, one bit per 
   expect(bytes.slice(19 + 110)).toEqual([0x1f, 0xf0, 0x05, 0x00, 0x1f, 0xf0, 0x03, 0x00])
 })
 
-it('splits tall images into blocks of 255 lines and marks continuous paper', () => {
-  const bytes = labelCommands(image(440, 300), { media: 'continuous' })
-  expect(bytes[10]).toBe(0x0b)
+it('splits tall images into blocks of 255 lines', () => {
+  const bytes = labelCommands(image(440, 300))
   expect([...bytes.slice(11, 19)]).toEqual([0x1d, 0x76, 0x30, 0, 55, 0, 255, 0])
   const second = 19 + 255 * 55
   expect([...bytes.slice(second, second + 8)]).toEqual([0x1d, 0x76, 0x30, 0, 55, 0, 45, 0])
