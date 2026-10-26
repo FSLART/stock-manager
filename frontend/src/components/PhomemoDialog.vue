@@ -56,7 +56,7 @@ defineExpose({ open })
       <button type="button" class="del" aria-label="Fechar" @click="dialog.close()">×</button>
     </div>
     <h2 id="phomemo-title">Phomemo M110</h2>
-    <p class="hint">Assim sai na impressora: preto e branco, a 203 dpi, numa cabeça de 48 mm.</p>
+    <p class="hint">Assim sai na impressora: preto e branco, a 203 dpi, até 55 mm de largura.</p>
     <div>
       <p id="phomemo-orientation" class="editor-label">Orientação</p>
       <div class="toggle-chips" role="group" aria-labelledby="phomemo-orientation">
@@ -72,7 +72,7 @@ defineExpose({ open })
     <div class="phomemo-previews">
       <figure v-for="entry in rendered" :key="entry.name + entry.url.length">
         <img :src="entry.url" :alt="`${entry.name} como sai na impressora`">
-        <figcaption>{{ entry.canvas.width }} × {{ entry.canvas.height }} pontos<span v-if="entry.tooWide" class="phomemo-warn"> · mais larga do que a cabeça: os lados ficam cortados</span></figcaption>
+        <figcaption>{{ entry.canvas.width }} × {{ entry.canvas.height }} pontos<span v-if="entry.tooWide" class="phomemo-warn"> · mais larga do que 55 mm: os lados ficam cortados</span></figcaption>
       </figure>
     </div>
     <p v-if="status" class="hint" role="status">{{ status }}</p>
