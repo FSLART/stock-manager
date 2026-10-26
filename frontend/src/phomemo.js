@@ -1,11 +1,11 @@
 // Phomemo M110 (e irmãs M120/M220): etiquetas a 203 dpi, a preto e branco, por Bluetooth (Web Bluetooth) ou como PNG
 // para a app do telemóvel. Comandos como no driver aberto phomemo-tools (rastertopm110).
 export const DPI = 203
-export const HEAD_DOTS = 384 // cabeça de 48 mm
+export const HEAD_DOTS = 440 // largura máxima de impressão: 55 mm (rolo de 55 mm), 55 bytes por linha
 const MM = DPI / 25.4
 export const dots = mm => Math.round(mm * MM)
 
-// Etiqueta mais larga do que a cabeça mas que cabe deitada: roda 90° e sai ao comprido do rolo.
+// Etiqueta mais larga do que os 55 mm mas que cabe deitada: roda 90° e sai ao comprido do rolo.
 export const shouldRotate = (label, orientation) => orientation === 'auto'
   ? dots(label.width) > HEAD_DOTS && dots(label.height) <= HEAD_DOTS
   : orientation === 'rotated'
@@ -50,8 +50,8 @@ export function forPrinter(source, rotate) {
 }
 
 // Uma etiqueta em comandos para a M110: velocidade, densidade e tipo de papel, a imagem em blocos "GS v 0"
-// (1 bit por ponto, 1 = preto) centrada na cabeça de 384 pontos, e no fim avança até à próxima etiqueta.
-// image é um ImageData já a preto e branco; mais larga do que a cabeça é cortada dos dois lados.
+// (1 bit por ponto, 1 = preto) centrada nos 440 pontos (55 mm), e no fim avança até à próxima etiqueta.
+// image é um ImageData já a preto e branco; mais larga do que isso é cortada dos dois lados.
 export function labelCommands(image, { media = 'gaps', density = 10 } = {}) {
   const bytesPerLine = HEAD_DOTS / 8, offset = Math.floor((HEAD_DOTS - image.width) / 2)
   const out = [0x1b, 0x4e, 0x0d, 5, 0x1b, 0x4e, 0x04, density, 0x1f, 0x11, media === 'continuous' ? 0x0b : 0x0a]
