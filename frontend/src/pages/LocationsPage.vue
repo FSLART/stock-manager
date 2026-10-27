@@ -80,7 +80,7 @@ async function print(boxes) {
         <div><span class="card-icon">▦</span><h2>Caixas e gavetas</h2></div>
         <span class="status-pill">{{ locations.length }} localização(ões)</span>
       </div>
-      <form v-if="inventory.canEdit && inventory.signedIn" class="location-new" @submit.prevent="create">
+      <form v-if="inventory.canEdit && inventory.signedIn && inventory.electronicsEditor" class="location-new" @submit.prevent="create">
         <input v-model="created" aria-label="Nome da nova caixa" placeholder="Caixa 1, Gaveta A…" maxlength="255" autocomplete="off">
         <button class="primary" :disabled="!created.trim()">Criar caixa</button>
       </form>
@@ -114,10 +114,10 @@ async function print(boxes) {
             <span class="sub">{{ box.refs }} {{ box.refs === 1 ? 'referência' : 'referências' }} · {{ box.units }} un.</span>
             <div class="location-actions">
               <button class="text-button" @click="router.push(stockPath(box.name))">Ver no stock</button>
-              <button v-if="inventory.canEdit && inventory.signedIn" class="text-button" @click="edit(box)">Editar</button>
+              <button v-if="inventory.canEdit && inventory.signedIn && inventory.electronicsEditor" class="text-button" @click="edit(box)">Editar</button>
               <button class="text-button" @click="print([box])">Imprimir QR</button>
               <!-- Com componentes lá dentro não se apaga: o servidor também recusa. -->
-              <button v-if="inventory.canEdit && inventory.signedIn" class="text-button danger" :disabled="box.refs > 0" :title="box.refs ? 'Move os componentes antes de apagar' : ''" @click="remove(box)">Apagar</button>
+              <button v-if="inventory.canEdit && inventory.signedIn && inventory.electronicsEditor" class="text-button danger" :disabled="box.refs > 0" :title="box.refs ? 'Move os componentes antes de apagar' : ''" @click="remove(box)">Apagar</button>
             </div>
           </template>
         </li>

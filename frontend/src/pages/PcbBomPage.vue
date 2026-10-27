@@ -19,9 +19,9 @@ const projects = ref([]), localProjects = ref(readLocal()), listError = ref('')
 const selectedProject = ref(null)
 const labelScanner = ref(null), projectDetail = ref(null)
 const api = inject('api'), auth = inject('auth')
-// Só quem criou o projeto (ou um admin) o muda; o servidor também recusa. Os de antes desta regra não têm dono.
-const canChange = project => !auth.enabled || Boolean(auth.user && (auth.user.admin || project?.createdBy?.id === auth.user.id))
 const inventory = useInventoryContext()
+// Electronics só muda os seus projetos; um admin pode mudar qualquer projeto.
+const canChange = project => inventory.electronicsEditor && (!auth.enabled || Boolean(auth.user && (auth.user.admin || project?.createdBy?.id === auth.user.id)))
 const stepBusy = ref(false), stepError = ref(''), bomError = ref(''), imageBusy = ref(false)
 // Placas a produzir por projeto; 0 deixa o projeto fora da lista de produção.
 const boardCounts = reactive({})
@@ -49,7 +49,7 @@ function readLocal() {
 async function loadProjects() {
   try {
     // Sobem com o mesmo id, por isso repetir (outro separador, falha a meio) não duplica.
-    if (localProjects.value.length && inventory.signedIn) {
+    if (localProjects.value.length && inventory.signedIn && inventory.electronicsEditor) {
       await api.direct('savePcbProjects', { projects: localProjects.value })
       writeStored(PROJECTS_STORAGE_KEY, [])
       localProjects.value = []
@@ -59,7 +59,7 @@ async function loadProjects() {
   } catch (error) { listError.value = error.message || 'Não foi possível carregar os projetos.' }
 }
 // Carrega quando a sessão é conhecida e outra vez ao entrar ou sair (entrar também sobe os do browser).
-watch(() => inventory.ready ? String(inventory.signedIn) : '', key => { if (key) loadProjects() }, { immediate: true })
+watch(() => inventory.ready ? `${inventory.signedIn}:${inventory.electronicsEditor}` : '', key => { if (key) loadProjects() }, { immediate: true })
 // Devolve o projeto como o servidor o guardou (com o dono), ou null.
 async function persist(project, errorRef = projectError) {
   let saved
@@ -222,8 +222,8 @@ async function removeProject(projectId) {
     title="PCB e os seus BOMs"
     description="Cria projetos PCB, consulta os seus BOMs e confirma o stock para produzir. Os projetos e os modelos STEP ficam no servidor, para toda a equipa."
   >
-    <!-- Sem sessão só se consultam os projetos: criar e mudar pede login, como no inventário. -->
-    <section v-if="inventory.signedIn" class="workspace-grid">
+    <!-- Criar e mudar projetos exige Electronics ou admin; consultar continua livre. -->
+    <section v-if="inventory.signedIn && inventory.electronicsEditor" class="workspace-grid">
       <article class="workspace-card workspace-card-wide">
         <div class="card-heading">
           <div>
@@ -275,9 +275,9 @@ async function removeProject(projectId) {
         <span class="status-pill">{{ projects.length }} projeto(s)</span>
       </div>
       <div v-if="listError" class="upload-error" role="alert">{{ listError }}</div>
-      <div v-if="!projects.length" class="empty-workspace">Ainda não há projetos PCB guardados.<template v-if="!inventory.signedIn"> Inicia sessão para criar um.</template></div>
-      <p v-if="localProjects.length && !inventory.signedIn" class="hint">{{ localProjects.length }} projeto(s) guardado(s) só neste navegador sobem para a equipa quando iniciares sessão.</p>
-      <div v-else class="saved-project-list">
+      <div v-if="!projects.length" class="empty-workspace">Ainda não há projetos PCB guardados.<template v-if="!inventory.signedIn"> Inicia sessão com uma conta de Electronics ou admin para criar um.</template></div>
+      <p v-if="localProjects.length && (!inventory.signedIn || !inventory.electronicsEditor)" class="hint">{{ localProjects.length }} projeto(s) guardado(s) só neste navegador. Para os partilhar, entra com uma conta de Electronics ou admin.</p>
+      <div class="saved-project-list">
         <div v-for="project in projects" :key="project.id" :class="['saved-project', { selected: selectedProject?.id === project.id }]">
           <button class="saved-project-open" @click="openProject(project)">
             <span class="saved-project-thumb">

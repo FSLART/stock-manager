@@ -50,7 +50,7 @@ onMounted(() => load().catch(cause => { error.value = cause.message }))
 <template>
   <article class="workspace-card people-admin">
     <div class="card-heading"><h2>Pessoas</h2><span class="status-pill">{{ shown.length === people.length ? `${people.length} pessoa(s)` : `${shown.length} de ${people.length}` }}</span></div>
-    <p class="card-muted">Quem entra com Notion no workspace LART é adicionado automaticamente. O cargo e o departamento vêm da base Members Filtered do Notion a cada login; se os mudares aqui, o Notion deixa de os mudar para essa pessoa. Só Electronics altera o stock eletrónico.</p>
+    <p class="card-muted">Quem entra com Notion no workspace LART é adicionado automaticamente. Os admins atribuem o cargo e o departamento após confirmar a identidade da pessoa. O nome do perfil Notion não dá permissões. Electronics e admins podem alterar stock, localizações e os seus projetos PCB/BOM.</p>
     <!-- PIN:
     <form class="people-form" @submit.prevent="add">
       <label class="project-name-field"><span>Nome</span><input v-model="name" required autocomplete="off"></label>
@@ -97,7 +97,7 @@ onMounted(() => load().catch(cause => { error.value = cause.message }))
           <span v-for="department in departmentsOf(person)" :key="department" class="person-tag">{{ department }}</span>
           <span v-if="!person.department" class="person-tag empty">Sem departamento</span>
         </span>
-        <small>{{ [person.admin && 'Admin', person.manual ? 'Editado à mão' : 'Do Notion', person.notion ? 'Notion ligado' : 'Sem Notion'].filter(Boolean).join(' · ') }}</small>
+        <small>{{ [person.admin && 'Admin', person.manual ? 'Revisto por admin' : 'Por rever', person.notion ? 'Notion ligado' : 'Sem Notion'].filter(Boolean).join(' · ') }}</small>
       </span>
       <div class="people-actions">
         <button class="text-button" :aria-expanded="editing === person.id" @click="editing = editing === person.id ? null : person.id">{{ editing === person.id ? 'Fechar' : 'Editar cargo' }}</button>

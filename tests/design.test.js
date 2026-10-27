@@ -186,7 +186,7 @@ it('hides electronics stock changes until someone from Electronics signs in', as
   expect(login.element.open).toBe(false)
   await open('PCB e os seus BOMs')
   expect(wrapper.text()).not.toContain('Novo projeto PCB')
-  expect(wrapper.text()).toContain('Inicia sessão para criar um.')
+  expect(wrapper.text()).toContain('Inicia sessão com uma conta de Electronics ou admin para criar um.')
   await open('Etiquetas')
   expect(wrapper.find('[aria-label="Nova etiqueta"]').exists()).toBe(false)
   wrapper.unmount()
@@ -210,8 +210,8 @@ it('hides electronics stock changes until someone from Electronics signs in', as
   expect(wrapper.find('thead').text()).toContain('Ações')
   expect(wrapper.find('.add-part').exists()).toBe(true)
 })
-it('lets only the creator or an admin change a PCB project', async () => {
-  const signedIn = { ...structuredClone(data), auth: true, user: { id: 2, name: 'Rui', admin: false, department: 'Powertrain' } }
+it('lets an Electronics creator or an admin change a PCB project', async () => {
+  const signedIn = { ...structuredClone(data), auth: true, user: { id: 2, name: 'Rui', admin: false, department: 'Electronics' } }
   fetch.mockImplementation(async url => ({ ok: true, json: async () => url === '/api/data' ? structuredClone(signedIn) : { msg: 'ok' } }))
   pcbServer([{ id: 'a', name: 'Da Ana', items: [], createdBy: { id: 1, name: 'Ana' } }, { id: 'b', name: 'Do Rui', items: [], createdBy: { id: 2, name: 'Rui' } }])
   wrapper = mount(App)

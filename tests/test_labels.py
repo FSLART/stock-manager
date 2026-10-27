@@ -116,7 +116,7 @@ class PcbProjectsTest(unittest.TestCase):
         saved = self.client.post('/api/pcb-projects', json={'projects': [project]}).get_json()['projects'][0]
         # O dono vem da sessao (Tester, id 1), nunca do que o browser manda.
         self.assertEqual(saved['createdBy'], {'id': 1, 'name': 'Tester'})
-        as_person(self, self.module, {'id': 2, 'name': 'Rui', 'admin': False, 'notion': False})
+        as_person(self, self.module, {'id': 2, 'name': 'Rui', 'admin': False, 'notion': False, 'department': 'Electronics'})
         self.assertEqual(self.client.post('/api/pcb-projects', json={'projects': [{**project, 'step': {'name': 'x.step', 'url': '/uploads/x.step'}}]}).status_code, 403)
         self.assertEqual(self.client.delete('/api/pcb-projects/p1').status_code, 403)
         mine = self.client.post('/api/pcb-projects', json={'projects': [{**project, 'id': 'p2', 'name': 'BMS'}]}).get_json()['projects'][0]

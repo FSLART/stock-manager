@@ -379,7 +379,7 @@ it('fills the movement form from a catalog part and reuses the stocked item with
   const row = wrapper.findAll('tbody tr').find(tr => tr.text().includes('SN74HC02PWRG4'))
   expect(row.findAll('.price-cell').map(cell => cell.text())).toEqual(['0,85\u00a0€', '2,55\u00a0€'])
   expect(wrapper.find('tbody tr .price-cell').text()).toBe('—')
-  await wrapper.findAll('button').find(button => button.text() === 'Adicionar / retirar').trigger('click')
+  await wrapper.findAll('button').find(button => button.text() === 'Adicionar').trigger('click')
   const form = wrapper.find('dialog form')
   const picker = form.find('input[list="catalog-parts"]')
   expect(form.findAll('#catalog-parts option').map(option => option.element.value)).toEqual(['SN74HC02PWRG4', 'LAN8720AI'])
@@ -507,7 +507,7 @@ it('fills the rest of the form when a catalog part number is typed or chosen in 
   }) })
   wrapper = mount(App)
   await flushPromises()
-  await wrapper.findAll('button').find(button => button.text() === 'Adicionar / retirar').trigger('click')
+  await wrapper.findAll('button').find(button => button.text() === 'Adicionar').trigger('click')
   const form = wrapper.find('dialog form')
   const fields = () => form.findAll('.fields input')
   expect(fields()[1].attributes('list')).toBe('catalog-parts')
@@ -524,7 +524,7 @@ it('previews the chosen image and removes it again before saving', async () => {
   URL.revokeObjectURL = vi.fn()
   wrapper = mount(App)
   await flushPromises()
-  await wrapper.findAll('button').find(button => button.text() === 'Adicionar / retirar').trigger('click')
+  await wrapper.findAll('button').find(button => button.text() === 'Adicionar').trigger('click')
   const dialog = wrapper.find('dialog')
   const input = dialog.find('input[type=file]').element
   let assigned = []
@@ -889,4 +889,33 @@ it('takes a location photo with the phone camera and previews it before saving',
   await camera.trigger('change')
   expect(wrapper.find('.location-card img').attributes('src')).toBe('blob:nova')
   expect(wrapper.find('.location-form .location-check input').attributes('disabled')).toBeDefined()
+})
+
+it.each(['Member', 'Board', 'Department Leader'])('keeps PCB/BOMs read-only for a non-Electronics %s, even their own projects', async role => {
+  const user = { id: 2, name: 'Rui', admin: false, role, department: 'Powertrain' }
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), auth: true, user }) })
+  pcbServer([{ id: 'owned', name: 'My PCB', createdBy: { id: 2, name: 'Rui' }, items: [] }])
+  localStorage.setItem('stocklart-pcb-projects', JSON.stringify([{ id: 'local', name: 'Local PCB', items: [] }]))
+  window.history.replaceState(null, '', '/#/pcbs')
+  wrapper = mount(App)
+  await flushPromises()
+  expect(wrapper.text()).not.toContain('Novo projeto PCB')
+  expect(wrapper.find('.saved-project-delete').exists()).toBe(false)
+  await wrapper.find('.saved-project-open').trigger('click')
+  expect(wrapper.find('.pcb-project-detail').text()).toContain('My PCB')
+  expect(wrapper.find('input[aria-label="Substituir ficheiro BOM"]').exists()).toBe(false)
+  expect(wrapper.find('input[aria-label="Anexar imagem da PCB"]').exists()).toBe(false)
+  expect(fetch.mock.calls.filter(([url, options]) => url === '/api/pcb-projects' && options.method === 'POST')).toHaveLength(0)
+  expect(JSON.parse(localStorage.getItem('stocklart-pcb-projects'))).toHaveLength(1)
+})
+
+it('hides location mutation controls from non-Electronics users', async () => {
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ ...structuredClone(data), auth: true,
+    user: { id: 2, name: 'Rui', admin: false, role: 'Board', department: 'Powertrain' }, locations: { 'Original box': '' } }) })
+  window.history.replaceState(null, '', '/#/locations')
+  wrapper = mount(App)
+  await flushPromises()
+  expect(wrapper.text()).toContain('Original box')
+  expect(wrapper.find('.location-new').exists()).toBe(false)
+  expect(wrapper.findAll('button').some(button => ['Editar', 'Apagar'].includes(button.text()))).toBe(false)
 })

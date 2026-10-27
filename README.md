@@ -72,7 +72,14 @@ pelo workspace `NOTION_WORKSPACE_ID` (LART) e ainda não está na lista é adici
 automaticamente; contas de outros workspaces só entram se já estiverem na lista.
 A sessão fica aberta até carregar em **Sair**.
 
-Os admins gerem pessoas em **Definições → Pessoas** (dar ou tirar admin, apagar).
+Os admins gerem pessoas em **Definições → Pessoas** (cargo, departamentos,
+dar ou tirar admin, apagar). O Notion confirma a identidade; o nome do perfil
+não atribui permissões. Novas contas começam como Member sem departamento.
+Atribuições automáticas antigas são removidas na inicialização e precisam de
+revisão por um admin; as atribuições já feitas por um admin são preservadas.
+Só Electronics e admins alteram stock, localizações e projetos PCB/BOM.
+Além do departamento, editar ou apagar um projeto PCB exige ser o seu criador
+ou admin. Pessoas de outros departamentos continuam a consultar os projetos.
 Apagar uma pessoa mantém o nome nos movimentos já registados. O `.env` precisa de
 `SECRET_KEY` (assina os cookies; mudá-lo termina todas as sessões) e de
 `PUBLIC_BASE_URL`.

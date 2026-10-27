@@ -20,7 +20,6 @@ import sqlite3
 import sys
 # Permite executar o verificador do Excel sem bloquear os pedidos web.
 import threading
-import unicodedata
 # Faz a thread esperar alguns segundos entre duas verificacoes do Excel.
 import time
 # Permite criar funcoes que funcionam com o bloco "with".
@@ -258,11 +257,7 @@ NOTION_CLIENT_ID = os.getenv("NOTION_CLIENT_ID", "").strip()
 NOTION_CLIENT_SECRET = os.getenv("NOTION_CLIENT_SECRET", "").strip()
 # Quem entra com Notion por este workspace e ainda nao esta na lista e adicionado automaticamente.
 NOTION_WORKSPACE_ID = os.getenv("NOTION_WORKSPACE_ID", "").strip().replace("-", "").lower()
-# Cargo e departamento vem da base Members Filtered; sem NOTION_TOKEN usa o token do proprio login.
-NOTION_TOKEN = os.getenv("NOTION_TOKEN", "").strip()
-NOTION_MEMBERS_DB = os.getenv("NOTION_MEMBERS_DB", "3d5ce47890c280f8a695ccf113fd66c3").strip()
-# Copia local dessa base ([[nome, [etiquetas]], ...]), usada quando a API do Notion nao a deixa ler. Fora do git: o repo e publico.
-MEMBERS_PATH = Path(os.getenv("MEMBERS_PATH", BASE_DIR.parent / "data" / "notion-members.json"))
+# Cargo e departamento sao atribuidos por um admin, nunca pelo nome editavel do perfil Notion.
 # PIN: PIN_RE = re.compile(r"[A-Za-z0-9]{4}")
 # PIN: shortcut: tentativas falhadas em memoria, so valem com 1 worker; passar para a BD se houver mais.
 # PIN: LOGIN_ATTEMPTS = {}
@@ -440,6 +435,9 @@ def init_db(seed=True):
             init_mysql_schema(connection)
         else:
             init_sqlite_schema(connection)
+        # Revoga atribuicoes antigas por nome, inclusive para sessoes ja abertas.
+        # notion_sync=0 identifica permissoes revistas explicitamente por um admin.
+        connection.execute("UPDATE people SET role = 'Member', department = '' WHERE notion_sync = 1 AND (role <> 'Member' OR department <> '')")
         if not seed:
             return
         seed_categories(connection)
@@ -1410,6 +1408,8 @@ def upload_image():
 
 @app.post("/api/pcb-step")
 def upload_pcb_step():
+    if (denied := electronics_denied()):
+        return denied
     # Modelos STEP das PCBs passam do limite geral de 5 MB; o nginx aceita até 50 MB.
     request.max_content_length = MAX_STEP_SIZE
     step = request.files.get("step")
@@ -1745,6 +1745,8 @@ def mudar_localizacao():
 
 @app.patch("/api/locations")
 def editar_localizacao():
+    if (denied := electronics_denied()):
+        return denied
     # Muda o nome (em todos os componentes que la estao) e/ou a foto de uma localizacao.
     if STORAGE_MODE != "local":
         return erro("A edição está disponível no modo local")
@@ -1773,6 +1775,8 @@ def editar_localizacao():
 
 @app.delete("/api/locations")
 def apagar_localizacao():
+    if (denied := electronics_denied()):
+        return denied
     # So apaga caixas vazias: os componentes nunca ficam sem sitio por engano.
     if STORAGE_MODE != "local":
         return erro("A edição está disponível no modo local")
@@ -1894,6 +1898,8 @@ def projetos_pcb():
 
 @app.post("/api/pcb-projects")
 def guardar_projetos_pcb():
+    if (denied := electronics_denied()):
+        return denied
     # {"projects": [...]}: cria ou substitui cada projeto pelo id. Varios de uma vez trazem os guardados no browser.
     if STORAGE_MODE != "local":
         return erro("A edição está disponível no modo local")
@@ -1930,6 +1936,8 @@ def guardar_projetos_pcb():
 
 @app.delete("/api/pcb-projects/<project_id>")
 def apagar_projeto_pcb(project_id):
+    if (denied := electronics_denied()):
+        return denied
     if STORAGE_MODE != "local":
         return erro("A edição está disponível no modo local")
     try:
@@ -2641,7 +2649,6 @@ def notion_callback():
         notion_id = str(notion_user["id"])
     except (OSError, ValueError, KeyError, TypeError):
         return notion_page("O Notion não confirmou o login. Tenta outra vez.")
-    member = notion_member(token.get("access_token"), str(notion_user.get("name") or ""))
     from_workspace = bool(NOTION_WORKSPACE_ID) and str(token.get("workspace_id", "")).replace("-", "").lower() == NOTION_WORKSPACE_ID
     init_db()
     with db_connection() as connection:
@@ -2661,57 +2668,11 @@ def notion_callback():
             # Foto do perfil Notion para o menu da sessao; so URLs https, atualizada a cada login.
             avatar = str(notion_user.get("avatar_url") or "")
             connection.execute("UPDATE people SET avatar = ? WHERE id = ?", (avatar[:1000] if avatar.startswith("https://") else "", row["id"]))
-            if member:
-                # Um admin que mudou o cargo/departamento na app desliga a sincronizacao dessa pessoa.
-                connection.execute("UPDATE people SET role = ?, department = ? WHERE id = ? AND notion_sync = 1", (*member, row["id"]))
     if row is None:
         return notion_page("Esta conta Notion não está na lista do Stocklart. Entra outra vez e escolhe o workspace LART no ecrã do Notion.")
     next_page = session.get("notion_next", "/#/stock")
     start_session(row["id"])
     return redirect(next_page)
-
-
-def same_person(a, b):
-    # Mesmo primeiro nome e o nome mais curto (2+ palavras, sem acentos) aparece por ordem no mais longo:
-    # "Rita Faria" e "Rita Sofia Faria Lemos" sim; "Nuno Matos" e "Hugo Nuno ... Matos" nao.
-    short, long = sorted((unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().casefold().split() for name in (a, b)), key=len)
-    rest = iter(long)
-    return len(short) >= 2 and short[0] == long[0] and all(word in rest for word in short)
-
-
-def notion_members(token):
-    # [[nome, [etiquetas]], ...] da base Members Filtered.
-    rows, cursor = [], None
-    while True:
-        query = urllib.request.Request(
-            f"https://api.notion.com/v1/databases/{NOTION_MEMBERS_DB}/query",
-            data=json.dumps({"page_size": 100, **({"start_cursor": cursor} if cursor else {})}).encode(),
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"},
-        )
-        with urllib.request.urlopen(query, timeout=10) as response:
-            page = json.load(response)
-        rows += [["".join(part["plain_text"] for part in row["properties"]["Name"]["title"]),
-                  [option["name"] for option in row["properties"]["Department"]["multi_select"]]] for row in page["results"]]
-        if not page.get("has_more"):
-            return rows
-        cursor = page["next_cursor"]
-
-
-def notion_member(token, name):
-    # (cargo, departamentos) de quem entra, ou None se o nome nao aparece uma so vez.
-    try:
-        rows = notion_members(NOTION_TOKEN or token)
-    except (OSError, ValueError, KeyError, TypeError):
-        try:
-            rows = json.loads(MEMBERS_PATH.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return None
-    matches = [tags for title, tags in rows if same_person(title, name)]
-    if len(matches) != 1:
-        return None
-    tags = matches[0]
-    role = "Board" if "Board" in tags else "Department Leader" if "Leaders" in tags else "Member"
-    return role, ", ".join(tag for tag in tags if tag in DEPARTMENTS)
 
 
 def require_admin():
