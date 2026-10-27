@@ -8,7 +8,7 @@ function retry() { failed.value = false; loading.value = true; frameKey.value +=
 </script>
 
 <template>
-  <WorkspacePage active="harness" title="Cablagem" description="Consulta conectores, fios e circuitos do T26e.">
+  <WorkspacePage class="tool-workspace" active="harness" title="Cablagem" description="Consulta conectores, fios e circuitos do T26e.">
     <div class="tool-page-actions"><a class="text-button" :href="harness" target="_blank" rel="noopener">Abrir numa nova janela</a></div>
     <p v-if="loading" role="status" class="card-muted">A carregar a cablagem…</p>
     <p v-if="failed" role="alert">Não foi possível abrir a cablagem. <button class="text-button" @click="retry">Tentar novamente</button></p>

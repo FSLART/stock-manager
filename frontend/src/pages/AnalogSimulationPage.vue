@@ -26,7 +26,7 @@ function closeBoard(event) {
 </script>
 
 <template>
-  <WorkspacePage active="analog-simulation" title="Simulação analógica" description="Testa circuitos das placas LART e acompanha a resposta dos componentes. Os valores são simulados.">
+  <WorkspacePage class="tool-workspace" active="analog-simulation" title="Simulação analógica" description="Testa circuitos das placas LART e acompanha a resposta dos componentes. Os valores são simulados.">
       <template v-if="selected">
         <div class="simulation-toolbar">
           <a class="text-button" href="#/analog-simulation" @click="closeBoard">← Simulações</a>

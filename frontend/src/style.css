@@ -1737,3 +1737,6 @@ input::placeholder,textarea::placeholder { color:var(--muted);opacity:1; }
 @media(prefers-reduced-motion:reduce){.spinning{animation:none}}
 @media(max-width:1280px){.site-footer-inner{margin-inline:clamp(20px,5vw,60px)}}
 @media(max-width:650px){.site-footer-inner{align-items:flex-start;flex-direction:column;gap:12px;padding-block:24px}.site-footer nav{gap:8px 20px}.tool-page-actions{justify-content:flex-start;margin-top:-16px}}
+
+/* Engineering tools use the available width for diagrams and tables. */
+.tool-workspace .workspace-content{width:100%;max-width:none;padding-inline:clamp(16px,2vw,32px)}
