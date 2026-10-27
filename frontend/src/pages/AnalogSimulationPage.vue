@@ -2,7 +2,7 @@
 import { nextTick, onUnmounted, ref } from 'vue'
 import AppNavigation from '../components/AppNavigation.vue'
 
-const bspd = { id: 'bspd', name: 'BSPD 2.2', file: 'bspd_emulator.html' }
+const bspd = { id: 'bspd', name: 'BSPD 2.2', file: 'bspd_emulator.html?v=20261027' }
 const planned = ['TSAL Green', 'TSAL Red', 'Latch Board', 'Voltage Indicator']
 const selected = ref(null)
 const loading = ref(false)
