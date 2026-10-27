@@ -27,3 +27,8 @@ Harness shares the warm dark/yellow palette and interface scale. Search and choi
 ## Verification
 
 Main surfaces at 1440px desktop and 390/320px phones; inspect native links, focus, drafts, read-only permissions, empty/error states and printing. Keep all data writes disabled during real-data visual inspection. Run frontend/build checks and harness tests/build. No deployment implied by a worktree build.
+
+
+## Shared shell refinements
+All routes share one footer with the Stocklart identity, home and account links, and a keyboard accessible return to the top. Cablagem and analog simulation use WorkspacePage headings and breadcrumbs. Same-origin embedded tools share the workspace fonts, omit duplicate branding, and grow to their content height so the outer page owns scrolling. Standalone tool navigation remains available.
+Settings group identity (avatar, name, role and department) with local preferences; admin people management uses the full content width. Refresh exposes an in-progress label and blocks repeat requests. PCB projects no longer expose label scanning; inventory scanning remains available.

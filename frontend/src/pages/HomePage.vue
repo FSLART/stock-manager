@@ -52,7 +52,6 @@ const engineering = [
           <a v-if="leader" class="purchasing-link" href="#/batches" @click="router.follow($event, '/batches')"><span><strong>Compras e encomendas</strong><span>Consulta fornecedores, material e documentos.</span></span><svg class="tool-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg></a>
         </section>
       </div>
-      <footer class="team-home-footer"><p>Consulta livre. Alterações identificadas e de acordo com as permissões da tua conta.</p><a href="#/settings" @click="router.follow($event, '/settings')">Conta e preferências</a></footer>
     </main>
   </div>
 </template>

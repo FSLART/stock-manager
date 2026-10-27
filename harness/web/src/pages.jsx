@@ -160,7 +160,7 @@ export function CarOverview({ data }) {
 
   return (
     <Stack gap="xl" mt="xl">
-      <div>
+      <div className="harness-overview-heading">
         <Title order={1} fz={{ base: 28, sm: 36 }} lh={1.15}>Cablagem · {data.index.car}</Title>
         <Text c="dimmed" mt="sm">Todos os harnesses da pasta Harness · gerado em {data.index.generated}</Text>
       </div>

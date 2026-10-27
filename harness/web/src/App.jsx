@@ -57,6 +57,9 @@ async function load(setProgress) {
   }
 }
 
+const embedded = new URLSearchParams(location.search).get('embedded') === '1'
+if (embedded) document.documentElement.classList.add('embedded')
+
 export default function App() {
   const [page = '', a = '', b = '', c = ''] = useRoute()
   const [data, setData] = useState(null)
@@ -93,7 +96,7 @@ export default function App() {
     <>
       <Container fluid px={{ base: 'md', sm: 'xl' }} py="md" component="header">
         <Group justify="space-between" gap="sm">
-          <Anchor href={href('')} underline="never" c="white" fw={600}>
+          <Anchor className="harness-brand" href={href('')} underline="never" c="white" fw={600}>
             LART <Text span c="dimmed">Cablagem</Text>
           </Anchor>
           <Group gap="md" component="nav" aria-label="Secções" wrap="wrap">

@@ -111,10 +111,11 @@ it('starts PCB with saved projects and reveals creation explicitly', async () =>
   expect(wrapper.findAll('h2')[0].text()).toBe('Projetos guardados')
   expect(wrapper.text()).toContain('partilhados com a equipa')
 })
-it('describes shared PCB data separately from browser preferences', () => {
+it('combines the user profile and preferences without the old session and sharing cards', async () => {
   page(SettingsPage)
-  expect(wrapper.text()).toContain('Projetos PCB, BOMs e modelos STEP são partilhados com a equipa')
+  expect(wrapper.get('.settings-profile').text()).toContain('Ana')
   expect(wrapper.text()).toContain('Só neste navegador')
-  expect(wrapper.text()).not.toContain('Projetos PCB e preferências são guardados apenas neste navegador')
-  expect(wrapper.text()).toContain('A tua sessão')
+  expect(wrapper.text()).not.toMatch(/A tua sessão|Dados partilhados/)
+  await wrapper.get('[aria-label="Modo compacto"]').setValue(true)
+  expect(localStorage.getItem('stocklart-compact-mode')).toBe('true')
 })

@@ -232,3 +232,13 @@ main { min-width: 0; }
     border-radius: 12px;
   }
 }
+
+/* Embedded tools use the Stocklart page heading and the outer page scroll. */
+html.embedded, .embedded body, .embedded #root { min-height: 0; height: auto; }
+.embedded body { font-family: 'DM Sans', sans-serif; }
+.embedded { --mantine-font-family: 'DM Sans', sans-serif; --mantine-font-family-headings: 'Bricolage Grotesque', sans-serif; }
+.embedded header { background: transparent; padding: 0 0 12px; margin-bottom: 24px; }
+.embedded .harness-brand, .embedded .harness-overview-heading { display: none; }
+.embedded main { padding-inline: 0; padding-bottom: 0; }
+.embedded main > .mantine-Stack-root { margin-top: 0; }
+.embedded header nav { gap: 8px 16px; }

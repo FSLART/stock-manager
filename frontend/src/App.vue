@@ -10,6 +10,7 @@ import StockMovement from './components/StockMovement.vue'
 import CategoryForm from './components/CategoryForm.vue'
 import PartsCatalog from './components/PartsCatalog.vue'
 import LabelScanner from './components/LabelScanner.vue'
+import AppFooter from './components/AppFooter.vue'
 import InventoryTutorial from './components/InventoryTutorial.vue'
 import AppNavigation from './components/AppNavigation.vue'
 import LoginDialog from './components/LoginDialog.vue'
@@ -50,7 +51,8 @@ const movement = ref(null), categoryForm = ref(null), partsCatalog = ref(null), 
 const csvImport = ref(null), csvError = ref(''), inventoryTutorial = ref(null)
 const canEdit = ref(false), categoryError = ref('')
 const queues = shallowReactive(new Map())
-let timer, toastTimer, refreshing = false, disposed = false
+const refreshing = ref(false)
+let timer, toastTimer, disposed = false
 const normalize = value => String(value).toLowerCase().replace(/\s+/g, '')
 const propertyFilters = ref({}), filterSearch = ref({}), stockFilter = ref(''), imageFilter = ref(''), locationFilter = ref('')
 const filtersOpen = ref(false), sortKey = ref(''), sortDirection = ref(1)
@@ -478,14 +480,14 @@ async function submitCategory(payload) {
   finally { busy.value = false }
 }
 async function refresh() {
-  if (refreshing || busy.value || queues.size || document.visibilityState === 'hidden') return
-  refreshing = true
+  if (refreshing.value || busy.value || queues.size || document.visibilityState === 'hidden') return
+  refreshing.value = true
   try {
     const count = await api.syncPending(toast)
     await load()
     if (count) toast(`${count} operação(ões) sincronizada(s)`)
   } catch (error) { syncError.value = error.message || 'Não foi possível atualizar. Tenta novamente.' }
-  finally { refreshing = false }
+  finally { refreshing.value = false }
 }
 const guarded = {
   step: guard(stepItem), deleteItem: guard(deleteItem), deleteCategory: guard(deleteCategory), openCategory: guard(openCategory), savePart: guard(savePart),
@@ -540,7 +542,7 @@ onUnmounted(() => {
     </div>
   </aside>
   <main id="main-content" class="stock-content" tabindex="-1">
-    <div class="sync-strip" role="status"><span>{{ loading ? 'A carregar inventário…' : syncError || (syncPendingCount ? `${syncPendingCount} alteração(ões) por sincronizar` : cachedData ? 'Sem ligação · a mostrar dados guardados neste dispositivo' : lastSynced ? `Atualizado às ${new Intl.DateTimeFormat('pt-PT', { hour: '2-digit', minute: '2-digit' }).format(new Date(lastSynced))}` : 'Inventário da equipa') }}</span><button type="button" class="text-button" :disabled="loading || locked" @click="refresh">Atualizar</button></div>
+    <div class="sync-strip" role="status"><span>{{ loading ? 'A carregar inventário…' : syncError || (syncPendingCount ? `${syncPendingCount} alteração(ões) por sincronizar` : cachedData ? 'Sem ligação · a mostrar dados guardados neste dispositivo' : lastSynced ? `Atualizado às ${new Intl.DateTimeFormat('pt-PT', { hour: '2-digit', minute: '2-digit' }).format(new Date(lastSynced))}` : 'Inventário da equipa') }}</span><button type="button" class="refresh-button" :disabled="loading || locked || refreshing" :aria-busy="refreshing" @click="refresh"><svg viewBox="0 0 24 24" aria-hidden="true" :class="{ spinning: refreshing }"><path d="M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 18 17"/></svg>{{ refreshing ? 'A atualizar…' : 'Atualizar' }}</button></div>
     <div class="top">
       <div class="search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -617,6 +619,7 @@ onUnmounted(() => {
   </main>
   </div>
   </div>
+  <AppFooter />
   <StockMovement ref="movement" :categories="categories" :items="items" :parts="parts" :busy="busy" :error="formError" @submit="submitMovement" @clear-error="formError = ''" @part="updatePart" />
   <CategoryForm ref="categoryForm" :categories="categories" :busy="busy" :error="categoryError" @submit="submitCategory" @delete="deleteFromForm" />
   <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />

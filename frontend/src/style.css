@@ -1715,3 +1715,25 @@ main:focus,h1[tabindex]:focus{outline:none}
 input::placeholder,textarea::placeholder { color:var(--muted);opacity:1; }
 .stock-content .search input::placeholder { color:var(--muted); }
 .home-page .team-photo img { object-position:center 58%; }
+
+/* One page shell and footer for every team tool. */
+#app{display:flex;flex-direction:column;min-height:100vh}
+#app > .workspace-page,#app > .home-page,#app > .stock-page{flex:1;min-height:0}
+.site-footer{border-top:1px solid var(--line);background:var(--side);margin-top:auto}
+.site-footer-inner{max-width:1200px;margin:0 auto;padding:28px 0;display:flex;align-items:center;justify-content:space-between;gap:24px;color:var(--muted);font-size:13px}
+.footer-brand{font-size:16px;font-family:var(--head);font-weight:700;color:var(--ink);text-decoration:none;letter-spacing:.02em}
+.site-footer p{margin:4px 0 0}
+.site-footer nav{display:flex;flex-direction:row;align-items:center;flex-wrap:wrap;gap:8px 24px}
+.site-footer nav a,.site-footer nav button{display:inline-flex;align-items:center;min-height:44px;color:var(--muted);background:none;border:0;padding:0;text-decoration:none;font-size:13px;font-weight:500;cursor:pointer}
+.site-footer nav a:hover,.site-footer nav button:hover{color:var(--ink);text-decoration:underline}
+.tool-page-actions{display:flex;justify-content:flex-end;margin:-16px 0 16px}
+.tool-page-actions a{display:inline-flex;align-items:center;min-height:44px;text-decoration:none}
+.refresh-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;min-width:126px;border:1px solid var(--line);border-radius:8px;padding:8px 14px;background:var(--panel);color:var(--ink);cursor:pointer;white-space:nowrap;font-size:13px}
+.refresh-button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.refresh-button:disabled{cursor:wait;opacity:.65}
+.refresh-button svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.spinning{animation:refresh-spin 1s linear infinite}
+@keyframes refresh-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.spinning{animation:none}}
+@media(max-width:1280px){.site-footer-inner{margin-inline:clamp(20px,5vw,60px)}}
+@media(max-width:650px){.site-footer-inner{align-items:flex-start;flex-direction:column;gap:12px;padding-block:24px}.site-footer nav{gap:8px 20px}.tool-page-actions{justify-content:flex-start;margin-top:-16px}}

@@ -126,3 +126,24 @@ it('preserves earlier destinations after cancelling Back from a label draft', as
   window.history.back()
   await vi.waitFor(() => expect(wrapper.find('h1').text()).toBe('Tudo em stock'))
 })
+
+it.each(['/', '/stock', '/settings', '/harness', '/analog-simulation'])('shows exactly one shared footer on %s', async route => {
+  window.history.replaceState(null, '', '/#' + route)
+  wrapper = mount(App)
+  await flushPromises()
+  expect(wrapper.findAll('footer.site-footer')).toHaveLength(1)
+  expect(wrapper.get('footer.site-footer a[href="#/settings"]').text()).toBe('Conta e preferências')
+})
+it('disables manual refresh and announces progress while the request is pending', async () => {
+  window.history.replaceState(null, '', '/#/stock')
+  wrapper = mount(App)
+  await flushPromises()
+  let complete
+  fetch.mockImplementationOnce(() => new Promise(resolve => { complete = resolve }))
+  await wrapper.get('.refresh-button').trigger('click')
+  expect(wrapper.get('.refresh-button').attributes('disabled')).toBeDefined()
+  expect(wrapper.get('.refresh-button').text()).toBe('A atualizar…')
+  complete({ ok: true, json: async () => structuredClone(stock) })
+  await flushPromises()
+  expect(wrapper.get('.refresh-button').text()).toBe('Atualizar')
+})

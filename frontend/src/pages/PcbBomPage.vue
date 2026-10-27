@@ -5,7 +5,6 @@ import { readStored, writeStored } from '../api.js'
 import { stockCheck, stockToTake } from '../pcbStock.js'
 import { useInventoryContext } from '../composables/useInventoryContext.js'
 import WorkspacePage from '../components/WorkspacePage.vue'
-import LabelScanner from '../components/LabelScanner.vue'
 import BomStockList from '../components/BomStockList.vue'
 import StepViewer from '../components/StepViewer.vue'
 
@@ -22,7 +21,7 @@ const bomItems = ref([])
 const projectError = ref('')
 const projects = ref([]), localProjects = ref(readLocal()), listError = ref('')
 const selectedProject = ref(null)
-const labelScanner = ref(null), projectDetail = ref(null)
+const projectDetail = ref(null)
 const api = inject('api'), auth = inject('auth')
 const inventory = useInventoryContext()
 // Electronics só muda os seus projetos; um admin pode mudar qualquer projeto.
@@ -121,16 +120,6 @@ async function saveAndOpenProject() {
   bomFile.value = null
   bomItems.value = []
   projectName.value = ''
-}
-
-// Uma etiqueta lida soma-se à linha com o mesmo MPN, ou entra como linha nova no BOM do projeto aberto.
-function addLabel({ mpn, manufacturer, qty }) {
-  const project = selectedProject.value
-  const same = item => item.partNumber.toUpperCase() === mpn.toUpperCase()
-  const items = project.items.some(same)
-    ? project.items.map(item => same(item) ? { ...item, quantity: item.quantity + qty } : item)
-    : [...project.items, { reference: '—', value: 'Componente sem valor', description: manufacturer || '—', footprint: '—', partNumber: mpn, quantity: qty }]
-  updateProject({ ...project, items })
 }
 
 async function updateProject(updated) {
@@ -318,7 +307,6 @@ async function removeProject(projectId) {
             Substituir BOM
             <input type="file" class="sr-only" accept=".csv,.bom,.txt,text/csv,text/plain" aria-label="Substituir ficheiro BOM" @change="replaceBom" />
           </label>
-          <button v-if="canChange(selectedProject)" class="text-button" type="button" @click="labelScanner.open()">Ler etiqueta</button>
           <button v-if="inventory.electronicsEditor" class="text-button" type="button" @click="openConsume">Retirar do stock</button>
           <button class="text-button" type="button" @click="selectedProject = null">Fechar</button>
         </span>
@@ -369,6 +357,5 @@ async function removeProject(projectId) {
         </div>
       </form>
     </dialog>
-    <LabelScanner ref="labelScanner" action="Adicionar ao BOM" @use="addLabel" />
   </WorkspacePage>
 </template>

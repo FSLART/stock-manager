@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BSPD 2.2 Emulator</title>
-<script>if (location.hash === '#preview') document.documentElement.classList.add('pv');   // embedded thumbnail (the Stocklart card): rotating 3D board only
+<script>if (new URLSearchParams(location.search).get('embedded') === '1') document.documentElement.classList.add('embedded');
+if (location.hash === '#preview') document.documentElement.classList.add('pv');   // embedded thumbnail (the Stocklart card): rotating 3D board only
 try { const th = localStorage.getItem('bspd.theme'); if (['dark', 'light'].includes(th)) document.documentElement.dataset.theme = th; } catch { /* no storage */ }</script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <style>
@@ -307,6 +308,16 @@ footer{max-width:1760px;margin:0 auto;padding:var(--s2) var(--s4) var(--s5);colo
 html.pv body{overflow:hidden}
 html.pv #w3d{position:fixed;inset:0;z-index:50;height:auto}
 @media (prefers-reduced-motion: reduce){ *{transition:none!important} }
+
+/* The workspace provides branding and page navigation when embedded. */
+.embedded body { font-family: 'DM Sans', sans-serif; }
+.embedded h2, .embedded h3 { font-family: 'Bricolage Grotesque', sans-serif; }
+.embedded .brand { display: none; }
+.embedded .status { position: static; background: var(--bg); padding-inline: 0; }
+.embedded .toolbar { padding-inline: 0; background: var(--bg); }
+.embedded .app { padding-inline: 0; }
+.embedded .rail { position: static; max-height: none; overflow: visible; }
+.embedded .vp { height: clamp(360px, 45vw, 560px); }
 </style>
 </head>
 <body>
