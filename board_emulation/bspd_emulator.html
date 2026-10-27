@@ -1,16 +1,16 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BSPD 2.2 Emulator</title>
 <script>if (location.hash === '#preview') document.documentElement.classList.add('pv');   // embedded thumbnail (the Stocklart card): rotating 3D board only
-try { const th = localStorage.getItem('bspd.theme'); if (th) document.documentElement.dataset.theme = th; } catch { /* no storage */ }</script>
+try { const th = localStorage.getItem('bspd.theme'); if (['dark', 'light'].includes(th)) document.documentElement.dataset.theme = th; } catch { /* no storage */ }</script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <style>
 :root{
   --bg:#f3f4f6; --panel:#ffffff; --panel-2:#f8f9fb; --ink:#15181d; --muted:#5b6370; --line:#d9dde3; --grid:#eceef1;
-  --accent:#f2c500; --accent-ink:#111111; --brand-bg:#111111;
+  --accent:#ffd400; --accent-ink:#111111; --brand-bg:#111111;
   --hi:#e08a00; --lo:#9aa3ae; --ok:#1f9d55; --bad:#d62f2f;
   --ok-bg:#dff5e8; --ok-ink:#0d5c2f; --bad-bg:#fde2df; --bad-ink:#8f1d17; --warn-bg:#fff1cc; --warn-ink:#6b4500; --off-bg:#e6e9ee; --off-ink:#39424e;
   --led-off:#c9ced6; --p:#2f6fdb; --i:#c8326a; --c7:#8a4fd8; --c3:#11928a;
@@ -22,21 +22,21 @@ try { const th = localStorage.getItem('bspd.theme'); if (th) document.documentEl
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#0f1115; --panel:#181b21; --panel-2:#1d2128; --ink:#e7eaee; --muted:#9aa3af; --line:#2b3039; --grid:#22262e;
+    --bg:#20211f; --panel:#292a27; --panel-2:#181914; --ink:#f4f2e9; --muted:#a7a99e; --line:#454740; --grid:#34362f;
     --hi:#ffb02e; --lo:#5d6672; --ok:#3ccf7a; --bad:#ff5a52;
     --ok-bg:#12372a; --ok-ink:#8ef0b6; --bad-bg:#45181a; --bad-ink:#ffb3ad; --warn-bg:#3d2f0a; --warn-ink:#ffd27a; --off-bg:#262b33; --off-ink:#c4cbd4;
     --led-off:#353b45; --p:#6aa1ff; --i:#ff7aa8; --c7:#b58cff; --c3:#3fd0c4;
-    --sch-bg:#12151a; --w3d-bg:#252a32; --sym:#8fb0ff; --body:#26261c; --pin:#b9c0ca; --des:#7fb6ff; --val:#a3abb6; --note:#ff8a80; --frame:#363c46;
+    --sch-bg:#181914; --w3d-bg:#20211f; --sym:#8fb0ff; --body:#26261c; --pin:#b9c0ca; --des:#7fb6ff; --val:#a3abb6; --note:#ff8a80; --frame:#363c46;
     --w0:#5f6976; --w5:#ff9a2e; --w24:#ff5a52; --flow:#bfe3ff;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#0f1115; --panel:#181b21; --panel-2:#1d2128; --ink:#e7eaee; --muted:#9aa3af; --line:#2b3039; --grid:#22262e;
+  --bg:#20211f; --panel:#292a27; --panel-2:#181914; --ink:#f4f2e9; --muted:#a7a99e; --line:#454740; --grid:#34362f;
   --hi:#ffb02e; --lo:#5d6672; --ok:#3ccf7a; --bad:#ff5a52;
   --ok-bg:#12372a; --ok-ink:#8ef0b6; --bad-bg:#45181a; --bad-ink:#ffb3ad; --warn-bg:#3d2f0a; --warn-ink:#ffd27a; --off-bg:#262b33; --off-ink:#c4cbd4;
   --led-off:#353b45; --p:#6aa1ff; --i:#ff7aa8; --c7:#b58cff; --c3:#3fd0c4;
-  --sch-bg:#12151a; --w3d-bg:#252a32; --sym:#8fb0ff; --body:#26261c; --pin:#b9c0ca; --des:#7fb6ff; --val:#a3abb6; --note:#ff8a80; --frame:#363c46;
+  --sch-bg:#181914; --w3d-bg:#20211f; --sym:#8fb0ff; --body:#26261c; --pin:#b9c0ca; --des:#7fb6ff; --val:#a3abb6; --note:#ff8a80; --frame:#363c46;
   --w0:#5f6976; --w5:#ff9a2e; --w24:#ff5a52; --flow:#bfe3ff;
   color-scheme: dark;
 }
@@ -49,8 +49,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-ap
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .skip{position:absolute;left:var(--s3);top:-48px;z-index:100;background:var(--accent);color:var(--accent-ink);padding:var(--s2) var(--s3);border-radius:var(--r);font-weight:700}
 .skip:focus{top:var(--s2)}
-h2{font-size:15px;font-weight:650;margin:0}
-h3{font-size:13px;font-weight:650;margin:0}
+h2{font-size:18px;font-weight:650;margin:0}
+h3{font-size:14px;font-weight:650;margin:0}
 p{margin:0}
 .muted{color:var(--muted)}
 .num{white-space:nowrap}
@@ -58,7 +58,7 @@ p{margin:0}
 .warn{color:var(--bad-ink);background:var(--bad-bg);padding:0 4px;border-radius:4px}
 
 /* ---------- controls ---------- */
-button,select,input[type=number],input[type=search]{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 10px;min-height:32px}
+button,select,input[type=number],input[type=search]{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 10px;min-height:44px}
 button{cursor:pointer;font-weight:600}
 button:hover{border-color:var(--muted)}
 button:active{transform:translateY(1px)}
@@ -77,7 +77,7 @@ input[type=range]{width:100%;margin:0}
 @media (pointer:coarse){ button,select,input[type=number],input[type=search]{min-height:44px} }
 
 /* ---------- status bar (sticky) ---------- */
-.status{position:sticky;top:0;z-index:20;display:flex;align-items:center;flex-wrap:wrap;gap:var(--s2) var(--s4);padding:var(--s2) var(--s4);background:var(--panel);border-bottom:3px solid var(--accent)}
+.status{position:sticky;top:0;z-index:20;display:flex;align-items:center;flex-wrap:wrap;gap:var(--s2) var(--s4);padding:var(--s2) var(--s4);background:var(--panel);border-bottom:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:var(--s3);min-width:0}
 /* Official LART logo: replace the .brand-mark text with the team's SVG when the file is available. */
 .brand-mark{background:var(--brand-bg);color:var(--accent);font-weight:900;font-size:17px;letter-spacing:.06em;padding:4px 10px;border-radius:4px;line-height:1.2}
@@ -134,7 +134,7 @@ input[type=range]{width:100%;margin:0}
 .readout small{font-size:13px;font-weight:600;color:var(--muted);margin-left:2px}
 .btns{display:flex;flex-wrap:wrap;gap:var(--s2)}
 .btns button{flex:1 1 auto}
-details > summary{cursor:pointer;color:var(--muted);font-weight:600;padding:2px 0}
+details > summary{cursor:pointer;color:var(--muted);font-weight:600;padding:10px 0;min-height:44px}
 details[open] > summary{margin-bottom:var(--s2)}
 .sub{display:flex;flex-direction:column;gap:var(--s2);padding:var(--s3);background:var(--panel-2);border-radius:var(--r)}
 
@@ -357,7 +357,7 @@ html.pv #w3d{position:fixed;inset:0;z-index:50;height:auto}
       <ol class="steps">
         <li id="st1"><span class="n">1</span><div><b data-i18n="g.s1">Run the BSPD test</b><p data-i18n="g.s1d">Loads the Scrut Test, mandatory in electrical scrutineering (10 turns × 0.833 A through the current sensor = 5 kW at 600 V) and presses the brake fully for 2 s.</p></div></li>
         <li id="st2"><span class="n">2</span><div><b data-i18n="g.s2">Follow the chain</b><p data-i18n="g.s2d">In the block diagram, brake and current go high, Q1 starts the 0.5 s timer (C7 charges), then IC1 drops the relay. The strip above gives the trip delay against the 500 ms rule.</p></div></li>
-        <li id="st3"><span class="n">3</span><div><b data-i18n="g.s3">Change a threshold, test again</b><p data-i18n="g.s3d">Turn T0.5 or CTH in the Trimmers panel and run the test again. Click any block to see the real parts in the schematic.</p></div></li>
+        <li id="st3"><span class="n">3</span><div><b data-i18n="g.s3">Change a threshold, test again</b><p data-i18n="g.s3d">Open Advanced calibration, turn T0.5 or CTH and run the test again. Click any block to see the real parts in the schematic.</p></div></li>
       </ol>
       <p class="hint" data-i18n="g.sdc">Note: the board schematic labels the shutdown circuit SC (SC_IN, SC_OUT), but the correct Formula Student name is SDC.</p>
       <div class="guide-more">
@@ -506,7 +506,9 @@ html.pv #w3d{position:fixed;inset:0;z-index:50;height:auto}
     </div>
   </aside>
 
-  <aside class="panel rail trims" aria-labelledby="trT">
+  <details class="panel trims" id="calibration">
+    <summary data-i18n="tr.advanced" style="padding:16px">Advanced calibration</summary>
+    <aside class="rail" aria-labelledby="trT">
     <div class="trims-head">
       <h2 id="trT" data-i18n="tr.title">Trimmers</h2>
       <p class="hint" data-i18n="tr.lead">Each trimmer sets one threshold. 0 % is fully counter-clockwise. Type a target and press Set to see the position it needs.</p>
@@ -515,7 +517,8 @@ html.pv #w3d{position:fixed;inset:0;z-index:50;height:auto}
       <button id="setAll" data-i18n="tr.reset">Reset all to targets</button>
     </div>
     <div id="pots"></div>
-  </aside>
+    </aside>
+  </details>
 </main>
 
 <footer>
@@ -541,12 +544,12 @@ const T = {
   en: {
     'skip': 'Skip to the circuit view', 'app.sub': 'Brake System Plausibility Device · circuit emulator',
     'leds.label': 'Board LEDs', 'tb.label': 'Simulation controls', 'tb.guide': 'Guide', 'tb.lang': 'Language', 'tb.speed': 'Speed',
-    'tb.dark': 'Dark mode', 'tb.realtime': '1× real time', 'tb.pause': 'Pause', 'tb.resume': 'Resume', 'tb.lv': 'LV supply', 'tb.cycle': 'Power-cycle LV',
+    'tr.advanced': 'Advanced calibration', 'tb.dark': 'Dark mode', 'tb.realtime': '1× real time', 'tb.pause': 'Pause', 'tb.resume': 'Resume', 'tb.lv': 'LV supply', 'tb.cycle': 'Power-cycle LV',
     'tb.lag': 'running at {x}× (CPU-limited)',
     'g.title': 'Start here: make the BSPD trip', 'g.lead': "Three steps, about a minute. Everything you see is computed live from the board's real circuit.",
     'g.s1': 'Run the BSPD test', 'g.s1d': 'Loads the Scrut Test, mandatory in electrical scrutineering (10 turns × 0.833 A through the current sensor = 5 kW at 600 V) and presses the brake fully for 2 s.',
     'g.s2': 'Follow the chain', 'g.s2d': 'In the block diagram, brake and current go high, Q1 starts the 0.5 s timer (C7 charges), then IC1 drops the relay. The strip above gives the trip delay against the 500 ms rule.',
-    'g.s3': 'Change a threshold, test again', 'g.s3d': 'Turn T0.5 or CTH in the Trimmers panel and run the test again. Click any block to see the real parts in the schematic.',
+    'g.s3': 'Change a threshold, test again', 'g.s3d': 'Open Advanced calibration, turn T0.5 or CTH and run the test again. Click any block to see the real parts in the schematic.',
     'g.leds': 'What the LEDs mean', 'led.PWR': 'the 5 V rail is up.', 'led.PTH': 'brake pressure is above PTH (hard braking).',
     'led.CTH': 'current is above CTH, or the current sensor is open.', 'led.PS': 'TRIGGER is low: the 0.5 s timer fired or the pressure sensor is out of range.',
     'led.BSPD': 'the relay has dropped: the shutdown circuit is open.', 'led.on': 'on', 'led.off': 'off',
@@ -647,12 +650,12 @@ const T = {
   pt: {
     'skip': 'Saltar para a vista do circuito', 'app.sub': 'Brake System Plausibility Device · emulador do circuito',
     'leds.label': 'LEDs da placa', 'tb.label': 'Controlos da simulação', 'tb.guide': 'Guia', 'tb.lang': 'Idioma', 'tb.speed': 'Velocidade',
-    'tb.dark': 'Modo escuro', 'tb.realtime': '1× tempo real', 'tb.pause': 'Pausa', 'tb.resume': 'Continuar', 'tb.lv': 'Alimentação LV', 'tb.cycle': 'Desligar e ligar LV',
+    'tr.advanced': 'Calibração avançada', 'tb.dark': 'Modo escuro', 'tb.realtime': '1× tempo real', 'tb.pause': 'Pausa', 'tb.resume': 'Continuar', 'tb.lv': 'Alimentação LV', 'tb.cycle': 'Desligar e ligar LV',
     'tb.lag': 'a correr a {x}× (limitado pelo CPU)',
     'g.title': 'Começar aqui: fazer o BSPD disparar', 'g.lead': 'Três passos, cerca de um minuto. Tudo o que vês é calculado em tempo real a partir do circuito real da placa.',
     'g.s1': 'Correr o teste do BSPD', 'g.s1d': 'Carrega o Scrut Test, obrigatório na inspeção elétrica (10 voltas × 0,833 A pelo sensor de corrente = 5 kW a 600 V) e trava a fundo durante 2 s.',
     'g.s2': 'Seguir a cadeia', 'g.s2d': 'No diagrama de blocos, a travagem e a corrente sobem, o Q1 arranca o temporizador de 0,5 s (o C7 carrega) e depois o IC1 desliga o relé. A faixa acima mostra o atraso de disparo face à regra dos 500 ms.',
-    'g.s3': 'Mudar um limiar e testar outra vez', 'g.s3d': 'Roda o T0.5 ou o CTH no painel Trimmers e corre o teste outra vez. Clica em qualquer bloco para ver as peças reais no esquemático.',
+    'g.s3': 'Mudar um limiar e testar outra vez', 'g.s3d': 'Abre a Calibração avançada, roda o T0.5 ou o CTH e corre o teste outra vez. Clica em qualquer bloco para ver as peças reais no esquemático.',
     'g.leds': 'O que significam os LEDs', 'led.PWR': 'os 5 V estão presentes.', 'led.PTH': 'a pressão de travagem está acima do PTH (travagem forte).',
     'led.CTH': 'a corrente está acima do CTH, ou o sensor de corrente está aberto.', 'led.PS': 'o TRIGGER está em baixo: o temporizador de 0,5 s disparou ou o sensor de pressão está fora da gama.',
     'led.BSPD': 'o relé caiu: o circuito de shutdown está aberto.', 'led.on': 'aceso', 'led.off': 'apagado',
@@ -751,7 +754,7 @@ const T = {
     'ft.src': 'Construído a partir dos ficheiros Altium da equipa (esquemático, PCB, STEP) para o BSPD 2.2. Todos os valores são simulados, não medidos.',
   },
 };
-let LANG = store.get('lang') || (/^pt/i.test(navigator.language || '') ? 'pt' : 'en');
+let LANG = ['pt', 'en'].includes(store.get('lang')) ? store.get('lang') : 'pt';
 const t = (k, o) => String((T[LANG] && T[LANG][k]) ?? T.en[k] ?? k).replace(/\{(\w+)\}/g, (_, n) => o && o[n] !== undefined ? o[n] : '');
 const GLOSS = [['BSPD', 'gl.BSPD'], ['SDC', 'gl.SDC'], ['LV', 'gl.LV'], ['HV / TS', 'gl.HV'], ['PTH', 'gl.PTH'], ['CTH', 'gl.CTH'], ['P.S.± ', 'gl.PS'], ['C.S.−', 'gl.CS'],
   ['T0.5', 'gl.T05'], ['T10', 'gl.T10'], ['Sensors_TH', 'gl.STH'], ['TRIGGER', 'gl.TRIG'], ['CV', 'gl.CV'], ['KCL', 'gl.KCL'], ['J1', 'gl.J1']];
@@ -2189,7 +2192,7 @@ document.addEventListener('keydown', e => {
   if ($('stageCard').classList.contains('full')) { toggleExpand(false); $('expand').focus(); return; }
   if (!$('guide').hidden && $('guide').contains(document.activeElement)) showGuide(false);
 });
-// light / dark: follows the system until the user picks one, then the choice is remembered
+// Start in the shared workspace dark theme; remember an explicit light/dark preference.
 const darkMQ = matchMedia('(prefers-color-scheme: dark)');
 const isDark = () => (document.documentElement.dataset.theme || (darkMQ.matches ? 'dark' : 'light')) === 'dark';
 function syncTheme() { $('themeBtn').setAttribute('aria-pressed', isDark()); readCols(); }

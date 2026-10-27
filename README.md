@@ -1,18 +1,19 @@
-# Stocklart · Stock de componentes
+# Stocklart · Ferramentas da equipa LART
 
 Interface em **Vue 3**, com componentes Single File (`.vue`) e Vite. A mesma
 aplicação funciona com a API Flask e com o Google Apps Script.
 
 ## Design e páginas
 
-O design usa tema escuro, amarelo LART,
-menu responsivo e fotografias incluídas no HTML gerado. A página inicial mostra
-o stock real e permite consultar o inventário, gerir categorias e adicionar material.
+O design usa o tema escuro e amarelo LART. A página inicial serve toda a equipa,
+com recursos de oficina e ferramentas de engenharia.
 
-O menu inclui **Início**, **Inventário**, **Simulação analógica**, **Movimentos**,
-**PCB e os seus BOMs** e **Definições**. A navegação usa fragmentos (`#/stock`,
-`#/pcbs`, etc.), compatíveis com Flask e Apps Script sem configurar novas rotas
-no servidor. O inventário mantém filtros, ordenação, edição e sincronização offline.
+A navegação agrupa **Inventário**, **Localizações**, **Etiquetas** e **Movimentos**
+em **Recursos e oficina**; **Projetos PCB**, **Cablagem** e **Simulação analógica**
+em **Engenharia**. **Compras e encomendas** aparece a administradores, Board e
+líderes. As ligações usam fragmentos (`#/stock`, `#/pcbs`, etc.), com suporte para
+novos separadores, teclado e aviso ao sair de uma etiqueta por guardar.
+O inventário mantém filtros, ordenação, edição e sincronização offline.
 
 - **PCB/BOM**: importa CSV, BOM ou TXT separados por vírgulas ou ponto e vírgula,
   incluindo campos entre aspas e descrições com várias linhas. Aceita cabeçalhos
@@ -26,10 +27,11 @@ no servidor. O inventário mantém filtros, ordenação, edição e sincronizaç
 - **Definições**: modo compacto do inventário e confirmações de alterações.
   Desativar confirmações mantém as mensagens de erro visíveis.
 
-Projetos PCB e preferências usam armazenamento do navegador.
-Não são partilhados entre dispositivos e não migram para a base de dados Flask.
-O stock continua a usar a API e as chaves offline existentes. Erros ao guardar
-os novos dados locais são apresentados, sem confirmar falsamente a gravação.
+No servidor principal, os projetos PCB, BOMs, modelos STEP, etiquetas e localizações
+são partilhados com a equipa. As preferências de interface ficam neste navegador.
+O inventário apresenta 100 referências de cada vez e permite carregar mais.
+O histórico filtra os últimos 1000 movimentos e apresenta-os em lotes de 100.
+O estado indica dados em cache, alterações por sincronizar e erros de ligação.
 
 ## Modo local (por defeito)
 

@@ -11,6 +11,11 @@ import StepViewer from '../components/StepViewer.vue'
 
 // Antes os projetos ficavam só no browser; os que ainda lá estão sobem para o servidor quando há sessão.
 const PROJECTS_STORAGE_KEY = 'stocklart-pcb-projects'
+const creating = ref(false), projectNameInput = ref(null)
+async function toggleCreation() {
+  creating.value = !creating.value
+  if (creating.value) { await nextTick(); projectNameInput.value?.focus() }
+}
 const bomFile = ref(null)
 const projectName = ref('')
 const bomItems = ref([])
@@ -112,6 +117,7 @@ async function saveAndOpenProject() {
   const saved = await persist(project)
   if (!saved) return
   selectedProject.value = saved
+  creating.value = false
   bomFile.value = null
   bomItems.value = []
   projectName.value = ''
@@ -218,64 +224,20 @@ async function removeProject(projectId) {
 <template>
   <WorkspacePage
     active="pcbs"
-    eyebrow="Produção · listas de materiais"
-    title="PCB e os seus BOMs"
+    title="Projetos PCB"
     description="Cria projetos PCB, consulta os seus BOMs e confirma o stock para produzir. Os projetos e os modelos STEP ficam no servidor, para toda a equipa."
   >
-    <!-- Criar e mudar projetos exige Electronics ou admin; consultar continua livre. -->
-    <section v-if="inventory.signedIn && inventory.electronicsEditor" class="workspace-grid">
-      <article class="workspace-card workspace-card-wide">
-        <div class="card-heading">
-          <div>
-            <span class="card-icon">▦</span>
-            <h2>Novo projeto PCB</h2>
-          </div>
-          <button class="primary-button" type="button" :disabled="!bomFile" @click="saveAndOpenProject">
-            Guardar projeto
-          </button>
-        </div>
-        <p class="card-muted">Define o projeto e carrega o BOM para consultar os componentes e quantidades da placa.</p>
-        <label class="project-name-field">
-          <span>Nome do projeto</span>
-          <input v-model="projectName" type="text" placeholder="Ex.: Controlador de motor V1" />
-        </label>
-        <div class="pcb-file-actions">
-          <label class="file-dropzone" :class="{ 'file-dropzone-selected': bomFile }">
-            <span class="file-dropzone-icon">BOM</span>
-            <span
-              ><strong>{{ bomFile?.name || 'Carregar ficheiro BOM' }}</strong
-              ><small>CSV, BOM ou TXT</small></span
-            >
-            <input type="file" aria-label="Carregar ficheiro BOM" accept=".csv,.bom,.txt,text/csv,text/plain" @change="selectBom" />
-          </label>
-        </div>
-        <div v-if="projectError" class="upload-error" role="alert">{{ projectError }}</div>
-        <div class="project-upload-summary">
-          <span
-            ><strong>{{ componentCount }}</strong> componentes detetados</span
-          >
-          <span v-if="projectName" class="status-pill">Projeto definido</span>
-        </div>
-      </article>
-      <article class="workspace-card">
-        <p class="eyebrow">Fluxo de trabalho</p>
-        <h2>Projeto e BOM associados</h2>
-        <p class="card-muted">
-          Cada projeto guarda o nome, o BOM e o modelo STEP no servidor, e toda a equipa vê os mesmos. Indica quantas placas queres produzir de cada projeto para ver o que há em stock.
-        </p>
-      </article>
-    </section>
-
     <section class="workspace-card saved-projects">
       <div class="card-heading">
         <div>
-          <span class="card-icon">PCB</span>
           <h2>Projetos guardados</h2>
         </div>
-        <span class="status-pill">{{ projects.length }} projeto(s)</span>
+        <div class="pcb-detail-actions"><span class="status-pill">{{ projects.length }} projeto(s)</span><button v-if="inventory.signedIn && inventory.electronicsEditor" type="button" class="primary" :aria-expanded="creating" aria-controls="new-pcb-project" @click="toggleCreation">{{ creating ? 'Fechar novo projeto' : 'Novo projeto' }}</button></div>
       </div>
-      <div v-if="listError" class="upload-error" role="alert">{{ listError }}</div>
-      <div v-if="!projects.length" class="empty-workspace">Ainda não há projetos PCB guardados.<template v-if="!inventory.signedIn"> Inicia sessão com uma conta de Electronics ou admin para criar um.</template></div>
+      <p class="card-muted">Os projetos guardados são partilhados com a equipa. Abre um projeto para consultar o BOM e o modelo 3D. As quantidades de produção abaixo são uma simulação até confirmares a retirada do stock.</p>
+      <p v-if="!inventory.signedIn || !inventory.electronicsEditor" class="hint">Modo de consulta. Criar e alterar projetos exige Electronics ou administrador; cada autor gere os seus projetos.</p>
+      <div v-if="listError" class="upload-error" role="alert">{{ listError }} <button type="button" class="text-button" @click="loadProjects">Tentar novamente</button></div>
+      <div v-if="!projects.length && !listError" class="empty-workspace">Ainda não há projetos PCB guardados.<template v-if="!inventory.signedIn"> Inicia sessão com uma conta de Electronics ou admin para criar um.</template></div>
       <p v-if="localProjects.length && (!inventory.signedIn || !inventory.electronicsEditor)" class="hint">{{ localProjects.length }} projeto(s) guardado(s) só neste navegador. Para os partilhar, entra com uma conta de Electronics ou admin.</p>
       <div class="saved-project-list">
         <div v-for="project in projects" :key="project.id" :class="['saved-project', { selected: selectedProject?.id === project.id }]">
@@ -299,15 +261,56 @@ async function removeProject(projectId) {
         </div>
       </div>
       <div v-if="build.length" class="build-list">
-        <h2>Lista de produção</h2>
+        <h2>Lista de produção</h2><p class="hint">Compara as necessidades com o stock. Esta lista não reserva nem retira material. Abre cada projeto para confirmar a retirada disponível, que pode ser parcial se houver faltas.</p>
         <BomStockList :rows="build" label="Lista de produção" />
       </div>
+    </section>
+
+    <!-- Criar e mudar projetos exige Electronics ou admin; consultar continua livre. -->
+    <section v-if="creating && inventory.signedIn && inventory.electronicsEditor" id="new-pcb-project" class="workspace-grid">
+      <article class="workspace-card workspace-card-wide">
+        <div class="card-heading">
+          <div>
+            <h2>Novo projeto PCB</h2>
+          </div>
+          <button class="primary-button" type="button" :disabled="!bomFile" @click="saveAndOpenProject">
+            Guardar projeto
+          </button>
+        </div>
+        <p class="card-muted">Define o projeto e carrega o BOM para consultar os componentes e quantidades da placa.</p>
+        <label class="project-name-field">
+          <span>Nome do projeto</span>
+          <input ref="projectNameInput" v-model="projectName" type="text" placeholder="Ex.: Controlador de motor V1" />
+        </label>
+        <div class="pcb-file-actions">
+          <label class="file-dropzone" :class="{ 'file-dropzone-selected': bomFile }">
+            <span class="file-dropzone-icon">BOM</span>
+            <span
+              ><strong>{{ bomFile?.name || 'Carregar ficheiro BOM' }}</strong
+              ><small>CSV, BOM ou TXT</small></span
+            >
+            <input type="file" aria-label="Carregar ficheiro BOM" accept=".csv,.bom,.txt,text/csv,text/plain" @change="selectBom" />
+          </label>
+        </div>
+        <div v-if="projectError" class="upload-error" role="alert">{{ projectError }}</div>
+        <div class="project-upload-summary">
+          <span
+            ><strong>{{ componentCount }}</strong> componentes detetados</span
+          >
+          <span v-if="projectName" class="status-pill">Projeto definido</span>
+        </div>
+      </article>
+      <article class="workspace-card">
+        <h2>Projeto e BOM associados</h2>
+        <p class="card-muted">
+          Cada projeto guarda o nome, o BOM e o modelo STEP no servidor, e toda a equipa vê os mesmos. Indica quantas placas queres produzir de cada projeto para ver o que há em stock.
+        </p>
+      </article>
     </section>
 
     <section v-if="selectedProject" ref="projectDetail" class="workspace-card pcb-project-detail">
       <div class="card-heading">
         <div>
-          <span class="card-icon">PCB</span>
           <h2>{{ selectedProject.name }}</h2>
         </div>
         <span class="pcb-detail-actions">
@@ -358,7 +361,7 @@ async function removeProject(projectId) {
         <h2 id="consume-title">Retirar do stock</h2>
         <label>Placas produzidas <input v-model.number="consumeBoards" type="number" min="1" step="1" required></label>
         <p class="hint">Sai do stock: <b>{{ toTakeUnits }}</b> unidade(s) de {{ toTake.items.length }} componente(s). Fica registado nos movimentos.</p>
-        <p v-if="toTake.short.length" class="hint error">Sem stock suficiente (retira-se só o que há): {{ toTake.short.join(', ') }}</p>
+        <p v-if="toTake.short.length" class="hint error">Retirada parcial: faltam componentes para completar a produção. Só será retirada a quantidade disponível; os componentes em falta não ficam reservados nem são encomendados. Em falta: {{ toTake.short.join(', ') }}</p>
         <label>Escreve <b>{{ selectedProject.name }}</b> para confirmar <input v-model="consumeName" autocomplete="off" required></label>
         <div class="actions">
           <button type="button" class="ghost" @click="consumeDialog.close()">Cancelar</button>

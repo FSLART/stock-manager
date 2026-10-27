@@ -13,6 +13,10 @@ const locations = computed(() => [...new Set([...inventory.items.map(item => ite
     const items = inventory.items.filter(item => item.location === name)
     return { name, code: inventory.codes?.[name] || '', image: inventory.locations[name] || '', refs: items.length, units: items.reduce((sum, item) => sum + item.qty, 0) }
   }))
+const query = ref('')
+const plain = value => String(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+const shownLocations = computed(() => locations.value.filter(box => plain(`${box.name} ${box.code}`).includes(plain(query.value))))
+const canManage = computed(() => inventory.canEdit && inventory.signedIn && inventory.electronicsEditor)
 const editing = ref(null), newName = ref(''), file = ref(null), removeImage = ref(false), labels = ref([]), error = ref(''), created = ref('')
 const picked = ref(new Set())
 const pickedBoxes = computed(() => locations.value.filter(box => picked.value.has(box.name)))
@@ -71,16 +75,17 @@ async function print(boxes) {
 <template>
   <WorkspacePage
     active="locations"
-    eyebrow="Inventário · arrumação"
     title="Localizações"
     description="Caixas e gavetas onde os componentes estão guardados. Cada uma pode ter uma foto e um código QR para colar na caixa."
   >
     <section class="workspace-card">
       <div class="card-heading">
-        <div><span class="card-icon">▦</span><h2>Caixas e gavetas</h2></div>
+        <div><h2>Caixas e gavetas</h2></div>
         <span class="status-pill">{{ locations.length }} localização(ões)</span>
       </div>
-      <form v-if="inventory.canEdit && inventory.signedIn && inventory.electronicsEditor" class="location-new" @submit.prevent="create">
+      <label class="project-name-field"><span>Pesquisar localizações</span><input v-model="query" type="search" aria-label="Pesquisar localizações" placeholder="Nome ou código da caixa"></label>
+      <p v-if="!canManage" class="card-muted">Podes consultar as caixas e imprimir códigos QR. A gestão de localizações está disponível para Electronics e administradores.</p>
+      <form v-if="canManage" class="location-new" @submit.prevent="create">
         <input v-model="created" aria-label="Nome da nova caixa" placeholder="Caixa 1, Gaveta A…" maxlength="255" autocomplete="off">
         <button class="primary" :disabled="!created.trim()">Criar caixa</button>
       </form>
@@ -89,9 +94,10 @@ async function print(boxes) {
         <button class="text-button" :disabled="!pickedBoxes.length" @click="print(pickedBoxes)">Imprimir QR ({{ pickedBoxes.length }})</button>
       </div>
       <p v-if="error" class="upload-error" role="alert">{{ error }}</p>
-      <div v-if="!locations.length" class="empty-workspace">Ainda não há localizações. Cria uma caixa acima, ou no inventário seleciona componentes e escolhe "Mover para aqui".</div>
+      <div v-if="!locations.length" class="empty-workspace">Ainda não há localizações.<template v-if="canManage"> Cria uma caixa acima ou move componentes no inventário para uma localização.</template><template v-else> As caixas aparecem aqui quando Electronics ou um administrador lhes atribuir componentes ou uma foto.</template></div>
+      <div v-else-if="!shownLocations.length" class="empty-workspace">Nenhuma localização corresponde à pesquisa. <button type="button" class="text-button" @click="query = ''">Limpar pesquisa</button></div>
       <ul v-else class="location-grid">
-        <li v-for="box in locations" :key="box.name" class="location-card">
+        <li v-for="box in shownLocations" :key="box.name" class="location-card">
           <img v-if="editing === box.name && preview" :src="preview" :alt="`Nova foto de ${box.name}`" class="location-image">
           <img v-else-if="box.image" :src="box.image" :alt="`Foto de ${box.name}`" class="location-image">
           <div v-else class="location-image" aria-hidden="true">▦</div>
@@ -112,12 +118,13 @@ async function print(boxes) {
             <label class="location-check"><input type="checkbox" :checked="picked.has(box.name)" :aria-label="`Selecionar ${box.name} para imprimir`" @change="toggle(box.name)"><strong>{{ box.name }}</strong></label>
             <span v-if="box.code" class="sub">Código {{ box.code }}</span>
             <span class="sub">{{ box.refs }} {{ box.refs === 1 ? 'referência' : 'referências' }} · {{ box.units }} un.</span>
+            <p v-if="!box.refs" class="hint">Sem componentes. <template v-if="canManage">Move componentes para esta caixa a partir do inventário.</template><template v-else>Consulta o inventário ou pede a Electronics para atribuir material.</template></p>
             <div class="location-actions">
               <button class="text-button" @click="router.push(stockPath(box.name))">Ver no stock</button>
-              <button v-if="inventory.canEdit && inventory.signedIn && inventory.electronicsEditor" class="text-button" @click="edit(box)">Editar</button>
+              <button v-if="canManage" class="text-button" @click="edit(box)">Editar</button>
               <button class="text-button" @click="print([box])">Imprimir QR</button>
               <!-- Com componentes lá dentro não se apaga: o servidor também recusa. -->
-              <button v-if="inventory.canEdit && inventory.signedIn && inventory.electronicsEditor" class="text-button danger" :disabled="box.refs > 0" :title="box.refs ? 'Move os componentes antes de apagar' : ''" @click="remove(box)">Apagar</button>
+              <button v-if="canManage" class="text-button danger" :disabled="box.refs > 0" :title="box.refs ? 'Move os componentes antes de apagar' : ''" @click="remove(box)">Apagar</button>
             </div>
           </template>
         </li>

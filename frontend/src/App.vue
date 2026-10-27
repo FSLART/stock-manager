@@ -30,6 +30,7 @@ const auth = reactive({
   enabled: false, user: null, notion: false,
   login: () => loginDialog.value.open(),
   async logout() {
+    if (!canLeave()) return
     try { toast((await api.direct('logout')).msg); auth.user = null }
     catch (error) { toast(error.message, true) }
   },
@@ -42,6 +43,8 @@ function guard(fn) {
   return (...args) => !auth.enabled || auth.user ? fn(...args) : loginDialog.value.open().then(ok => ok && fn(...args))
 }
 const categories = ref([]), items = ref([]), parts = ref([]), locationImages = ref({}), locationCodes = ref({}), labels = ref([]), current = ref(null), section = ref(null), query = ref('')
+const resultLimit = ref(100), categoryMenuOpen = ref(false)
+const syncPendingCount = ref(readStored('stock.pending.v1', []).length), syncError = ref(''), cachedData = ref(false), lastSynced = ref(readStored('stock.last-synced.v1', ''))
 const busy = ref(false), loading = ref(true), toastMessage = ref(''), toastUndo = ref(null), formError = ref('')
 const movement = ref(null), categoryForm = ref(null), partsCatalog = ref(null), labelScanner = ref(null)
 const csvImport = ref(null), csvError = ref(''), inventoryTutorial = ref(null)
@@ -106,7 +109,7 @@ const columns = computed(() => [
   { key: 'location', label: 'Localização' }, { key: 'price', label: 'Preço un.' }, { key: 'qty', label: 'Quantidade' }, { key: 'value', label: 'Valor' },
 ])
 const activeFilters = computed(() => Object.values(propertyFilters.value).reduce((sum, values) => sum + values.length, 0) + Number(Boolean(stockFilter.value)) + Number(Boolean(imageFilter.value)) + Number(locationFilter.value !== ''))
-watch([current, section], () => { propertyFilters.value = {}; filterSearch.value = {} })
+watch([current, section], () => { propertyFilters.value = {}; filterSearch.value = {}; categoryMenuOpen.value = false })
 function clearFilters() {
   current.value = null
   section.value = null
@@ -147,6 +150,8 @@ const shown = computed(() => items.value.filter(item =>
   const av = sortValue(a, sortKey.value), bv = sortValue(b, sortKey.value)
   return sortDirection.value * (NUMERIC.has(sortKey.value) ? av - bv : String(av).localeCompare(String(bv), 'pt', { numeric: true, sensitivity: 'base' }))
 }))
+watch([current, section, query, propertyFilters, stockFilter, imageFilter, locationFilter, sortKey, sortDirection], () => { resultLimit.value = 100 }, { deep: true })
+const visibleItems = computed(() => shown.value.slice(0, resultLimit.value))
 const units = computed(() => shown.value.reduce((sum, item) => sum + item.qty, 0))
 const priceOf = computed(() => priceEstimator(parts.value))
 const estimate = computed(() => {
@@ -161,7 +166,7 @@ const locked = computed(() => busy.value || queues.size > 0)
 const locations = computed(() => [...new Set([...items.value.map(item => item.location), ...Object.keys(locationImages.value)].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true })))
 const selected = ref(new Set()), locationName = ref('')
 let lastPicked = null
-const selectable = computed(() => electronicsEditor.value ? shown.value : [])
+const selectable = computed(() => electronicsEditor.value ? visibleItems.value : [])
 const allShownSelected = computed(() => selectable.value.length > 0 && selectable.value.every(item => selected.value.has(item.id)))
 function pick(item, shift) {
   const on = !selected.value.has(item.id), list = selectable.value
@@ -210,12 +215,35 @@ const routeKeys = { '/': 'home', '/stock': 'stock', '/analog-simulation': 'analo
 const page = ref('home')
 // #/stock?location=Caixa%201 (o QR de cada caixa) abre o inventário só com essa localização.
 // Antes de os dados chegarem o código ainda não tem nome: load() volta a tentar.
+const leaveChecks = new Set()
+let routeHash = window.location.hash
+let routePosition = Number.isInteger(window.history.state?.stocklartRoute) ? window.history.state.stocklartRoute : 0
+let restoringHistory = false
+window.history.replaceState({ ...window.history.state, stocklartRoute: routePosition }, '')
+const canLeave = () => [...leaveChecks].every(check => check())
 let pendingBox = null
 function openBox() {
   const name = Object.keys(locationCodes.value).find(entry => locationCodes.value[entry] === pendingBox)
   if (name !== undefined) { locationFilter.value = name; pendingBox = null }
 }
 function readRoute() {
+  const nextHash = window.location.hash
+  if (restoringHistory) {
+    if (nextHash === routeHash) restoringHistory = false
+    return
+  }
+  if (nextHash !== routeHash) {
+    const position = window.history.state?.stocklartRoute
+    if (!canLeave()) {
+      // Return to the current entry; rewriting the traversed entry would lose Back history.
+      restoringHistory = true
+      window.history.go(Number.isInteger(position) ? routePosition - position : -1)
+      return
+    }
+    routePosition = Number.isInteger(position) ? position : routePosition + 1
+    window.history.replaceState({ ...window.history.state, stocklartRoute: routePosition }, '')
+    routeHash = nextHash
+  }
   const [path, search] = window.location.hash.slice(1).split('?')
   page.value = routeKeys[path] || 'home'
   const location = new URLSearchParams(search).get('location')
@@ -225,7 +253,31 @@ function readRoute() {
   if (pendingBox) { clearFilters(); openBox() }
 }
 readRoute()
-const navigation = { push(path) { window.location.hash = path; readRoute() } }
+const navigation = {
+  beforeLeave(check) { leaveChecks.add(check); return () => leaveChecks.delete(check) },
+  push(path) {
+    if (restoringHistory) return false
+    if (window.location.hash === `#${path}`) return true
+    if (!canLeave()) return false
+    routeHash = `#${path}`
+    window.history.pushState({ ...window.history.state, stocklartRoute: ++routePosition }, '', routeHash)
+    readRoute()
+    return true
+  },
+  follow(event, path) {
+    if (event.button > 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    return navigation.push(path)
+  },
+}
+const pageTitles = { home: 'Ferramentas da equipa', stock: 'Inventário', locations: 'Localizações', labels: 'Etiquetas', movements: 'Movimentos', pcbs: 'Projetos PCB', batches: 'Compras e encomendas', settings: 'Definições', harness: 'Cablagem', 'analog-simulation': 'Simulação analógica' }
+watch(page, async value => {
+  document.title = `${pageTitles[value]} · Stocklart`
+  categoryMenuOpen.value = false
+  await nextTick()
+  const heading = document.querySelector('main h1')
+  if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus({ preventScroll: true }) }
+}, { immediate: true })
 provide('navigation', navigation)
 const preferences = reactive({ compact: readStored('stocklart-compact-mode', false) === true, notifications: readStored('stocklart-notifications', true) !== false })
 provide('preferences', preferences)
@@ -252,11 +304,12 @@ provide('inventory', reactive({
   deleteLabels: guard((ids, done) => act('deleteLabels', { ids }, done)),
   consume: guard((payload, done) => act('consumeItems', payload, done)),
   revertMovements: guard((ids, done) => act('revertMovements', { ids }, done)),
-  async manageCategories() { navigation.push('/stock'); await nextTick(); document.querySelector('nav[aria-label="Categorias"]')?.focus() },
-  addMaterial: guard(async () => { navigation.push('/stock'); await nextTick(); if (categories.value.length) movement.value.open(current.value) }),
+  async manageCategories() { if (!navigation.push('/stock')) return; await nextTick(); document.querySelector('nav[aria-label="Categorias"]')?.focus() },
+  addMaterial: guard(async () => { if (!navigation.push('/stock')) return; await nextTick(); if (categories.value.length) movement.value.open(current.value) }),
 }))
 
 function toast(message, important = false, undo = null) {
+  syncPendingCount.value = readStored('stock.pending.v1', []).length
   if (!preferences.notifications && !important && !undo) return
   toastMessage.value = message || ''
   toastUndo.value = undo
@@ -267,6 +320,9 @@ function toast(message, important = false, undo = null) {
 async function load() {
   const data = await api.load()
   if (disposed) return
+  cachedData.value = api.cached
+  syncPendingCount.value = readStored('stock.pending.v1', []).length
+  if (!api.cached) { lastSynced.value = new Date().toISOString(); writeStored('stock.last-synced.v1', lastSynced.value); syncError.value = '' }
   categories.value = data.categories
   items.value = data.items
   parts.value = data.parts || []
@@ -428,7 +484,7 @@ async function refresh() {
     const count = await api.syncPending(toast)
     await load()
     if (count) toast(`${count} operação(ões) sincronizada(s)`)
-  } catch { /* Preserve the last visible snapshot when the network is down. */ }
+  } catch (error) { syncError.value = error.message || 'Não foi possível atualizar. Tenta novamente.' }
   finally { refreshing = false }
 }
 const guarded = {
@@ -442,7 +498,7 @@ onMounted(async () => {
   try {
     await api.syncPending(toast)
     await load()
-  } catch (error) { toast(error.message || 'Sem ligação ao servidor e sem dados guardados neste dispositivo', true) }
+  } catch (error) { syncError.value = error.message || 'Sem ligação ao servidor e sem dados guardados neste dispositivo'; toast(syncError.value, true) }
   finally { loading.value = false }
 })
 onUnmounted(() => {
@@ -460,9 +516,10 @@ onUnmounted(() => {
   <div v-else class="stock-page" :class="{ compact: preferences.compact }">
   <AppNavigation active="stock" />
   <div class="stock-shell">
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ 'categories-open': categoryMenuOpen }">
+    <button class="category-menu-toggle" :aria-expanded="categoryMenuOpen" aria-controls="inventory-categories" @click="categoryMenuOpen = !categoryMenuOpen">{{ current || section || 'Todas as categorias' }}<span>{{ categoryMenuOpen ? 'Fechar' : 'Escolher categoria' }}</span></button>
     <!-- O fundo da barra vai até ao fim da página; o conteúdo fica fixo no topo enquanto a lista desce. -->
-    <div class="sidebar-inner">
+    <div id="inventory-categories" class="sidebar-inner">
     <div class="sidebar-heading"><h2>Categorias</h2><button v-if="electronicsEditor" class="new-category" aria-label="Nova categoria" :disabled="locked" @click="guarded.openCategory()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nova</button></div>
     <nav class="category-nav" aria-label="Categorias" tabindex="-1">
       <div class="cat-row"><button :aria-current="!current && !section" @click="current = null; section = null">Tudo <span class="n">{{ total() }}</span></button></div>
@@ -482,13 +539,14 @@ onUnmounted(() => {
     <button v-if="parts.length" type="button" class="catalog-btn" @click="partsCatalog.open()">Catálogo de peças <span class="n">{{ parts.length }}</span></button>
     </div>
   </aside>
-  <main class="stock-content">
+  <main id="main-content" class="stock-content" tabindex="-1">
+    <div class="sync-strip" role="status"><span>{{ loading ? 'A carregar inventário…' : syncError || (syncPendingCount ? `${syncPendingCount} alteração(ões) por sincronizar` : cachedData ? 'Sem ligação · a mostrar dados guardados neste dispositivo' : lastSynced ? `Atualizado às ${new Intl.DateTimeFormat('pt-PT', { hour: '2-digit', minute: '2-digit' }).format(new Date(lastSynced))}` : 'Inventário da equipa') }}</span><button type="button" class="text-button" :disabled="loading || locked" @click="refresh">Atualizar</button></div>
     <div class="top">
       <div class="search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input v-model="query" type="search" aria-label="Pesquisar componentes" placeholder="Pesquisar componentes…" autocomplete="off">
       </div>
-      <button v-if="electronicsEditor" class="text-button tutorial-button" @click="inventoryTutorial.open()"><span aria-hidden="true">?</span> Tutorial</button>
+      <button class="text-button tutorial-button" @click="inventoryTutorial.open()"><span aria-hidden="true">?</span> Tutorial</button>
       <template v-if="electronicsEditor && categories.length">
       <button v-if="canEdit" class="text-button import-csv-button" aria-label="Importar CSV" :disabled="locked" @click="guarded.importCsv()">Importar CSV</button>
       <button class="text-button" :disabled="locked" @click="guarded.scanLabel()">Ler etiqueta</button>
@@ -550,9 +608,10 @@ onUnmounted(() => {
             </th>
             <th v-if="selectable.length" scope="col">Ações</th>
           </tr></thead>
-          <tbody><StockItem v-for="item in shown" :key="item.id" :item="item" :price="priceOf(item)" :property-keys="showCategory ? [] : propertyKeys" :show-category="showCategory" :busy="busy" :locked="locked" :can-edit="canEdit && selectable.length > 0" :can-change="electronicsEditor" :actions="selectable.length > 0" :selected="selected.has(item.id)" @select="shift => pick(item, shift)" @edit="guarded.editItem(item)" @step="delta => guarded.step(item, delta)" @delete="guarded.deleteItem(item)" /></tbody>
+          <tbody><StockItem v-for="item in visibleItems" :key="item.id" :item="item" :price="priceOf(item)" :property-keys="showCategory ? [] : propertyKeys" :show-category="showCategory" :busy="busy" :locked="locked" :can-edit="canEdit && selectable.length > 0" :can-change="electronicsEditor" :actions="selectable.length > 0" :selected="selected.has(item.id)" @select="shift => pick(item, shift)" @edit="guarded.editItem(item)" @step="delta => guarded.step(item, delta)" @delete="guarded.deleteItem(item)" /></tbody>
         </table>
-        <div v-if="!shown.length" class="empty"><b>Nada encontrado.</b><br>Tenta outra pesquisa ou adiciona um item novo.</div>
+        <div v-if="!shown.length" class="empty"><b>Nada encontrado.</b><p>Tenta outra pesquisa ou escolhe outra categoria.</p><button class="text-button" @click="clearFilters">Limpar pesquisa e filtros</button></div>
+        <div v-if="shown.length > resultLimit" class="stock-pagination"><span>{{ visibleItems.length }} de {{ shown.length }} referências</span><button class="text-button stock-load-more" @click="resultLimit += 100">Mostrar mais 100</button></div>
       </template>
     </div>
   </main>

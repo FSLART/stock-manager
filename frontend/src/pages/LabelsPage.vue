@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { writeBarcode } from 'zxing-wasm/writer'
 import DrawerLabel from '../components/DrawerLabel.vue'
 import LabelTutorial from '../components/LabelTutorial.vue'
@@ -7,7 +7,9 @@ import PhomemoDialog from '../components/PhomemoDialog.vue'
 import WorkspacePage from '../components/WorkspacePage.vue'
 import { ICON_GROUPS, iconFor } from '../labelIcons.js'
 import { useInventoryContext } from '../composables/useInventoryContext.js'
+import { useNavigation } from '../composables/useNavigation.js'
 const inventory = useInventoryContext()
+const navigation = useNavigation()
 const tutorial = ref(null), phomemoDialog = ref(null)
 // Qualquer pessoa com sessão cria e muda etiquetas; sem sessão só se veem e imprimem.
 const canChange = computed(() => inventory.canEdit && inventory.signedIn)
@@ -28,6 +30,12 @@ const copy = entry => JSON.parse(JSON.stringify(entry))
 // Os modelos da equipa guardam-se como etiquetas com template: true; não entram na lista de etiquetas.
 const labels = computed(() => inventory.labels.filter(entry => !entry.template))
 const customTemplates = computed(() => inventory.labels.filter(entry => entry.template))
+const query = ref('')
+const plain = value => String(value ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+const matches = entry => plain([entry.title, entry.templateName, entry.location, ...entry.fields.flatMap(field => [field.name, field.value])].join(' ')).includes(plain(query.value))
+const shownLabels = computed(() => labels.value.filter(matches))
+const shownTemplates = computed(() => customTemplates.value.filter(matches))
+const shownDefaults = computed(() => templates.filter(([name]) => plain(name).includes(plain(query.value))))
 const label = ref(null)
 const saved = computed(() => labels.value.find(entry => entry.id === label.value?.id))
 const dirty = computed(() => Boolean(label.value) && JSON.stringify(label.value) !== JSON.stringify(saved.value ?? null))
@@ -68,6 +76,14 @@ function pickItem() {
 }
 
 const discard = () => !dirty.value || confirm('Descartar as alterações por guardar?')
+const unregister = navigation.beforeLeave(discard)
+function beforeUnload(event) {
+  if (!dirty.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+window.addEventListener('beforeunload', beforeUnload)
+onUnmounted(() => { unregister(); window.removeEventListener('beforeunload', beforeUnload) })
 function open(entry) { if (entry.id !== label.value?.id && discard()) select(entry) }
 function back() { if (discard()) label.value = null }
 function add(from) {
@@ -172,24 +188,25 @@ async function print(entries) {
 <template>
   <WorkspacePage
     active="labels"
-    eyebrow="Inventário · arrumação"
     title="Etiquetas"
     description="Cria etiquetas para gavetas e armários, com código Data Matrix ou QR, e imprime-as no tamanho do teu rolo."
   >
     <section class="workspace-card">
       <div class="card-heading">
-        <div><span class="card-icon">▤</span><h2>Etiquetas da equipa</h2></div>
+        <div><h2>Etiquetas da equipa</h2></div>
         <div class="label-heading-actions">
           <button v-if="canChange" type="button" class="text-button tutorial-button" @click="tutorial.open()"><span aria-hidden="true">?</span> Tutorial</button>
           <span class="status-pill">{{ labels.length }} etiqueta(s)</span>
         </div>
       </div>
+      <p class="card-muted">As etiquetas e os modelos guardados são partilhados com a equipa. Imprime no tamanho definido ou usa Phomemo para Bluetooth e PNG.</p>
+      <label v-if="!label" class="project-name-field"><span>Pesquisar etiquetas e modelos</span><input v-model="query" type="search" aria-label="Pesquisar etiquetas e modelos" placeholder="Título, localização ou conteúdo"></label>
       <div class="drawer-label-bar">
         <button v-if="label" type="button" class="text-button" @click="back">← Todas as etiquetas</button>
         <div class="location-actions">
           <div v-if="canChange" class="location-actions" role="group" aria-label="Nova etiqueta">
-            <button v-for="[name, template] in templates" :key="name" class="text-button" @click="add(blank(template))">+ {{ name }}</button>
-            <span v-for="entry in customTemplates" :key="entry.id" class="label-template">
+            <button v-for="[name, template] in shownDefaults" :key="name" class="text-button" @click="add(blank(template))">+ {{ name }}</button>
+            <span v-for="entry in shownTemplates" :key="entry.id" class="label-template">
               <button class="text-button" :title="`Modelo da equipa: ${entry.templateName}`" @click="add(blank(entry))">+ {{ entry.templateName }}</button>
               <button type="button" class="del" :aria-label="`Apagar modelo ${entry.templateName}`" @click="removeTemplate(entry)">×</button>
             </span>
@@ -210,8 +227,9 @@ async function print(entries) {
             <button type="button" class="text-button" @click="picked = new Set()">Limpar seleção</button>
           </template>
         </div>
-        <ul v-if="labels.length" class="label-list">
-          <li v-for="entry in labels" :key="entry.id" class="label-card" :class="{ picked: picked.has(entry.id) }">
+        <p v-if="labels.length && !shownLabels.length" class="empty-workspace">Nenhuma etiqueta corresponde à pesquisa. <button type="button" class="text-button" @click="query = ''">Limpar pesquisa</button></p>
+        <ul v-if="shownLabels.length" class="label-list">
+          <li v-for="entry in shownLabels" :key="entry.id" class="label-card" :class="{ picked: picked.has(entry.id) }">
             <!-- A miniatura também abre a etiqueta; para o teclado e leitores de ecrã é o botão do título. -->
             <div class="label-card-preview" aria-hidden="true" :style="canChange ? null : { cursor: 'default' }" @click="canChange && open(entry)">
               <div :style="{ zoom: fit(entry) }"><DrawerLabel :label="entry" :code="listSvgs[entry.id] || ''" /></div>
@@ -236,11 +254,9 @@ async function print(entries) {
               <button v-for="[layout, name] in layouts" :key="layout" type="button" class="toggle-chip" :aria-pressed="(label.layout || 'drawer') === layout" @click="label.layout = layout">{{ name }}</button>
             </div>
           </div>
-          <!-- O tamanho da letra fica ao lado do que muda; vazio acompanha a altura da etiqueta. -->
-          <div class="label-with-size">
+          <div>
             <label v-if="many">Títulos, um por linha<textarea v-model="titles" rows="4" :placeholder="label.layout === 'bin' ? 'M3x10\nM4x16\nM5x20' : 'Armário 1\nArmário 2'"></textarea></label>
             <label v-else>Título<input v-model="label.title" maxlength="40" :placeholder="label.layout === 'bin' ? 'M3x10' : 'Armário 1'" autocomplete="off"></label>
-            <label>Letra (pt)<input v-model.number="label.titleSize" type="number" min="4" max="72" step="0.5" placeholder="Auto" aria-label="Letra do título (pt)"></label>
           </div>
           <div v-if="label.id == null" class="toggle-chips">
             <button type="button" class="toggle-chip" :aria-pressed="many" @click="toggleMany">Várias de uma vez</button>
@@ -256,7 +272,6 @@ async function print(entries) {
           <div>
             <div class="label-fields-head">
               <p class="editor-label">Campos</p>
-              <label>Letra (pt)<input v-model.number="label.fieldSize" type="number" min="4" max="72" step="0.5" placeholder="Auto" aria-label="Letra dos campos (pt)"></label>
             </div>
             <div v-for="(field, index) in label.fields" :key="index" class="drawer-label-field">
               <input v-model="field.name" :aria-label="`Nome do campo ${index + 1}`" placeholder="Posição" maxlength="20">
@@ -277,34 +292,41 @@ async function print(entries) {
           <label v-if="label.code">Localização ligada<input v-model="label.location" list="drawer-label-locations" placeholder="Nenhuma: o código leva o texto" autocomplete="off"></label>
           <p v-if="label.code && !label.location && boxOf(label)" class="hint">Sem localização, o código abre a do componente: {{ boxOf(label) }}.</p>
           <datalist id="drawer-label-locations"><option v-for="name in locationNames" :key="name" :value="name" /></datalist>
-          <div>
-            <p id="drawer-label-icon" class="editor-label">Ícone</p>
-            <div class="label-icon-groups" role="group" aria-labelledby="drawer-label-icon">
-              <button type="button" class="toggle-chip" :aria-pressed="!label.icon" @click="label.icon = ''">Sem ícone</button>
-              <div v-for="[group, icons] in ICON_GROUPS" :key="group">
-                <p class="label-icon-group">{{ group }}</p>
-                <div class="label-icons">
-                  <button v-for="[key, name, svg] in icons" :key="key" type="button" class="label-icon" :aria-pressed="label.icon === key" :aria-label="name" :title="name" @click="label.icon = key" v-html="svg"></button>
-                </div>
-              </div>
-            </div>
-          </div>
           <div class="drawer-label-size">
             <label>Largura (mm)<input v-model.number="label.width" type="number" min="20" max="150" required></label>
             <label>Altura (mm)<input v-model.number="label.height" type="number" min="10" max="100" required></label>
           </div>
-          <div>
-            <p id="drawer-label-border" class="editor-label">Borda</p>
-            <div class="toggle-chips" role="group" aria-labelledby="drawer-label-border">
-              <button type="button" class="toggle-chip" :aria-pressed="label.borderWidth == null" @click="toggleBorder(false)">Sem borda</button>
-              <button type="button" class="toggle-chip" :aria-pressed="label.borderWidth != null" @click="toggleBorder(true)">Borda preta</button>
+          <details class="label-advanced">
+            <summary>Estilo avançado</summary>
+            <div class="drawer-label-size">
+              <label>Letra (pt)<input v-model.number="label.titleSize" type="number" min="4" max="72" step="0.5" placeholder="Auto" aria-label="Letra do título (pt)"></label>
+              <label>Letra (pt)<input v-model.number="label.fieldSize" type="number" min="4" max="72" step="0.5" placeholder="Auto" aria-label="Letra dos campos (pt)"></label>
             </div>
-            <div v-if="label.borderWidth != null" class="drawer-label-border">
-              <label>Espessura (mm)<input v-model.number="label.borderWidth" type="number" min="0.1" max="5" step="0.1" required></label>
-              <label>Cantos (mm)<input v-model.number="label.borderRadius" type="number" min="0" max="20" step="0.5" placeholder="0"></label>
-              <label>Margem (mm)<input v-model.number="label.borderInset" type="number" min="0" max="10" step="0.5" placeholder="0" title="Distância da borda ao corte da etiqueta"></label>
+            <div>
+              <p id="drawer-label-icon" class="editor-label">Ícone</p>
+              <div class="label-icon-groups" role="group" aria-labelledby="drawer-label-icon">
+                <button type="button" class="toggle-chip" :aria-pressed="!label.icon" @click="label.icon = ''">Sem ícone</button>
+                <div v-for="[group, icons] in ICON_GROUPS" :key="group">
+                  <p class="label-icon-group">{{ group }}</p>
+                  <div class="label-icons">
+                    <button v-for="[key, name, svg] in icons" :key="key" type="button" class="label-icon" :aria-pressed="label.icon === key" :aria-label="name" :title="name" @click="label.icon = key" v-html="svg"></button>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+            <div>
+              <p id="drawer-label-border" class="editor-label">Borda</p>
+              <div class="toggle-chips" role="group" aria-labelledby="drawer-label-border">
+                <button type="button" class="toggle-chip" :aria-pressed="label.borderWidth == null" @click="toggleBorder(false)">Sem borda</button>
+                <button type="button" class="toggle-chip" :aria-pressed="label.borderWidth != null" @click="toggleBorder(true)">Borda preta</button>
+              </div>
+              <div v-if="label.borderWidth != null" class="drawer-label-border">
+                <label>Espessura (mm)<input v-model.number="label.borderWidth" type="number" min="0.1" max="5" step="0.1" required></label>
+                <label>Cantos (mm)<input v-model.number="label.borderRadius" type="number" min="0" max="20" step="0.5" placeholder="0"></label>
+                <label>Margem (mm)<input v-model.number="label.borderInset" type="number" min="0" max="10" step="0.5" placeholder="0" title="Distância da borda ao corte da etiqueta"></label>
+              </div>
+            </div>
+          </details>
         </form>
         <div class="drawer-label-side">
           <p class="editor-label">Pré-visualização</p>
@@ -336,3 +358,8 @@ async function print(entries) {
     </div></Teleport>
   </WorkspacePage>
 </template>
+
+<style scoped>
+.label-advanced summary { cursor: pointer; padding: .75rem 0; font-weight: 600; }
+.label-advanced[open] > div { margin-top: 1rem; }
+</style>

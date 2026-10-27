@@ -1,39 +1,34 @@
-/* linguagem visual inspirada em harness.design: fundo escuro, brilho azul-marinho, grelha subtil */
+/* Shared LART workspace surfaces; circuit colors carry their engineering meaning. */
 :root[data-mantine-color-scheme='dark'] {
-  --mantine-color-body: #0f1117;
+  --mantine-color-body: #20211f;
+  --mantine-color-text: #f4f2e9;
+  --mantine-color-dimmed: #a7a99e;
+  --mantine-color-anchor: #ffd400;
 }
-body {
-  background: #0f1117;
-}
-.bg {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background: radial-gradient(ellipse 70% 50% at 50% -10%, #0a1949 0%, transparent 70%);
-}
-.bg::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 20%, #000 20%, transparent 75%);
-}
-.glass {
-  padding: 7px;
-  border-radius: 15px;
-  background: linear-gradient(180deg, #ffffff1a, #ffffff06 40%, #ffffff0a);
-  box-shadow: 0 0 0 1px #ffffff14 inset, 0 0 0 1px #0009, 0 12px 30px #0a1948;
-}
-.grad {
-  background: linear-gradient(90deg, var(--mantine-color-teal-5), var(--mantine-color-blue-5));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
+html { color-scheme: dark; scrollbar-color: #707367 #20211f; }
+body { background: #20211f; }
+* { box-sizing: border-box; }
+::selection { background: #ffd400; color: #20211f; }
+:focus-visible { outline: 2px solid #ffd400; outline-offset: 3px; }
+.bg { display: none; }
+.glass { border: 1px solid #454740; border-radius: 12px; overflow: hidden; }
+.grad { color: #ffd400; }
+.mantine-Paper-root { --paper-border-color: #454740; }
+.mantine-Button-root, .mantine-Input-input, .mantine-NativeSelect-input { min-height: 44px; }
+.mantine-Input-input { background: #181914; border-color: #454740; }
+.mantine-Input-input::placeholder { color: #a7a99e; opacity: 1; }
+.mantine-Accordion-control, .mantine-UnstyledButton-root { min-height: 44px; }
+.mantine-Switch-body { align-items: center; min-height: 44px; }
+.mantine-Anchor-root { text-underline-offset: 3px; }
+header { background: #181914; border-bottom: 1px solid #454740; }
+header nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; }
+header nav a[aria-current='page'] { color: #ffd400; text-decoration: underline; }
+main { min-width: 0; }
+.issue-details { border-block: 1px solid #454740; padding: 8px 0; }
+.issue-details summary { cursor: pointer; min-height: 44px; padding: 12px 4px; color: #f4f2e9; font-weight: 600; }
+@media (max-width: 640px) { .mantine-NativeSelect-root { max-width: 100%; } }
 .drop[data-over='true'] {
-  outline: 2px dashed var(--mantine-color-blue-5);
+  outline: 2px dashed #ffd400;
   outline-offset: -6px;
 }
 .viewer {
@@ -47,7 +42,7 @@ body {
 /* sem scroll dentro da caixa: o desenho cabe na largura e cresce para baixo (scroll só da página) */
 .diagram {
   overflow-x: auto;
-  background: #14161d;
+  background: #181914;
   border-radius: 10px;
 }
 .diagram svg {
@@ -63,25 +58,25 @@ body {
   opacity: 1;
 }
 .bus2d {
-  font: 700 9px Inter, sans-serif;
+  font: 700 9px system-ui, sans-serif;
 }
 .box2d {
-  fill: #1f2230;
+  fill: #292a27;
   stroke: #ffffff26;
 }
 .box2d-head {
-  fill: #272a37;
+  fill: #34362f;
 }
 .box2d-row {
   stroke: #ffffff0f;
 }
 .pin2d-dot {
-  stroke: #14161d;
+  stroke: #181914;
   stroke-width: 1.5;
   pointer-events: none;
 }
 .box2d-focus {
-  stroke: #74c0fc;
+  stroke: #ffd400;
   stroke-width: 2;
 }
 .box2d-missing {
@@ -90,12 +85,12 @@ body {
   stroke-dasharray: 6 4;
 }
 .box2d-title {
-  fill: #74c0fc;
-  font: 600 13px Inter, sans-serif;
+  fill: #ffd400;
+  font: 600 13px system-ui, sans-serif;
   cursor: pointer;
 }
 .box2d-sub {
-  fill: #868e96;
+  fill: #a7a99e;
   font: 11px monospace;
 }
 .pin2d {
@@ -103,8 +98,8 @@ body {
   font: 600 11px monospace;
 }
 .pin2d-label {
-  fill: #adb5bd;
-  font: 11px Inter, sans-serif;
+  fill: #bfc1b4;
+  font: 11px system-ui, sans-serif;
 }
 .board2d {
   height: min(72vh, 760px);
@@ -133,14 +128,14 @@ body {
 }
 .seg2d-label {
   fill: #c1c2c5;
-  font-family: Inter, sans-serif;
+  font-family: system-ui, sans-serif;
 }
 .seg2d-count {
   fill: #6a6e76;
 }
 .node2d-label {
   fill: #e9ecef;
-  font-family: Inter, sans-serif;
+  font-family: system-ui, sans-serif;
   font-weight: 600;
   pointer-events: none;
 }
@@ -182,19 +177,19 @@ body {
 }
 .face2d-title {
   fill: #e9ecef;
-  font: 600 12px Inter, sans-serif;
+  font: 600 12px system-ui, sans-serif;
   cursor: pointer;
 }
 .face2d-title,
 .face2d-sub {
   paint-order: stroke; /* contorno escuro: o título lê-se por cima de outros nomes */
-  stroke: #14161d;
+  stroke: #181914;
   stroke-width: 4px;
   stroke-linejoin: round;
 }
 .face2d-sub {
-  fill: #868e96;
-  font: 11px Inter, sans-serif;
+  fill: #a7a99e;
+  font: 11px system-ui, sans-serif;
 }
 .face2d-warn {
   fill: #ff8787;
@@ -205,7 +200,7 @@ body {
   stroke-dasharray: 3 2;
 }
 .cav2d text {
-  font: 600 11px Inter, sans-serif;
+  font: 600 11px system-ui, sans-serif;
   pointer-events: none;
 }
 .cav2d-on {

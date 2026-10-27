@@ -91,3 +91,15 @@ describe('Apps Script adapter', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 })
+
+it('distinguishes a cached snapshot from a fresh server load for sync feedback', async () => {
+  const data = { categories: [], items: [] }
+  localStorage.setItem('stock.data.v1', JSON.stringify(data))
+  fetch.mockRejectedValueOnce(new TypeError('offline'))
+  const api = createApi()
+  await api.load()
+  expect(api.cached).toBe(true)
+  fetch.mockResolvedValue({ ok: true, json: async () => data })
+  await api.load()
+  expect(api.cached).toBe(false)
+})

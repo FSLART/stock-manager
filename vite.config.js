@@ -9,6 +9,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://127.0.0.1:5000',
+      '/static': 'http://127.0.0.1:5000',
+      '/harness': 'http://127.0.0.1:5174',
       '/uploads': 'http://127.0.0.1:5000',
       '/simulations': 'http://127.0.0.1:5000',
     },

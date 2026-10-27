@@ -46,7 +46,7 @@ const routes = {
 
 export function createApi({ onUnauthorized } = {}) {
   const appsScript = Boolean(globalThis.google?.script?.run)
-  let syncing = false
+  let syncing = false, cached = false
 
   function callGoogle(action, payload) {
     return new Promise((resolve, reject) => {
@@ -112,12 +112,14 @@ export function createApi({ onUnauthorized } = {}) {
   async function load() {
     try {
       const data = await request('data')
+      cached = false
       writeStored(DATA_KEY, data)
       return data
     } catch (error) {
-      const cached = readStored(DATA_KEY, null)
-      if (!cached) throw error
-      return cached
+      const snapshot = readStored(DATA_KEY, null)
+      if (!snapshot) throw error
+      cached = true
+      return snapshot
     }
   }
 
@@ -178,7 +180,7 @@ export function createApi({ onUnauthorized } = {}) {
   }
 
   // direct não usa a fila offline: login, histórico e pessoas precisam do servidor.
-  return { request, direct, load, syncPending, uploadImage, uploadStep, importInventory: items => direct('importItems', { items }) }
+  return { get cached() { return cached }, request, direct, load, syncPending, uploadImage, uploadStep, importInventory: items => direct('importItems', { items }) }
 }
 
 // Uma foto de telemóvel (3–12 MB) fica com 800 px no lado maior, sem margens: ~100 KB e cabe no limite de 5 MB.

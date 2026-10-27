@@ -49,7 +49,7 @@ defineExpose({ open })
         <span class="login-mark login-mark-notion"><svg viewBox="0 0 40 40"><rect x="4" y="4" width="32" height="32" rx="7" fill="#fff" stroke="#111" stroke-width="2.5"/><path d="M13 11.5h5.2l8.3 12.2V15l-2-1.1v-2.4h6.8v2.4l-2 1.1v14h-3.8L16.6 16.6v9.6l2 1.1v2.4h-6.8v-2.4l2-1.1V14l-1.8-1z" fill="#111"/></svg></span>
       </div>
       <h2 id="login-title">Entra com o Notion</h2>
-      <p class="login-lead">Para tirar ou repor componentes, usa a tua conta Notion da LART. Ver o stock continua livre para todos.</p>
+      <p class="login-lead">Usa a tua conta Notion da LART para aceder às ferramentas da equipa. As ações disponíveis dependem do teu departamento e cargo. A consulta continua livre.</p>
       <!-- PIN:
       <label>Pessoa
         <select v-model="personId" required>
@@ -61,8 +61,8 @@ defineExpose({ open })
       <p v-if="error" class="hint error" role="alert">{{ error }}</p>
       -->
       <ul class="login-facts">
-        <li>Cada movimento fica com o teu nome no histórico.</li>
-        <li>O Stocklart só guarda o teu nome e a tua foto do Notion.</li>
+        <li>As alterações permitidas ficam identificadas no histórico.</li>
+        <li>O teu nome, foto, cargo e departamento identificam a tua conta.</li>
         <li>A sessão fica aberta neste browser até carregares em Sair.</li>
       </ul>
       <p v-if="!auth.notion" class="hint error" role="alert">O login com Notion não está configurado no servidor.</p>

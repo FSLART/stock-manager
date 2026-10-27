@@ -1,39 +1,22 @@
 <script setup>
+import { computed } from 'vue'
 import { useNavigation } from '../composables/useNavigation.js'
-const router = useNavigation()
 import AppNavigation from './AppNavigation.vue'
-
-defineProps({
-  active: {
-    type: String,
-    required: true
-  },
-  eyebrow: {
-    type: String,
-    required: true
-  },
-  title: {
-    type: String,
-    required: true
-  },
-  description: {
-    type: String,
-    required: true
-  }
-})
+const router = useNavigation()
+const props = defineProps({ active: { type: String, required: true }, eyebrow: String, title: { type: String, required: true }, description: { type: String, required: true } })
+const inventoryPage = computed(() => ['locations', 'labels', 'movements'].includes(props.active))
 </script>
 
 <template>
   <div class="workspace-page">
     <AppNavigation :active="active" />
-    <main class="workspace-content">
+    <main id="main-content" class="workspace-content" tabindex="-1">
       <header class="workspace-header">
         <div>
-          <p class="eyebrow">{{ eyebrow }}</p>
+          <nav class="page-breadcrumbs" aria-label="Localização na aplicação"><a href="#/" @click="router.follow($event, '/')">Início</a><template v-if="inventoryPage"><span aria-hidden="true">/</span><a href="#/stock" @click="router.follow($event, '/stock')">Inventário</a></template><span aria-hidden="true">/</span><span aria-current="page">{{ title }}</span></nav>
           <h1>{{ title }}</h1>
           <p class="subtitle">{{ description }}</p>
         </div>
-        <button class="home-button" @click="router.push('/stock')">← Inventário</button>
       </header>
       <slot />
     </main>

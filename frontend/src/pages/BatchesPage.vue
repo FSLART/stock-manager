@@ -39,9 +39,8 @@ watch(() => auth.user?.id, load, { immediate: true })
 <template>
   <WorkspacePage
     active="batches"
-    eyebrow="Compras · encomendas"
-    title="Batches"
-    description="Tudo o que foi comprado ou mandado produzir, lido dos ficheiros em data/compras no servidor. Pesquisa por P/N, descrição, fornecedor ou data."
+    title="Compras e encomendas"
+    description="Consulta material comprado e encomendado a partir dos documentos da equipa. Pesquisa por número de peça, descrição, fornecedor ou data."
   >
     <section class="workspace-card batches-page">
       <div class="card-heading">
@@ -58,16 +57,16 @@ watch(() => auth.user?.id, load, { immediate: true })
           {{ name }}<span class="chip-count">{{ rows.filter(row => row.kind === name).length }}</span>
         </button>
       </div>
-      <p v-if="error" class="upload-error" role="alert">{{ error }} <button v-if="!auth.user" class="text-button" type="button" @click="auth.login()">Entrar</button></p>
+      <p v-if="error" class="upload-error" role="alert">{{ error }} <button type="button" class="text-button" @click="load">Tentar novamente</button> <button v-if="!auth.user" class="text-button" type="button" @click="auth.login()">Entrar</button></p>
       <div v-else-if="loading" class="empty-workspace">A ler os ficheiros de compras…</div>
-      <div v-else-if="!shown.length" class="empty-workspace">{{ rows.length ? 'Nada corresponde à pesquisa.' : 'Ainda não há ficheiros em data/compras.' }}</div>
+      <div v-else-if="!shown.length" class="empty-workspace">{{ rows.length ? 'Nada corresponde à pesquisa.' : 'Ainda não há compras ou encomendas disponíveis. Os registos aparecem após a equipa disponibilizar os documentos de compra.' }}</div>
       <div v-else class="list batches-list">
         <table class="stock-table">
           <thead><tr>
             <th v-for="[key, label] in columns" :key="key" scope="col" :aria-sort="sort.key === key ? (sort.dir > 0 ? 'ascending' : 'descending') : undefined">
               <button type="button" @click="sortBy(key)">{{ label }}<span aria-hidden="true">{{ sort.key === key ? (sort.dir > 0 ? '↑' : '↓') : '↕' }}</span></button>
             </th>
-            <th scope="col">Preço</th><th scope="col">Ficheiro</th>
+            <th scope="col">Preço unitário / total</th><th scope="col">Documentos de origem</th>
           </tr></thead>
           <tbody>
             <tr v-for="(row, index) in shown.slice(0, limit)" :key="index">
@@ -76,10 +75,10 @@ watch(() => auth.user?.id, load, { immediate: true })
               <td class="batch-desc">{{ row.description || '—' }}<small v-if="row.manufacturer || row.notes || row.system">{{ [row.manufacturer, row.system, row.notes].filter(Boolean).join(' · ') }}</small></td>
               <td>{{ row.supplier || '—' }}<small>{{ [row.kind, row.batch, row.person].filter(Boolean).join(' · ') }}</small></td>
               <td>{{ row.qty ?? '—' }}</td>
-              <td class="price-cell">{{ row.price != null ? euros(row.price) : row.total != null ? `${euros(row.total)} total` : '—' }}</td>
+              <td class="price-cell">{{ row.price != null ? `${euros(row.price)} / un.` : row.total != null ? `${euros(row.total)} total` : '—' }}</td>
               <td class="batch-files">
                 <a v-if="row.doc" :href="fileUrl(row.doc)" target="_blank" rel="noopener">PDF</a>
-                <a v-if="row.link" :href="row.link" target="_blank" rel="noopener">Link</a>
+                <a v-if="row.link" :href="row.link" target="_blank" rel="noopener">Fornecedor</a>
                 <a v-if="row.kind !== 'Documento'" :href="fileUrl(row.file)" :title="`${row.file}${row.sheet ? ` › ${row.sheet}` : ''}`">Folha</a>
               </td>
             </tr>

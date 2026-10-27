@@ -11,7 +11,7 @@ const Viewer3D = lazy(() => import('./Viewer3D.jsx')) // three.js só carrega na
 
 // os Excels vivem no próprio site: para atualizar basta substituir o ficheiro do harness em data/t26/
 const DATA = `${import.meta.env.BASE_URL}data/t26/`
-const NAV = [['', 'Harnesses'], ['connectors', 'Conectores'], ['wires', 'Fios'], ['diagram', '2D'], ['3d', '3D'], ['pick', 'Coordenadas'], ['bom', 'BOM'], ['issues', 'Issues'], ['validate', 'Validar']]
+const NAV = [['', 'Harnesses'], ['connectors', 'Conectores'], ['wires', 'Fios'], ['diagram', '2D'], ['3d', '3D'], ['pick', 'Coordenadas'], ['bom', 'BOM'], ['issues', 'Problemas'], ['validate', 'Validar']]
 const SECTION = { c: 'connectors', t: 'wires', h: '', formboard: 'diagram' }
 
 function useRoute() {
@@ -74,7 +74,7 @@ export default function App() {
 
   const active = SECTION[page] ?? page
   let body
-  if (error) body = <Alert color="red" mt="xl" title="Erro">{error}</Alert>
+  if (error) body = <Alert color="red" mt="xl" title="Não foi possível carregar">{error} <Anchor component="button" onClick={() => location.reload()}>Tentar novamente</Anchor></Alert>
   else if (!data && page !== 'validate') body = <Group mt="xl" gap="sm"><Loader size="sm" /><Text c="dimmed">A carregar os harnesses… {progress}</Text></Group>
   else if (page === 'validate') body = <Validate data={data} code={a} />
   else if (page === 'h') body = <HarnessPage data={data} code={a} />
@@ -94,11 +94,11 @@ export default function App() {
       <Container fluid px={{ base: 'md', sm: 'xl' }} py="md" component="header">
         <Group justify="space-between" gap="sm">
           <Anchor href={href('')} underline="never" c="white" fw={600}>
-            LART <Text span c="dimmed">harness</Text>
+            LART <Text span c="dimmed">Cablagem</Text>
           </Anchor>
           <Group gap="md" component="nav" aria-label="Secções" wrap="wrap">
             {NAV.filter(([id]) => id !== 'pick' || signedIn).map(([id, label]) => (
-              <Anchor key={id} href={href(id)} size="sm" underline="never" c={active === id ? 'white' : 'dimmed'} fw={active === id ? 600 : 400}
+              <Anchor key={id} href={href(id)} size="sm" underline="never" c={active === id ? 'lart.5' : 'dimmed'} fw={active === id ? 600 : 400}
                 aria-current={active === id ? 'page' : undefined}>
                 {label}
               </Anchor>
@@ -106,7 +106,7 @@ export default function App() {
           </Group>
         </Group>
       </Container>
-      <Container fluid px={{ base: 'md', sm: 'xl' }} component="main" pb="xl">{body}</Container>
+      <Container fluid px={{ base: 'md', sm: 'xl' }} component="main" pb="xl">{page && <Anchor href={href('')} mt="md" display="inline-block" size="sm">← Cablagem</Anchor>}{body}</Container>
     </>
   )
 }

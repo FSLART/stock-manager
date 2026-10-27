@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Accordion, Alert, Anchor, Badge, Box, Button, Group, HoverCard, NativeSelect, Paper, SimpleGrid, Stack, Switch, Table, Text, TextInput, Title } from '@mantine/core'
 import { boardOf, pinKey, qKey, splitQ, txt } from './lib/harness.js'
 import { SEVERITIES } from './lib/validate.js'
@@ -121,9 +121,7 @@ function Findings({ list }) {
 }
 
 export const Card = ({ children, ...p }) => (
-  <div className="glass">
-    <Paper p="lg" radius={10} bg="dark.8" {...p}>{children}</Paper>
-  </div>
+  <Paper p="lg" radius="md" bg="dark.7" withBorder {...p}>{children}</Paper>
 )
 export const Stats = ({ items }) => (
   <Card>
@@ -155,7 +153,7 @@ export function CarOverview({ data }) {
   const needle = q.trim().toLowerCase()
   const hit = (...vals) => vals.some((v) => txt(v).toLowerCase().includes(needle))
   const conns = needle ? data.list.flatMap((h) => [...h.H.conns.values()].filter((c) => hit(c.ref, c.device, c.housing_pn)).map((c) => ({ h, c }))).slice(0, 24) : []
-  const wires = needle ? data.list.flatMap((h) => h.model.sheets.Wires.filter((w) => hit(w.wire_id, w.net, w.from_ref, w.to_ref, w.description)).map((w) => ({ code: h.code, w }))).slice(0, 30) : []
+  const wires = needle ? data.list.flatMap((h) => h.model.sheets.Wires.filter((w) => hit(w.wire_id, w.net, w.from_ref, w.to_ref, w.description)).map((w) => ({ code: h.code, w }))) : []
   const order = { car: 0, offboard: 1, test: 2 }
   const cards = [...data.list.map((h) => ({ ...h.meta, h })), ...data.missing].sort(
     (a, b) => order[a.category] - order[b.category] || (a.code === data.index.hub ? -1 : b.code === data.index.hub ? 1 : 0) || (b.wires || 0) - (a.wires || 0))
@@ -163,28 +161,13 @@ export function CarOverview({ data }) {
   return (
     <Stack gap="xl" mt="xl">
       <div>
-        <Title order={1} fz={{ base: 32, sm: 48 }} lh={1.15}>
-          Cada fio do <span className="grad">{data.index.car}</span>, rastreável.
-        </Title>
+        <Title order={1} fz={{ base: 28, sm: 36 }} lh={1.15}>Cablagem · {data.index.car}</Title>
         <Text c="dimmed" mt="sm">Todos os harnesses da pasta Harness · gerado em {data.index.generated}</Text>
       </div>
-      <Stats items={[['harnesses', data.list.length + data.missing.length], ['fios', all('Wires')], ['fichas', all('Connectors')],
-        ['pinos', all('Pins')], ['acoplamentos', data.index.mates.length]]} />
-
-      {data.carFindings.some((f) => f.sev !== 'info') && (
-        <Card>
-          <Group justify="space-between" mb="sm">
-            <Text fw={500}>Entre harnesses</Text>
-            <Anchor href={href('validate')} size="sm">ver validação →</Anchor>
-          </Group>
-          <Findings list={data.carFindings.filter((f) => f.sev !== 'info').slice(0, 8)} />
-        </Card>
-      )}
-
       <Stack gap="sm">
         <TextInput size="md" placeholder="Procurar em todos os harnesses: conector, fio, net ou P/N (ex.: ACCU J1, SDC, CAN)" aria-label="Procurar"
           value={q} onChange={(e) => setQ(e.currentTarget.value)} />
-        {needle && !conns.length && !wires.length && <Empty>Nada encontrado.</Empty>}
+        {needle && !conns.length && !wires.length && <Empty>Sem resultados. Tenta a referência de um conector, fio, sinal ou P/N.</Empty>}
         {conns.length > 0 && (
           <Group gap="xs">{conns.map(({ h, c }) => (
             <Badge key={h.code + c.ref} component="a" href={href('c', h.code, txt(c.ref))} variant="light" size="lg" style={{ cursor: 'pointer', textTransform: 'none' }}>
@@ -192,7 +175,7 @@ export function CarOverview({ data }) {
             </Badge>))}
           </Group>
         )}
-        {wires.length > 0 && <WireTable rows={wires} data={data} />}
+        {wires.length > 0 && <WireTable rows={wires} data={data} scopeKey={q} />}
       </Stack>
 
       <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }}>
@@ -210,7 +193,7 @@ export function CarOverview({ data }) {
               </Group>
               {h ? (
                 <>
-                  <Text size="sm" c="dimmed" mb="xs">{m.wires} fios · {m.connectors} conectores · {h.model.sheets.Issues.filter(isOpen).length} issues · {completeness(h, data.catalog).score}% completo</Text>
+                  <Text size="sm" c="dimmed" mb="xs">{m.wires} fios · {m.connectors} conectores · {h.model.sheets.Issues.filter(isOpen).length} problemas · {completeness(h, data.catalog).score}% completo</Text>
                   {m.wires ? <SevBadges findings={h.findings} size="sm" /> : <Badge color="gray" variant="light" size="sm">Excel ainda sem ligações</Badge>}
                 </>
               ) : (
@@ -220,6 +203,17 @@ export function CarOverview({ data }) {
           )
         })}
       </SimpleGrid>
+      <Stats items={[['harnesses', data.list.length + data.missing.length], ['fios', all('Wires')], ['fichas', all('Connectors')],
+        ['pinos', all('Pins')], ['acoplamentos', data.index.mates.length]]} />
+      {data.carFindings.some((f) => f.sev !== 'info') && (
+        <details className="issue-details">
+          <summary>Problemas entre harnesses · {SEVERITIES.filter((sev) => sev !== 'info' && count(data.carFindings, sev)).map((sev) => `${count(data.carFindings, sev)} ${SEV[sev].label}`).join(' · ')}</summary>
+          <Stack gap="md" mt="sm">
+            <Findings list={data.carFindings.filter((f) => f.sev !== 'info')} />
+            <Anchor href={href('validate')} size="sm">Ver validação e origem dos problemas →</Anchor>
+          </Stack>
+        </details>
+      )}
       {data.boards?.folder && <Anchor href={data.boards.folder} target="_blank" rel="noopener noreferrer" size="sm">Projetos das placas no Altium 365 ↗</Anchor>}
     </Stack>
   )
@@ -246,11 +240,11 @@ export function HarnessPage({ data, code }) {
       {!h ? <Alert color="gray" title="Sem Excel">Esta pasta ainda não tem um Excel de pinouts.</Alert> : (
         <>
           <Stats items={[['fios', h.model.sheets.Wires.length], ['fichas', h.model.sheets.Connectors.length],
-            ['pinos', h.model.sheets.Pins.length], ['issues abertas', h.model.sheets.Issues.filter(isOpen).length]]} />
+            ['pinos', h.model.sheets.Pins.length], ['problemas abertos', h.model.sheets.Issues.filter(isOpen).length]]} />
           <Group gap="lg">
             <Anchor href={href('connectors', code)}>Conectores →</Anchor>
             <Anchor href={href('wires', code)}>Fios →</Anchor>
-            <Anchor href={href('issues', code)}>Issues →</Anchor>
+            <Anchor href={href('issues', code)}>Problemas →</Anchor>
             <Anchor href={href('validate', code)}>Validação →</Anchor>
             <Anchor href={href('diagram', code)}>Diagrama 2D →</Anchor>
             <Anchor href={href('formboard', code)}>Formboard →</Anchor>
@@ -325,7 +319,7 @@ function HarnessLinks({ data, h }) {
         })}
       </Accordion>
       <Title order={3} mt="md">Todos os fios · {wires.length}</Title>
-      {wires.length ? <WireTable rows={wires} data={data} /> : <Empty>Este Excel ainda não tem ligações.</Empty>}
+      {wires.length ? <WireTable rows={wires} data={data} scopeKey={h.code} /> : <Empty>Este Excel ainda não tem ligações.</Empty>}
     </Stack>
   )
 }
@@ -510,15 +504,18 @@ export function Connector({ data, code, refName }) {
 }
 
 // ---------------------------------------------------------------- fios
-function WireTable({ rows, data }) {
+function WireTable({ rows, data, scopeKey = '' }) {
+  const [limit, setLimit] = useState(100)
+  useEffect(() => setLimit(100), [scopeKey])
   return (
+    <Stack gap="sm">
     <Table.ScrollContainer minWidth={980}>
       <Table striped highlightOnHover>
         <Table.Thead>
-          <Table.Tr><Table.Th>Harness</Table.Th><Table.Th>Fio</Table.Th><Table.Th>Net</Table.Th><Table.Th>De</Table.Th><Table.Th>Para</Table.Th><Table.Th>Cor</Table.Th><Table.Th>mm²</Table.Th><Table.Th>mm</Table.Th><Table.Th>Issue</Table.Th></Table.Tr>
+          <Table.Tr><Table.Th>Harness</Table.Th><Table.Th>Fio</Table.Th><Table.Th>Net</Table.Th><Table.Th>De</Table.Th><Table.Th>Para</Table.Th><Table.Th>Cor</Table.Th><Table.Th>mm²</Table.Th><Table.Th>mm</Table.Th><Table.Th>Problema</Table.Th></Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {rows.map(({ code, w }) => (
+          {rows.slice(0, limit).map(({ code, w }) => (
             <Table.Tr key={code + (txt(w.wire_id) || w._row)}>
               <Table.Td><HCode code={code} /></Table.Td>
               <Table.Td><WireLink code={code} id={txt(w.wire_id)} /> <Hv on={up(w.hv) === 'Y'} /></Table.Td>
@@ -534,6 +531,11 @@ function WireTable({ rows, data }) {
         </Table.Tbody>
       </Table>
     </Table.ScrollContainer>
+    <Group justify="space-between" gap="sm">
+      <Text size="sm" c="dimmed" role="status">A mostrar {Math.min(limit, rows.length)} de {rows.length} fios.</Text>
+      {limit < rows.length && <Button variant="default" onClick={() => setLimit((n) => n + 100)}>Mostrar mais {Math.min(100, rows.length - limit)} fios</Button>}
+    </Group>
+    </Stack>
   )
 }
 
@@ -552,10 +554,11 @@ export function Wires({ data, code }) {
         <HarnessSelect data={data} code={code} page="wires" />
         <TextInput placeholder="Filtrar (fio, net, conector, cor)" aria-label="Filtrar fios" value={q} onChange={(e) => setQ(e.currentTarget.value)} style={{ flex: '1 1 220px' }} />
         <Switch label="Só HV" checked={hvOnly} onChange={(e) => setHvOnly(e.currentTarget.checked)} />
-        <Switch label="Só com issue" checked={issueOnly} onChange={(e) => setIssueOnly(e.currentTarget.checked)} />
+        <Switch label="Só com problemas" checked={issueOnly} onChange={(e) => setIssueOnly(e.currentTarget.checked)} />
       </Group>
-      <WireTable rows={rows.slice(0, 400)} data={data} />
-      <Text size="xs" c="dimmed">{rows.length} de {all.length} fios{rows.length > 400 ? ' (a mostrar 400 — filtra para ver os outros)' : ''} · clica num fio para ver o circuito completo.</Text>
+      {rows.length ? <WireTable rows={rows} data={data} scopeKey={`${code}|${q}|${hvOnly}|${issueOnly}`} />
+        : <Empty>Sem fios com estes filtros. Altera a pesquisa ou desativa os filtros.</Empty>}
+      <Text size="xs" c="dimmed">{rows.length} de {all.length} fios · clica num fio para ver o circuito completo.</Text>
     </Stack>
   )
 }
@@ -662,11 +665,11 @@ export function Issues({ data, code }) {
   const [openOnly, setOpenOnly] = useState(true)
   return (
     <Stack gap="md" mt="xl">
-      <Title order={2}>Issues</Title>
+      <Title order={2}>Problemas</Title>
       <Text size="sm" c="dimmed">Problemas encontrados nos Excels originais. A decisão vai para a coluna team_decision do Excel de cada harness.</Text>
       <Group gap="lg">
         <HarnessSelect data={data} code={code} page="issues" />
-        <Switch label="Só abertas" checked={openOnly} onChange={(e) => setOpenOnly(e.currentTarget.checked)} />
+        <Switch label="Só por resolver" checked={openOnly} onChange={(e) => setOpenOnly(e.currentTarget.checked)} />
       </Group>
       {scope(data, code).map((h) => {
         const list = h.model.sheets.Issues.filter((i) => !openOnly || isOpen(i))
