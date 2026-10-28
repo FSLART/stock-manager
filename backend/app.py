@@ -2503,10 +2503,10 @@ def movimentos():
         init_db()
         with db_connection() as connection:
             # shortcut: so os ultimos 1000 movimentos; paginar quando o historico crescer.
-            rows = connection.execute("SELECT * FROM movements ORDER BY id DESC LIMIT 1000").fetchall()
+            rows = connection.execute("SELECT movements.*, people.avatar FROM movements LEFT JOIN people ON people.id = movements.person_id ORDER BY movements.id DESC LIMIT 1000").fetchall()
             reverted = {row["reverts"] for row in connection.execute("SELECT reverts FROM movements WHERE reverts IS NOT NULL")}
         return jsonify(movements=[{
-            "id": row["id"], "ts": row["ts"], "person": row["person"], "type": row["type"], "item_id": row["item_id"],
+            "id": row["id"], "ts": row["ts"], "person": row["person"], "avatar": row["avatar"] or "", "type": row["type"], "item_id": row["item_id"],
             "cat": row["cat"], "props": json.loads(row["props"]), "delta": row["delta"],
             "before": row["before_qty"], "after": row["after_qty"], "note": row["note"], "reverted": row["id"] in reverted,
         } for row in rows])

@@ -2,6 +2,7 @@
 import { computed, inject, onMounted, ref, watch } from 'vue'
 import { componentValue, describe } from '../stockText.js'
 import WorkspacePage from '../components/WorkspacePage.vue'
+import UserAvatar from '../components/UserAvatar.vue'
 import { useInventoryContext } from '../composables/useInventoryContext.js'
 
 const api = inject('api'), auth = inject('auth'), inventory = useInventoryContext()
@@ -99,7 +100,15 @@ onMounted(reload)
           <span :class="['movement-badge', movement.type]">{{ movementLabels[movement.type] }}</span>
           <div class="movement-main">
             <strong>{{ componentValue(movement) }}</strong>
-            <span>{{ [describe(movement), movement.cat, movement.person, formatDate(movement.ts), movement.note, movement.reverted && 'revertido'].filter(Boolean).join(' · ') }}</span>
+            <span>{{ [describe(movement), movement.cat, movement.note, movement.reverted && 'revertido'].filter(Boolean).join(' · ') }}</span>
+          </div>
+          <div class="movement-person">
+            <UserAvatar :name="movement.person || '?'" :src="movement.avatar" :size="32" />
+            <span>
+              <button v-if="movement.person" type="button" :title="`Ver só os movimentos de ${movement.person}`" @click="person = movement.person">{{ movement.person }}</button>
+              <b v-else>Desconhecido</b>
+              <time :datetime="movement.ts">{{ formatDate(movement.ts) }}</time>
+            </span>
           </div>
           <div v-if="movement.type !== 'label'" class="movement-quantity">
             <b :class="movement.delta > 0 ? 'positive' : movement.delta < 0 ? 'negative' : ''">

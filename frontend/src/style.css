@@ -601,7 +601,7 @@ button:disabled {
 }
 .movement-row {
   display: grid;
-  grid-template-columns: 88px minmax(0, 1fr) auto;
+  grid-template-columns: 88px minmax(0, 1fr) minmax(150px, 220px) auto;
   gap: 14px;
   align-items: center;
   padding: 14px 16px;
@@ -610,8 +610,15 @@ button:disabled {
   background: var(--bg);
 }
 .movement-list.selecting .movement-row {
-  grid-template-columns: auto 88px minmax(0, 1fr) auto;
+  grid-template-columns: auto 88px minmax(0, 1fr) minmax(150px, 220px) auto;
 }
+/* Quem fez o movimento: foto do Notion (ou iniciais) e nome, que filtra por essa pessoa. */
+.movement-person{display:flex;align-items:center;gap:10px;min-width:0}
+.movement-person .avatar{box-shadow:0 0 0 1px var(--line)}
+.movement-person>span{display:grid;gap:1px;min-width:0}
+.movement-person button,.movement-person b{padding:0;border:0;background:none;color:var(--ink);font-size:14px;font-weight:600;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.movement-person button:hover{color:var(--accent);text-decoration:underline}
+.movement-person time{color:var(--muted);font-size:12px}
 .movement-revert-bar {
   display: flex;
   flex-wrap: wrap;
@@ -878,7 +885,7 @@ a.text-button{display:inline-flex;align-items:center;text-decoration:none}
 .file-dropzone:focus-within{outline:2px solid var(--accent);outline-offset:3px}
 @media(max-width:560px){.main-menu{display:flex;gap:6px 18px}.main-menu .menu-link{font-size:12px}.workspace-card{padding:20px}.card-heading{flex-wrap:wrap}.movement-row{flex-wrap:wrap}.home-carousel{height:420px}.carousel-copy{left:24px;right:24px}.home-content{padding-top:24px}.workspace-header h1{font-size:36px}}
 .card-icon,.file-dropzone-icon{color:var(--on-accent)}
-@media(max-width:560px){.movement-row{grid-template-columns:auto minmax(0,1fr);padding:12px}.movement-quantity{grid-column:2;text-align:left}.movement-main{overflow-wrap:anywhere}.movement-list.selecting .movement-row{grid-template-columns:auto auto minmax(0,1fr)}.movement-list.selecting .movement-quantity{grid-column:3}}
+@media(max-width:560px){.movement-row{grid-template-columns:auto minmax(0,1fr);padding:12px}.movement-person,.movement-quantity{grid-column:2;text-align:left}.movement-main{overflow-wrap:anywhere}.movement-list.selecting .movement-row{grid-template-columns:auto auto minmax(0,1fr)}.movement-list.selecting .movement-person,.movement-list.selecting .movement-quantity{grid-column:3}}
 
 /* Secondary actions share the dark theme instead of browser button defaults. */
 .text-button {
