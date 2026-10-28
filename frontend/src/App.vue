@@ -7,6 +7,7 @@ import { euros, priceEstimator } from './prices.js'
 import InventoryCsvImport from './components/InventoryCsvImport.vue'
 import StockItem from './components/StockItem.vue'
 import StockMovement from './components/StockMovement.vue'
+import TakeFromStock from './components/TakeFromStock.vue'
 import CategoryForm from './components/CategoryForm.vue'
 import PartsCatalog from './components/PartsCatalog.vue'
 import LabelScanner from './components/LabelScanner.vue'
@@ -47,7 +48,7 @@ const categories = ref([]), items = ref([]), parts = ref([]), locationImages = r
 const resultLimit = ref(100), categoryMenuOpen = ref(false)
 const syncPendingCount = ref(readStored('stock.pending.v1', []).length), syncError = ref(''), cachedData = ref(false), lastSynced = ref(readStored('stock.last-synced.v1', ''))
 const busy = ref(false), loading = ref(true), toastMessage = ref(''), toastUndo = ref(null), formError = ref('')
-const movement = ref(null), categoryForm = ref(null), partsCatalog = ref(null), labelScanner = ref(null)
+const movement = ref(null), takeDialog = ref(null), categoryForm = ref(null), partsCatalog = ref(null), labelScanner = ref(null)
 const csvImport = ref(null), csvError = ref(''), inventoryTutorial = ref(null)
 const canEdit = ref(false), categoryError = ref('')
 const queues = shallowReactive(new Map())
@@ -207,6 +208,9 @@ async function syncSelected() {
     await load()
     toast(failed.length ? `Sem sincronizar: ${failed.join('; ')}` : `${mpns.length} P/N sincronizado(s) com a Mouser/DigiKey`, failed.length > 0)
   } finally { busy.value = false }
+}
+function takeItems(payload) {
+  act('consumeItems', payload, () => { takeDialog.value.close(); selected.value = new Set() })
 }
 function setLocation(location) {
   act('setLocation', { ids: [...selected.value], location }, () => { selected.value = new Set(); locationName.value = '' })
@@ -491,7 +495,7 @@ async function refresh() {
 }
 const guarded = {
   step: guard(stepItem), deleteItem: guard(deleteItem), deleteCategory: guard(deleteCategory), openCategory: guard(openCategory), savePart: guard(savePart),
-  openMovement: guard(() => movement.value.open(current.value)), scanLabel: guard(() => labelScanner.value.open()), editItem: guard(item => movement.value.edit(item)), setLocation: guard(setLocation), syncSelected: guard(syncSelected), importCsv: guard(() => csvImport.value.open()),
+  openMovement: guard(() => movement.value.open(current.value)), openTake: guard(() => takeDialog.value.open(items.value.filter(item => selected.value.has(item.id)))), scanLabel: guard(() => labelScanner.value.open()), editItem: guard(item => movement.value.edit(item)), setLocation: guard(setLocation), syncSelected: guard(syncSelected), importCsv: guard(() => csvImport.value.open()),
 }
 onMounted(async () => {
   window.addEventListener('online', refresh)
@@ -552,6 +556,7 @@ onUnmounted(() => {
       <template v-if="electronicsEditor && categories.length">
       <button v-if="canEdit" class="text-button import-csv-button" aria-label="Importar CSV" :disabled="locked" @click="guarded.importCsv()">Importar CSV</button>
       <button class="text-button" :disabled="locked" @click="guarded.scanLabel()">Ler etiqueta</button>
+      <button class="text-button" :disabled="locked" @click="guarded.openTake()">Retirar</button>
       <button class="primary" :disabled="locked" @click="guarded.openMovement()">Adicionar</button>
       </template>
     </div>
@@ -587,6 +592,7 @@ onUnmounted(() => {
       <datalist id="stock-locations"><option v-for="location in locations" :key="location" :value="location" /></datalist>
       <button class="primary" :disabled="locked || !locationName.trim()">Mover para aqui</button>
       <button type="button" class="text-button" :disabled="locked" @click="guarded.setLocation('')">Tirar localização</button>
+      <button type="button" class="text-button" :disabled="locked" @click="guarded.openTake()">Retirar do stock</button>
       <button type="button" class="text-button" :disabled="locked || !selectedPartNumbers.length" :title="selectedPartNumbers.length ? '' : 'Nenhum selecionado tem P/N'" @click="guarded.syncSelected">Sincronizar com APIs ({{ selectedPartNumbers.length }})</button>
       <button type="button" class="text-button" @click="selected = new Set()">Limpar seleção</button>
     </form>
@@ -627,5 +633,6 @@ onUnmounted(() => {
   <PartsCatalog v-if="parts.length" ref="partsCatalog" :parts="parts" :items="items" :categories="categories" :busy="busy" :can-edit="electronicsEditor" :error="partError" @save="guarded.savePart" @clear-error="partError = ''" />
   <InventoryTutorial ref="inventoryTutorial" />
   <LabelScanner ref="labelScanner" :items="items" :parts="parts" action="Adicionar ao stock" @use="useLabel" />
+  <TakeFromStock ref="takeDialog" :items="items" :busy="busy" @submit="takeItems" />
   <div id="toast" role="status" :class="{ on: toastMessage }">{{ toastMessage }}<button v-if="toastUndo" class="toast-undo" @click="toastUndo()">Desfazer</button></div>
 </template>

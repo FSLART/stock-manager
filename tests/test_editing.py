@@ -24,6 +24,12 @@ class EditingTest(unittest.TestCase):
         for code, size in [('A', 'small'), ('A', 'large')]:
             self.client.post('/api/move', json={'cat': 'Test', 'props': {'code': code, 'size': size}, 'qty': 4, 'mode': 'in'})
 
+    def test_move_in_accepts_zero_but_out_needs_one(self):
+        self.assertEqual(self.client.post('/api/move', json={'cat': 'Test', 'props': {'code': 'B', 'size': 'small'}, 'qty': 0, 'mode': 'in'}).status_code, 200)
+        self.assertIn(0, [item['qty'] for item in self.client.get('/api/data').get_json()['items']])
+        self.assertEqual(self.client.post('/api/move', json={'cat': 'Test', 'props': {'code': 'A', 'size': 'small'}, 'qty': 0, 'mode': 'out'}).status_code, 400)
+        self.assertEqual(self.client.post('/api/move', json={'cat': 'Test', 'props': {'code': 'A', 'size': 'small'}, 'qty': -1, 'mode': 'in'}).status_code, 400)
+
     def test_consume_pcb_and_revert_mass_delete(self):
         self.assertEqual(self.client.post('/api/items/consume', json={'items': [{'id': 1, 'qty': 5}], 'note': 'Placa'}).status_code, 400)
         self.assertEqual(self.client.post('/api/items/consume', json={'items': [{'id': 1, 'qty': 3}], 'note': ' '}).status_code, 400)

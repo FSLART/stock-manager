@@ -1740,3 +1740,25 @@ input::placeholder,textarea::placeholder { color:var(--muted);opacity:1; }
 
 /* Engineering tools use the available width for diagrams and tables. */
 .tool-workspace .workspace-content{width:100%;max-width:none;padding-inline:clamp(16px,2vw,32px)}
+
+/* Retirar do stock: pesquisa em cima, lista do que sai em baixo. */
+.take-dialog{width:min(620px,94vw);max-height:92vh;overflow:auto;border:1px solid var(--line)}
+.take-results,.take-list ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.take-results{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:-6px}
+.take-results li+li{border-top:1px solid var(--line)}
+.take-results button{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto 28px;gap:12px;align-items:center;padding:10px 12px;border:0;background:var(--bg);color:var(--ink);text-align:left;cursor:pointer}
+.take-results button:hover,.take-results button:focus-visible{background:var(--line)}
+.take-results button:hover .take-add{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.take-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.take-name b{color:var(--accent);font-weight:600}
+.take-name small{color:var(--muted);font-size:12px}
+.take-meta{color:var(--muted);font-size:12px;white-space:nowrap}
+.take-add{display:grid;place-items:center;width:28px;height:28px;border:1px solid var(--line-strong);border-radius:50%;font-weight:700}
+.take-list{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px}
+.take-list h3{font:600 12px var(--body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px}
+.take-list li{display:grid;grid-template-columns:minmax(0,1fr) 84px auto 36px;gap:8px;align-items:center;padding:8px 0}
+.take-list li+li{border-top:1px solid var(--line)}
+.take-list input{width:100%;padding:8px 10px;border-radius:8px;font-size:15px}
+.take-remove{width:36px;height:36px;border:1px solid var(--line);border-radius:8px;background:none;color:var(--muted)}
+.take-remove:hover{border-color:var(--danger-text);color:var(--danger-text)}
+@media(max-width:560px){.take-list li{grid-template-columns:minmax(0,1fr) 72px 44px;}.take-list .take-name{grid-column:1/-1;white-space:normal}.take-list .toggle-chip{min-height:40px}.take-remove{width:44px;height:44px}.take-meta{display:none}.take-results button{grid-template-columns:minmax(0,1fr) 28px}}

@@ -212,7 +212,7 @@ defineExpose({ open, edit, fill, close: () => dialog.value.close() })
         <input v-model="unitPrice" type="number" min="0" step="any" :disabled="!canPrice" :placeholder="estimatedPrice?.estimated ? `≈ ${euros(estimatedPrice.price)} (estimativa)` : ''">
         <span class="hint">{{ priceHint }}</span>
       </label>
-      <label>Quantidade <input v-model.number="qty" type="number" :min="editing ? 0 : 1" step="1" required></label>
+      <label>Quantidade <input v-model.number="qty" type="number" min="0" step="1" required></label>
       <p class="hint" :class="{ error: error || syncFailed && syncNote }" role="status">{{ error || syncNote || (editing ? 'A quantidade indicada substitui o stock atual. Sem nova imagem, a existente é mantida.' : hint) }}</p>
       <div class="actions"><button type="button" class="text-button sync-part" :disabled="busy || syncing || !canPrice || !api" :title="canPrice ? '' : 'Preenche o P/N para sincronizar'" @click="syncPart">{{ syncing ? 'A sincronizar…' : 'Sincronizar com APIs' }}</button><button type="button" class="ghost" :disabled="busy" @click="dialog.close()">Cancelar</button><button class="primary" :disabled="busy || !selected">{{ editing ? 'Guardar alterações' : 'Adicionar ao stock' }}</button></div>
     </form>

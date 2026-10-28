@@ -1543,14 +1543,14 @@ def import_items():
 def mover():
     # POST /api/move processa entrada ou saida de stock enviada pelo frontend.
     data = request.get_json(silent=True) or {}
-    # A quantidade vem do JSON como texto ou numero; converte para int e exige
-    # pelo menos uma unidade antes de alterar qualquer dado.
+    # A quantidade vem do JSON como texto ou numero; converte para int. Uma entrada
+    # pode ter 0 (registar a peca sem stock); uma saida exige pelo menos uma unidade.
     try:
         qty = int(data.get("qty", 0))
     except (TypeError, ValueError):
-        qty = 0
-    if qty < 1:
-        return erro("A quantidade tem de ser 1 ou mais")
+        qty = -1
+    if qty < (1 if data.get("mode") == "out" else 0):
+        return erro("A quantidade tem de ser 1 ou mais" if data.get("mode") == "out" else "A quantidade tem de ser 0 ou mais")
 
     try:
         _, _, _, items = read_items()
@@ -1602,11 +1602,11 @@ def mover():
 
 @app.post("/api/items/consume")
 def consumir():
-    # Tira do stock as pecas de uma PCB produzida: tudo ou nada, e cada saida fica com o nome da PCB.
+    # Tira do stock uma lista de pecas (PCB produzida ou retirada manual): tudo ou nada, e cada saida fica com a nota.
     data = request.get_json(silent=True) or {}
     lines, note = data.get("items"), data.get("note")
     if not isinstance(note, str) or not note.strip() or len(note.strip()) > 255:
-        return erro("Escreve o nome da PCB")
+        return erro("Escreve para que é a retirada")
     if not isinstance(lines, list) or not lines or not all(
             isinstance(line, dict) and type(line.get("id")) is int and type(line.get("qty")) is int and line["qty"] > 0 for line in lines):
         return erro("Escolhe os componentes e as quantidades a retirar")

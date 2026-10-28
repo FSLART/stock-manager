@@ -137,7 +137,7 @@ const ACTIONS = {
 
   move({cat, props = {}, qty, mode, image = ''}) {
     qty = Number(qty);
-    if (!Number.isInteger(qty) || qty < 1) throw new Error('A quantidade tem de ser 1 ou mais');
+    if (!Number.isInteger(qty) || qty < (mode === 'out' ? 1 : 0)) throw new Error(`A quantidade tem de ser ${mode === 'out' ? 1 : 0} ou mais`);
     const cats = categories_();
     const c = cats.find(x => x.name === String(cat || '').trim());
     if (!c) throw new Error('Categoria não encontrada');
