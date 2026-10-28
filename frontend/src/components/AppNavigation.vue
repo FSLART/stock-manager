@@ -3,12 +3,15 @@ import brandLogo from '../assets/lartt-transparent.svg?inline'
 import { computed, inject, onMounted, onUnmounted, ref } from 'vue'
 import { useNavigation } from '../composables/useNavigation.js'
 import UserAvatar from './UserAvatar.vue'
+import ViewAsPicker from './ViewAsPicker.vue'
 import { componentValue } from '../stockText.js'
 const router = useNavigation()
 const auth = inject('auth', null), api = inject('api', null), movementFilter = inject('movementFilter', null)
 const props = defineProps({ active: { type: String, default: '' } })
 const menuOpen = ref(false), navOpen = ref(false), box = ref(null), chip = ref(null), navToggle = ref(null), header = ref(null), mine = ref(null), activityError = ref(false)
 const firstName = computed(() => auth?.user?.name.split(/\s+/)[0] || '')
+const previewLabel = computed(() => auth?.preview && (auth.preview.guest ? 'visitante sem sessão' : `${auth.preview.role} · ${auth.preview.department || 'sem departamento'}`))
+const changingView = ref(false)
 const leader = computed(() => Boolean(auth?.user && (auth.user.admin || ['Board', 'Department Leader'].includes(auth.user.role))))
 const groups = [
   { label: 'Recursos e oficina', links: [
@@ -58,6 +61,14 @@ onUnmounted(() => { document.removeEventListener('pointerdown', closeOutside); d
 
 <template>
   <a class="skip-link" href="#main-content" @click.prevent="header?.parentElement.querySelector('main')?.focus()">Saltar para o conteúdo</a>
+  <div v-if="auth?.preview" class="preview-banner" role="status">
+    <div class="preview-banner-row">
+      <span>A ver o site como <b>{{ previewLabel }}</b>. As permissões, também no servidor, são as desta vista.</span>
+      <button type="button" class="text-button" :aria-expanded="changingView" @click="changingView = !changingView">Mudar vista</button>
+      <button type="button" class="primary" @click="auth.viewAs(null)">Voltar a admin</button>
+    </div>
+    <ViewAsPicker v-if="changingView" />
+  </div>
   <header ref="header" class="home-nav">
     <a class="home-brand" href="#/" @click="follow($event, '/')">
       <span class="brand-mark"><img :src="brandLogo" alt="LART" /></span>
@@ -89,6 +100,7 @@ onUnmounted(() => { document.removeEventListener('pointerdown', closeOutside); d
           <div class="user-menu-stats" aria-live="polite"><template v-if="mine"><span><b>{{ mine.today }}</b> movimentos hoje</span><span><b>{{ mine.total }}</b> no histórico</span></template><span v-else>{{ activityError ? 'Histórico indisponível. Tenta novamente em Movimentos.' : 'A carregar os teus movimentos…' }}</span></div>
           <ul v-if="mine?.recent.length" class="user-menu-recent"><li v-for="movement in mine.recent" :key="movement.id"><b :class="movement.delta > 0 ? 'positive' : movement.delta < 0 ? 'negative' : ''">{{ movement.delta > 0 ? '+' : '' }}{{ movement.delta }}</b><span>{{ componentValue(movement) }} · {{ movement.cat }}</span><time :datetime="movement.ts">{{ new Intl.DateTimeFormat('pt-PT', { day: '2-digit', month: '2-digit' }).format(new Date(movement.ts)) }}</time></li></ul>
           <p v-else-if="mine" class="user-menu-empty">Ainda não tens movimentos neste histórico.</p>
+          <details v-if="auth.user.admin && auth.roles.length" class="view-as-menu"><summary>Ver o site como…</summary><ViewAsPicker /></details>
           <div class="user-menu-actions">
             <a href="#/movements" @click="follow($event, '/movements', auth.user.name)">Os meus movimentos</a>
             <a href="#/settings" class="menu-link" @click="follow($event, '/settings')">Definições</a>

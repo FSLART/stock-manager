@@ -83,3 +83,33 @@ class DepartmentPermissionsTest(unittest.TestCase):
         project = {'id': 'admin-pcb', 'name': 'Admin PCB', 'items': []}
         self.assertEqual(self.client.post('/api/pcb-projects', json={'projects': [project]}).status_code, 200)
         self.assertEqual(self.client.delete('/api/pcb-projects/admin-pcb').status_code, 200)
+
+    def test_admin_previews_the_site_with_the_permissions_of_the_view(self):
+        self.notion_login(self.client, 'notion-ana')
+        leds = {'cat': 'LEDs', 'props': {'cor': 'azul', 'tamanho (mm)': '5', 'tensão direta (V)': '3'}, 'qty': 1, 'mode': 'in'}
+        self.assertEqual(self.client.post('/api/auth/view-as', json={'role': 'Member', 'departments': ['Marketing']}).status_code, 400)
+        self.assertEqual(self.client.post('/api/auth/view-as', json={'role': 'Member', 'departments': ['Powertrain']}).status_code, 200)
+        data = self.client.get('/api/data').json
+        self.assertEqual((data['user']['admin'], data['user']['role'], data['user']['department']), (False, 'Member', 'Powertrain'))
+        self.assertEqual(data['preview'], {'role': 'Member', 'department': 'Powertrain'})
+        # The server enforces the view, not just the page.
+        self.assertEqual(self.client.post('/api/move', json=leds).status_code, 403)
+        self.assertEqual(self.client.get('/api/purchases').status_code, 403)
+        self.assertEqual(self.client.get('/api/people').status_code, 403)
+        self.client.post('/api/auth/view-as', json={'role': 'Department Leader', 'departments': ['Electronics']})
+        self.assertEqual(self.client.post('/api/move', json=leds).status_code, 200)
+        # As a guest the admin is signed out for every page, but can still switch back.
+        self.client.post('/api/auth/view-as', json={'guest': True})
+        data = self.client.get('/api/data').json
+        self.assertEqual((data['user'], data['preview']), (None, {'guest': True}))
+        self.assertEqual(self.client.post('/api/move', json=leds).status_code, 401)
+        self.assertEqual(self.client.delete('/api/auth/view-as').status_code, 200)
+        data = self.client.get('/api/data').json
+        self.assertEqual((data['user']['admin'], data['preview']), (True, None))
+
+    def test_only_admins_can_preview(self):
+        self.permissions('Board', 'Electronics')
+        self.notion_login(self.client, 'notion-rui')
+        self.assertEqual(self.client.post('/api/auth/view-as', json={'guest': True}).status_code, 403)
+        self.assertIsNone(self.client.get('/api/data').json['preview'])
+        self.assertEqual(self.user(self.client)['name'], 'Rui')

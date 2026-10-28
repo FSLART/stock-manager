@@ -347,6 +347,18 @@ CATEGORIAS_INICIAIS = {
 
 
 def current_person():
+    # Um admin pode ver o site como outra pessoa (session["view_as"]): as permissoes do servidor seguem essa vista,
+    # por isso a pre-visualizacao mostra o que essa pessoa veria de facto, e nao so botoes escondidos.
+    person = real_person()
+    view = session.get("view_as")
+    if not person or not person["admin"] or not view:
+        return person
+    if view.get("guest"):
+        return None
+    return {**person, "admin": False, "role": view["role"], "department": view["department"], "preview": True}
+
+
+def real_person():
     # Pessoa da sessao atual, ou None; tambem invalida sessoes de pessoas apagadas.
     person_id = session.get("person_id")
     if person_id is None:
@@ -1426,6 +1438,9 @@ def data_from_items(items):
         "auth": True,
         "user": current_person(),
         "notion_login": bool(NOTION_CLIENT_ID),
+        "roles": ROLES,
+        # So o admin real recebe a vista em que esta, para poder muda-la ou sair (tambem como visitante).
+        "preview": session.get("view_as") if (real_person() or {}).get("admin") else None,
     }
 
 
@@ -2761,6 +2776,26 @@ def reverter_movimentos():
 def me():
     # O site da cablagem (/harness/) so pergunta quem tem sessao, sem descarregar o stock.
     return jsonify(user=current_person())
+
+
+@app.route("/api/auth/view-as", methods=["POST", "DELETE"])
+def view_as():
+    # So admins: ver o site como visitante ({"guest": true}) ou com um cargo e departamentos; DELETE volta a admin.
+    person = real_person()
+    if not person or not person["admin"]:
+        return erro("Só um admin pode ver o site como outra pessoa", 403)
+    if request.method == "DELETE":
+        session.pop("view_as", None)
+        return jsonify(msg="De volta à tua conta de admin")
+    data = request.get_json(silent=True) or {}
+    if data.get("guest") is True:
+        session["view_as"] = {"guest": True}
+        return jsonify(msg="A ver como visitante sem sessão")
+    role, chosen = data.get("role"), data.get("departments", [])
+    if role not in ROLES or not isinstance(chosen, list) or any(department not in DEPARTMENTS for department in chosen):
+        return erro("Escolhe um cargo e departamentos válidos")
+    session["view_as"] = {"role": role, "department": ", ".join(d for d in DEPARTMENTS if d in chosen)}
+    return jsonify(msg="Pré-visualização ativa")
 
 
 @app.post("/api/auth/logout")

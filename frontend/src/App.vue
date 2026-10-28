@@ -30,11 +30,17 @@ const loginDialog = ref(null)
 const api = createApi({ onUnauthorized() { auth.user = null; loginDialog.value?.open() } })
 // enabled só vem do Flask; no Apps Script as alterações continuam sem login.
 const auth = reactive({
-  enabled: false, user: null, notion: false,
+  enabled: false, user: null, notion: false, preview: null, roles: [], departments: [],
   login: () => loginDialog.value.open(),
   async logout() {
     if (!canLeave()) return
     try { toast((await api.direct('logout')).msg); auth.user = null }
+    catch (error) { toast(error.message, true) }
+  },
+  // A vista fica na sessão do servidor; recarregar faz todas as páginas pedirem os dados como essa pessoa.
+  async viewAs(view) {
+    if (!canLeave()) return
+    try { await api.direct(view ? 'viewAs' : 'stopViewAs', view || {}); window.location.reload() }
     catch (error) { toast(error.message, true) }
   },
 })
@@ -367,7 +373,7 @@ async function load() {
   canEdit.value = Boolean(data.can_edit)
   const ids = new Set(data.items.map(item => item.id))
   for (const id of selected.value) if (!ids.has(id)) selected.value.delete(id)
-  Object.assign(auth, { enabled: Boolean(data.auth), user: data.user || null, notion: Boolean(data.notion_login) })
+  Object.assign(auth, { enabled: Boolean(data.auth), user: data.user || null, notion: Boolean(data.notion_login), preview: data.preview || null, roles: data.roles || [], departments: departments.value })
   // Sem escolha guardada abre o stock do primeiro departamento da pessoa.
   if (!departments.value.includes(department.value)) department.value = auth.user?.department?.split(', ').find(name => departments.value.includes(name)) || 'Electronics'
   if (current.value && !categories.value.some(c => c.name === current.value)) current.value = null
