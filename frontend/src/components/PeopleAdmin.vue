@@ -115,7 +115,7 @@ onMounted(() => load().catch(cause => { error.value = cause.message }))
         </div>
       </div>
       <div>
-        <p :id="`departments-${person.id}`" class="editor-label">Departamentos <span>Electronics pode alterar o stock eletrónico</span></p>
+        <p :id="`departments-${person.id}`" class="editor-label">Departamentos <span>Cada departamento altera o seu stock</span></p>
         <div class="toggle-chips" role="group" :aria-labelledby="`departments-${person.id}`">
           <button v-for="department in departments" :key="department" type="button" class="toggle-chip" :aria-pressed="departmentsOf(person).includes(department)" :disabled="busy"
                   @click="toggleDepartment(person, department)">{{ department }}</button>

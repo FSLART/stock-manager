@@ -9,6 +9,7 @@ import StockItem from './components/StockItem.vue'
 import StockMovement from './components/StockMovement.vue'
 import TakeFromStock from './components/TakeFromStock.vue'
 import CategoryForm from './components/CategoryForm.vue'
+import SectionForm from './components/SectionForm.vue'
 import PartsCatalog from './components/PartsCatalog.vue'
 import LabelScanner from './components/LabelScanner.vue'
 import AppFooter from './components/AppFooter.vue'
@@ -44,23 +45,44 @@ provide('movementFilter', ref(''))
 function guard(fn) {
   return (...args) => !auth.enabled || auth.user ? fn(...args) : loginDialog.value.open().then(ok => ok && fn(...args))
 }
-const categories = ref([]), items = ref([]), parts = ref([]), locationImages = ref({}), locationCodes = ref({}), labels = ref([]), current = ref(null), section = ref(null), query = ref('')
+const allCategories = ref([]), allItems = ref([]), parts = ref([]), locationImages = ref({}), locationCodes = ref({}), labels = ref([]), current = ref(null), section = ref(null), query = ref('')
 const resultLimit = ref(100), categoryMenuOpen = ref(false)
 const syncPendingCount = ref(readStored('stock.pending.v1', []).length), syncError = ref(''), cachedData = ref(false), lastSynced = ref(readStored('stock.last-synced.v1', ''))
 const busy = ref(false), loading = ref(true), toastMessage = ref(''), toastUndo = ref(null), formError = ref('')
 const movement = ref(null), takeDialog = ref(null), categoryForm = ref(null), partsCatalog = ref(null), labelScanner = ref(null)
 const csvImport = ref(null), csvError = ref(''), inventoryTutorial = ref(null)
-const canEdit = ref(false), categoryError = ref('')
+const canEdit = ref(false), categoryError = ref(''), sectionForm = ref(null), sectionError = ref('')
 const queues = shallowReactive(new Map())
 const refreshing = ref(false)
 let timer, toastTimer, disposed = false
 const normalize = value => String(value).toLowerCase().replace(/\s+/g, '')
 const propertyFilters = ref({}), filterSearch = ref({}), stockFilter = ref(''), imageFilter = ref(''), locationFilter = ref('')
 const filtersOpen = ref(false), sortKey = ref(''), sortDirection = ref(1)
+// Cada departamento tem o seu stock; os nomes de categorias só são únicos dentro do departamento,
+// por isso o resto da página trabalha só com o departamento escolhido.
+const departments = ref(['Electronics']), sectionsByDepartment = ref({})
+const department = ref(readStored('stocklart-department', ''))
+const departmentOf = entry => entry.department || 'Electronics'
+const categories = computed(() => allCategories.value.filter(c => departmentOf(c) === department.value))
+const items = computed(() => allItems.value.filter(item => departmentOf(item) === department.value))
+const electronicsItems = computed(() => allItems.value.filter(item => departmentOf(item) === 'Electronics'))
+// Os departamentos da pessoa primeiro: no telemóvel a fila de chips desliza e o dela fica à vista.
+const departmentChoices = computed(() => { const mine = auth.user?.department?.split(', ') || []; return [...departments.value.filter(d => mine.includes(d)), ...departments.value.filter(d => !mine.includes(d))] })
+const departmentTotal = name => allItems.value.filter(item => departmentOf(item) === name).reduce((sum, item) => sum + item.qty, 0)
+function chooseDepartment(name) {
+  if (name === department.value) return
+  department.value = name
+  writeStored('stocklart-department', name)
+  current.value = null
+  section.value = null
+  selected.value = new Set()
+}
 const sectionOf = computed(() => Object.fromEntries(categories.value.map(c => [c.name, c.section])))
-// Igual a electronics_denied no Flask: só Electronics (ou um admin) mexe no stock, em todas as secções.
+// Igual a department_denied no Flask: cada departamento (ou um admin) mexe no seu stock.
 const signedIn = computed(() => !auth.enabled || Boolean(auth.user))
-const electronicsEditor = computed(() => !auth.enabled || Boolean(auth.user?.admin || auth.user?.department?.split(', ').includes('Electronics')))
+const canChange = name => !auth.enabled || Boolean(auth.user?.admin || auth.user?.department?.split(', ').includes(name))
+const electronicsEditor = computed(() => canChange('Electronics'))
+const stockEditor = computed(() => canChange(department.value))
 // Subcategorias: uma categoria mostra o seu stock e o de todas as que estão dentro dela.
 const childrenOf = computed(() => {
   const names = new Set(categories.value.map(c => c.name)), map = new Map()
@@ -79,7 +101,9 @@ const inScope = item => current.value ? scope.value.has(item.cat) : !section.val
 const folded = ref(new Set(readStored('stocklart-folded-sections', []))), showEmpty = ref(readStored('stocklart-show-empty', false) === true)
 const filled = computed(() => new Set(items.value.map(item => item.cat)))
 const emptyCount = computed(() => categories.value.filter(c => !filled.value.has(c.name)).length)
-const sections = computed(() => [...new Set(categories.value.map(c => c.section))].map(name => {
+// Secções pela ordem do departamento; uma secção vazia só aparece a quem a pode encher.
+const sectionNames = computed(() => sectionsByDepartment.value[department.value] || [])
+const sections = computed(() => [...new Set([...sectionNames.value.filter(name => stockEditor.value || categories.value.some(c => c.section === name)), ...categories.value.map(c => c.section)])].map(name => {
   const all = categories.value.filter(c => c.section === name)
   const open = !folded.value.has(name) || all.some(c => c.name === current.value)
   // Árvore achatada por ordem, com a profundidade para a indentação; uma mãe aparece se algo dentro dela tiver stock.
@@ -169,7 +193,7 @@ const locked = computed(() => busy.value || queues.size > 0)
 const locations = computed(() => [...new Set([...items.value.map(item => item.location), ...Object.keys(locationImages.value)].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt', { numeric: true })))
 const selected = ref(new Set()), locationName = ref('')
 let lastPicked = null
-const selectable = computed(() => electronicsEditor.value ? visibleItems.value : [])
+const selectable = computed(() => stockEditor.value ? visibleItems.value : [])
 const allShownSelected = computed(() => selectable.value.length > 0 && selectable.value.every(item => selected.value.has(item.id)))
 function pick(item, shift) {
   const on = !selected.value.has(item.id), list = selectable.value
@@ -290,7 +314,8 @@ provide('preferences', preferences)
 provide('inventory', reactive({
   totalUnits: computed(() => total()),
   categoryCount: computed(() => categories.value.length),
-  items: computed(() => items.value),
+  items: computed(() => allItems.value),
+  electronicsItems,
   locations: computed(() => locationImages.value),
   codes: computed(() => locationCodes.value),
   labels: computed(() => labels.value),
@@ -329,8 +354,11 @@ async function load() {
   cachedData.value = api.cached
   syncPendingCount.value = readStored('stock.pending.v1', []).length
   if (!api.cached) { lastSynced.value = new Date().toISOString(); writeStored('stock.last-synced.v1', lastSynced.value); syncError.value = '' }
-  categories.value = data.categories
-  items.value = data.items
+  allCategories.value = data.categories
+  allItems.value = data.items
+  departments.value = data.departments || ['Electronics']
+  // O Apps Script não tem stock por departamento: fica com as secções fixas de antes.
+  sectionsByDepartment.value = data.sections || { Electronics: ['Componentes eletrónicos', 'Harness', 'Não consumíveis'] }
   parts.value = data.parts || []
   locationImages.value = data.locations || {}
   locationCodes.value = data.location_codes || {}
@@ -340,6 +368,8 @@ async function load() {
   const ids = new Set(data.items.map(item => item.id))
   for (const id of selected.value) if (!ids.has(id)) selected.value.delete(id)
   Object.assign(auth, { enabled: Boolean(data.auth), user: data.user || null, notion: Boolean(data.notion_login) })
+  // Sem escolha guardada abre o stock do primeiro departamento da pessoa.
+  if (!departments.value.includes(department.value)) department.value = auth.user?.department?.split(', ').find(name => departments.value.includes(name)) || 'Electronics'
   if (current.value && !categories.value.some(c => c.name === current.value)) current.value = null
   if (section.value && !categories.value.some(c => c.section === section.value)) section.value = null
 }
@@ -361,7 +391,7 @@ function deleteItem(item) {
     // Desfazer repõe o componente com as mesmas propriedades, quantidade e imagem (ganha um id novo).
     if (item.qty > 0) toast(`Apagado: ${componentValue(item)}`, false, async () => {
       toastMessage.value = ''; toastUndo.value = null
-      await act('move', { cat: item.cat, props: item.props, qty: item.qty, mode: 'in', image: item.image || '' })
+      await act('move', { cat: item.cat, department: departmentOf(item), props: item.props, qty: item.qty, mode: 'in', image: item.image || '' })
     })
     return false
   })
@@ -372,7 +402,7 @@ function deleteCategory(category) {
     ? `Isto vai apagar também ${refs.length} referência(s) (${refs.reduce((sum, item) => sum + item.qty, 0)} unidades) que estão lá dentro. Esta ação não pode ser desfeita.`
     : 'Esta ação não pode ser desfeita.') + (childrenOf.value.has(category.name) ? '\n\nAs subcategorias ficam e sobem um nível.' : '')
   if (confirm(`Apagar a categoria "${category.name}"?\n\n${warning}`)) {
-    act('deleteCategory', { name: category.name }, () => {
+    act('deleteCategory', { name: category.name, department: department.value }, () => {
       if (current.value === category.name) current.value = null
     })
   }
@@ -415,7 +445,7 @@ async function submitMovement({ file, imageUrl, partPrice, priceOnly, ...payload
     const editing = payload.id !== undefined
     if (file || imageUrl) payload.image = await api.uploadImage(file || imageUrl)
     else if (!editing) payload.image = ''
-    if (editing) { delete payload.mode; delete payload.cat }
+    if (editing) { delete payload.mode; delete payload.cat } else payload.department = department.value
     const result = priceOnly ? await api.request('savePart', partPrice) : await api.request(editing ? 'editItem' : 'move', payload)
     if (partPrice && !priceOnly) await api.request('savePart', partPrice)
     movement.value.close()
@@ -441,7 +471,7 @@ async function submitCsv(rows) {
   busy.value = true
   csvError.value = ''
   try {
-    const result = await api.importInventory(rows)
+    const result = await api.importInventory(rows, department.value)
     csvImport.value.close()
     toast(result.msg)
     await load()
@@ -474,13 +504,43 @@ async function submitCategory(payload) {
   busy.value = true
   categoryError.value = ''
   try {
-    const result = await api.request(payload.originalName ? 'editCategory' : 'newCategory', payload)
+    const result = await api.request(payload.originalName ? 'editCategory' : 'newCategory', { ...payload, department: department.value })
     categoryForm.value.close()
     current.value = payload.name
     section.value = null
     toast(result.msg)
     if (!result.queued) await load()
   } catch (error) { categoryError.value = error.message }
+  finally { busy.value = false }
+}
+function openSection(name) {
+  sectionError.value = ''
+  sectionForm.value.open(name)
+}
+async function submitSection(payload, moving) {
+  if (busy.value || queues.size) return
+  busy.value = true
+  sectionError.value = ''
+  try {
+    const result = await api.direct(payload.newName === undefined ? 'newSection' : 'editSection', { ...payload, department: department.value })
+    if (!moving) sectionForm.value.close()
+    if (section.value === payload.name && payload.newName) section.value = payload.newName
+    toast(result.msg)
+    await load()
+  } catch (error) { sectionError.value = error.message }
+  finally { busy.value = false }
+}
+async function deleteSection(name) {
+  if (busy.value || queues.size || !confirm(`Apagar a secção "${name}"?`)) return
+  busy.value = true
+  sectionError.value = ''
+  try {
+    const result = await api.direct('deleteSection', { name, department: department.value })
+    sectionForm.value.close()
+    if (section.value === name) section.value = null
+    toast(result.msg)
+    await load()
+  } catch (error) { sectionError.value = error.message }
   finally { busy.value = false }
 }
 async function refresh() {
@@ -494,7 +554,7 @@ async function refresh() {
   finally { refreshing.value = false }
 }
 const guarded = {
-  step: guard(stepItem), deleteItem: guard(deleteItem), deleteCategory: guard(deleteCategory), openCategory: guard(openCategory), savePart: guard(savePart),
+  step: guard(stepItem), deleteItem: guard(deleteItem), deleteCategory: guard(deleteCategory), openCategory: guard(openCategory), openSection: guard(openSection), savePart: guard(savePart),
   openMovement: guard(() => movement.value.open(current.value)), openTake: guard(() => takeDialog.value.open(items.value.filter(item => selected.value.has(item.id)))), scanLabel: guard(() => labelScanner.value.open()), editItem: guard(item => movement.value.edit(item)), setLocation: guard(setLocation), syncSelected: guard(syncSelected), importCsv: guard(() => csvImport.value.open()),
 }
 onMounted(async () => {
@@ -526,34 +586,41 @@ onUnmounted(() => {
     <button class="category-menu-toggle" :aria-expanded="categoryMenuOpen" aria-controls="inventory-categories" @click="categoryMenuOpen = !categoryMenuOpen">{{ current || section || 'Todas as categorias' }}<span>{{ categoryMenuOpen ? 'Fechar' : 'Escolher categoria' }}</span></button>
     <!-- O fundo da barra vai até ao fim da página; o conteúdo fica fixo no topo enquanto a lista desce. -->
     <div id="inventory-categories" class="sidebar-inner">
-    <div class="sidebar-heading"><h2>Categorias</h2><button v-if="electronicsEditor" class="new-category" aria-label="Nova categoria" :disabled="locked" @click="guarded.openCategory()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nova</button></div>
+    <div class="sidebar-heading"><h2>Categorias</h2><button v-if="stockEditor" class="new-category" aria-label="Nova categoria" :disabled="locked" @click="guarded.openCategory()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nova</button></div>
     <nav class="category-nav" aria-label="Categorias" tabindex="-1">
       <div class="cat-row"><button :aria-current="!current && !section" @click="current = null; section = null">Tudo <span class="n">{{ total() }}</span></button></div>
       <template v-for="group in sections" :key="group.name">
-      <div class="cat-section"><button class="fold" :aria-expanded="group.open" :aria-label="`${group.open ? 'Dobrar' : 'Abrir'} ${group.name}`" @click="fold(group.name)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button><button :aria-current="!current && section === group.name" @click="current = null; section = group.name">{{ group.name }} <span class="n">{{ sectionTotal(group.name) }}</span></button></div>
+      <div class="cat-section"><button class="fold" :aria-expanded="group.open" :aria-label="`${group.open ? 'Dobrar' : 'Abrir'} ${group.name}`" @click="fold(group.name)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button><button :aria-current="!current && section === group.name" @click="current = null; section = group.name">{{ group.name }} <span class="n">{{ sectionTotal(group.name) }}</span></button><button v-if="stockEditor && sectionNames.includes(group.name)" class="cat-edit" :aria-label="`Editar secção ${group.name}`" title="Editar secção" :disabled="locked" @click="guarded.openSection(group.name)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg></button></div>
       <div v-for="category in group.categories" :key="category.name" class="cat-row">
         <button :aria-current="current === category.name" :style="{ '--depth': category.depth }" @click="current = category.name; section = null"><span><i class="dot" :style="{ background: color(category.name) }"></i>{{ category.name }}</span><span class="n">{{ total(category.name) }}</span></button>
         <!-- Um só botão discreto por categoria; apagar fica dentro do formulário de edição. -->
-        <template v-if="electronicsEditor">
+        <template v-if="stockEditor">
         <button v-if="canEdit" class="cat-edit" :aria-label="`Editar categoria ${category.name}`" title="Editar categoria" :disabled="locked" @click="guarded.openCategory(category)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg></button>
         <button v-else class="cat-del" :aria-label="`Apagar categoria ${category.name}`" title="Apagar categoria" :disabled="locked" @click="guarded.deleteCategory(category)">✕</button>
         </template>
       </div>
       </template>
+      <button v-if="stockEditor" type="button" class="new-section" :disabled="locked" @click="guarded.openSection()">+ Secção</button>
       <label v-if="emptyCount" class="show-empty"><input v-model="showEmpty" type="checkbox"> Mostrar vazias ({{ emptyCount }})</label>
     </nav>
-    <button v-if="parts.length" type="button" class="catalog-btn" @click="partsCatalog.open()">Catálogo de peças <span class="n">{{ parts.length }}</span></button>
+    <button v-if="parts.length && department === 'Electronics'" type="button" class="catalog-btn" @click="partsCatalog.open()">Catálogo de peças <span class="n">{{ parts.length }}</span></button>
     </div>
   </aside>
   <main id="main-content" class="stock-content" tabindex="-1">
     <div class="sync-strip" role="status"><span>{{ loading ? 'A carregar inventário…' : syncError || (syncPendingCount ? `${syncPendingCount} alteração(ões) por sincronizar` : cachedData ? 'Sem ligação · a mostrar dados guardados neste dispositivo' : lastSynced ? `Atualizado às ${new Intl.DateTimeFormat('pt-PT', { hour: '2-digit', minute: '2-digit' }).format(new Date(lastSynced))}` : 'Inventário da equipa') }}</span><button type="button" class="refresh-button" :disabled="loading || locked || refreshing" :aria-busy="refreshing" @click="refresh"><svg viewBox="0 0 24 24" aria-hidden="true" :class="{ spinning: refreshing }"><path d="M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 18 17"/></svg>{{ refreshing ? 'A atualizar…' : 'Atualizar' }}</button></div>
+    <div v-if="departments.length > 1" class="department-picker">
+      <p id="stock-department" class="editor-label">Stock do departamento</p>
+      <div class="toggle-chips compact" role="group" aria-labelledby="stock-department">
+        <button v-for="name in departmentChoices" :key="name" type="button" class="toggle-chip" :aria-pressed="department === name" @click="chooseDepartment(name)">{{ name }}<span class="chip-count">{{ departmentTotal(name) }}</span></button>
+      </div>
+    </div>
     <div class="top">
       <div class="search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input v-model="query" type="search" aria-label="Pesquisar componentes" placeholder="Pesquisar componentes…" autocomplete="off">
       </div>
       <button class="text-button tutorial-button" @click="inventoryTutorial.open()"><span aria-hidden="true">?</span> Tutorial</button>
-      <template v-if="electronicsEditor && categories.length">
+      <template v-if="stockEditor && categories.length">
       <button v-if="canEdit" class="text-button import-csv-button" aria-label="Importar CSV" :disabled="locked" @click="guarded.importCsv()">Importar CSV</button>
       <button class="text-button" :disabled="locked" @click="guarded.scanLabel()">Ler etiqueta</button>
       <button class="text-button" :disabled="locked" @click="guarded.openTake()">Retirar</button>
@@ -616,9 +683,12 @@ onUnmounted(() => {
             </th>
             <th v-if="selectable.length" scope="col">Ações</th>
           </tr></thead>
-          <tbody><StockItem v-for="item in visibleItems" :key="item.id" :item="item" :price="priceOf(item)" :property-keys="showCategory ? [] : propertyKeys" :show-category="showCategory" :busy="busy" :locked="locked" :can-edit="canEdit && selectable.length > 0" :can-change="electronicsEditor" :actions="selectable.length > 0" :selected="selected.has(item.id)" @select="shift => pick(item, shift)" @edit="guarded.editItem(item)" @step="delta => guarded.step(item, delta)" @delete="guarded.deleteItem(item)" /></tbody>
+          <tbody><StockItem v-for="item in visibleItems" :key="item.id" :item="item" :price="priceOf(item)" :property-keys="showCategory ? [] : propertyKeys" :show-category="showCategory" :busy="busy" :locked="locked" :can-edit="canEdit && selectable.length > 0" :can-change="stockEditor" :actions="selectable.length > 0" :selected="selected.has(item.id)" @select="shift => pick(item, shift)" @edit="guarded.editItem(item)" @step="delta => guarded.step(item, delta)" @delete="guarded.deleteItem(item)" /></tbody>
         </table>
-        <div v-if="!shown.length" class="empty"><b>Nada encontrado.</b><p>Tenta outra pesquisa ou escolhe outra categoria.</p><button class="text-button" @click="clearFilters">Limpar pesquisa e filtros</button></div>
+        <div v-if="!categories.length" class="empty"><b>{{ department }} ainda não tem stock.</b>
+          <template v-if="stockEditor"><p>Cria a primeira categoria (por exemplo, Parafusos) e depois adiciona material.</p><button class="primary" :disabled="locked" @click="guarded.openCategory()">Criar primeira categoria</button></template>
+          <p v-else>Só quem é de {{ department }} (ou um admin) pode criar categorias aqui.</p></div>
+        <div v-else-if="!shown.length" class="empty"><b>Nada encontrado.</b><p>Tenta outra pesquisa ou escolhe outra categoria.</p><button class="text-button" @click="clearFilters">Limpar pesquisa e filtros</button></div>
         <div v-if="shown.length > resultLimit" class="stock-pagination"><span>{{ visibleItems.length }} de {{ shown.length }} referências</span><button class="text-button stock-load-more" @click="resultLimit += 100">Mostrar mais 100</button></div>
       </template>
     </div>
@@ -627,7 +697,8 @@ onUnmounted(() => {
   </div>
   <AppFooter />
   <StockMovement ref="movement" :categories="categories" :items="items" :parts="parts" :busy="busy" :error="formError" @submit="submitMovement" @clear-error="formError = ''" @part="updatePart" />
-  <CategoryForm ref="categoryForm" :categories="categories" :busy="busy" :error="categoryError" @submit="submitCategory" @delete="deleteFromForm" />
+  <CategoryForm ref="categoryForm" :categories="categories" :sections="sectionNames" :busy="busy" :error="categoryError" @submit="submitCategory" @delete="deleteFromForm" />
+  <SectionForm ref="sectionForm" :sections="sectionNames" :busy="busy" :error="sectionError" @submit="submitSection" @delete="deleteSection" />
   <InventoryCsvImport ref="csvImport" :categories="categories" :current="current" :busy="busy" :error="csvError" @submit="submitCsv" @clear-error="csvError = ''" />
   <LoginDialog ref="loginDialog" @login="user => { auth.user = user; toast(`Sessão iniciada: ${user.name}`) }" />
   <PartsCatalog v-if="parts.length" ref="partsCatalog" :parts="parts" :items="items" :categories="categories" :busy="busy" :can-edit="electronicsEditor" :error="partError" @save="guarded.savePart" @clear-error="partError = ''" />

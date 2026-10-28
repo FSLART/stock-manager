@@ -12,7 +12,9 @@ const movements = ref([]), loading = ref(true), error = ref(''), query = ref('')
 const movementFilter = inject('movementFilter', null)
 watch(() => movementFilter?.value, value => { if (value) { query.value = value; movementFilter.value = '' } }, { immediate: true })
 const plain = value => String(value).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-const person = ref(''), kind = ref(''), since = ref(''), until = ref(''), limit = ref(100)
+const person = ref(''), kind = ref(''), since = ref(''), until = ref(''), department = ref(''), limit = ref(100)
+// Só os departamentos que já têm movimentos; o histórico antigo é todo de Electronics.
+const departments = computed(() => [...new Set(movements.value.map(movement => movement.department || 'Electronics'))].sort((a, b) => a.localeCompare(b, 'pt')))
 const people = computed(() => [...new Set(movements.value.map(movement => movement.person).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt')))
 const localDate = timestamp => {
   const date = new Date(timestamp)
@@ -20,11 +22,12 @@ const localDate = timestamp => {
 }
 const shown = computed(() => movements.value.filter(movement =>
   (!person.value || movement.person === person.value) && (!kind.value || movement.type === kind.value) &&
+  (!department.value || (movement.department || 'Electronics') === department.value) &&
   (!since.value || localDate(movement.ts) >= since.value) && (!until.value || localDate(movement.ts) <= until.value) &&
   plain([movement.person, movement.cat, movement.note, ...Object.values(movement.props)].join(' ')).includes(plain(query.value))))
 const visible = computed(() => shown.value.slice(0, limit.value))
-watch([query, person, kind, since, until], () => { limit.value = 100; picked.value = new Set() })
-function clearFilters() { query.value = ''; person.value = ''; kind.value = ''; since.value = ''; until.value = '' }
+watch([query, person, kind, since, until, department], () => { limit.value = 100; picked.value = new Set() })
+function clearFilters() { query.value = ''; person.value = ''; kind.value = ''; since.value = ''; until.value = ''; department.value = '' }
 
 // Reverter (só admins): escolhe vários movimentos, por exemplo todas as remoções de uma categoria apagada.
 const reverting = ref(false), picked = ref(new Set())
@@ -81,12 +84,16 @@ onMounted(reload)
         <span>Pesquisar</span>
         <input v-model="query" type="search" aria-label="Pesquisar movimentos" placeholder="Pessoa, componente ou categoria" autocomplete="off">
       </label>
+      <div v-if="departments.length > 1" class="toggle-chips compact" role="group" aria-label="Departamento">
+        <button type="button" class="toggle-chip" :aria-pressed="!department" @click="department = ''">Todos</button>
+        <button v-for="name in departments" :key="name" type="button" class="toggle-chip" :aria-pressed="department === name" @click="department = department === name ? '' : name">{{ name }}</button>
+      </div>
       <div class="movement-filters">
         <label>Pessoa<select v-model="person" aria-label="Pessoa"><option value="">Todas as pessoas</option><option v-for="name in people" :key="name" :value="name">{{ name }}</option></select></label>
         <label>Tipo<select v-model="kind" aria-label="Tipo de movimento"><option value="">Todos os tipos</option><option v-for="(name, type) in movementLabels" :key="type" :value="type">{{ name }}</option></select></label>
         <label>Desde<input v-model="since" type="date" aria-label="Desde"></label>
         <label>Até<input v-model="until" type="date" aria-label="Até"></label>
-        <button v-if="query || person || kind || since || until" type="button" class="text-button" @click="clearFilters">Limpar filtros</button>
+        <button v-if="query || person || kind || since || until || department" type="button" class="text-button" @click="clearFilters">Limpar filtros</button>
       </div>
       <p v-if="error" class="upload-error" role="alert">{{ error }} <button type="button" class="text-button" @click="reload">Tentar novamente</button></p>
       <div v-else-if="loading" class="empty-workspace">A carregar histórico…</div>
@@ -100,7 +107,7 @@ onMounted(reload)
           <span :class="['movement-badge', movement.type]">{{ movementLabels[movement.type] }}</span>
           <div class="movement-main">
             <strong>{{ componentValue(movement) }}</strong>
-            <span>{{ [describe(movement), movement.cat, movement.note, movement.reverted && 'revertido'].filter(Boolean).join(' · ') }}</span>
+            <span>{{ [describe(movement), movement.cat, departments.length > 1 && (movement.department || 'Electronics'), movement.note, movement.reverted && 'revertido'].filter(Boolean).join(' · ') }}</span>
           </div>
           <div class="movement-person">
             <UserAvatar :name="movement.person || '?'" :src="movement.avatar" :size="32" />

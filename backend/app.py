@@ -135,11 +135,13 @@ def init_mysql_schema(connection):
     for sql in (
         """CREATE TABLE IF NOT EXISTS categories (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
-            name VARCHAR(255) COLLATE utf8mb4_0900_as_ci UNIQUE NOT NULL,
+            name VARCHAR(255) COLLATE utf8mb4_0900_as_ci NOT NULL,
             props LONGTEXT NOT NULL,
             image_enabled INTEGER NOT NULL DEFAULT 0,
             section VARCHAR(64) NOT NULL DEFAULT 'Componentes eletrónicos',
-            parent_id BIGINT NULL
+            parent_id BIGINT NULL,
+            department VARCHAR(64) NOT NULL DEFAULT 'Electronics',
+            UNIQUE KEY dept_name (department, name)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
         """CREATE TABLE IF NOT EXISTS items (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -181,7 +183,8 @@ def init_mysql_schema(connection):
             before_qty BIGINT NOT NULL,
             after_qty BIGINT NOT NULL,
             note VARCHAR(255) NOT NULL DEFAULT '',
-            reverts BIGINT NULL
+            reverts BIGINT NULL,
+            department VARCHAR(64) NOT NULL DEFAULT 'Electronics'
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
         # Catalogo de pecas (carrinhos Mouser/DigiKey), separado do stock: preenche o formulario e da o preco.
         """CREATE TABLE IF NOT EXISTS parts (
@@ -215,6 +218,14 @@ def init_mysql_schema(connection):
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
             data LONGTEXT NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
+        # Secoes de cada departamento, editaveis por ele; categories.section guarda o nome.
+        """CREATE TABLE IF NOT EXISTS sections (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            department VARCHAR(64) NOT NULL,
+            name VARCHAR(64) COLLATE utf8mb4_0900_as_ci NOT NULL,
+            position INTEGER NOT NULL DEFAULT 0,
+            UNIQUE KEY dept_name (department, name)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin""",
     ):
         if mariadb:
             sql = sql.replace("utf8mb4_0900_as_ci", "utf8mb4_uca1400_as_ci").replace("utf8mb4_0900_bin", "utf8mb4_bin")
@@ -242,6 +253,14 @@ def init_mysql_schema(connection):
     if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'movements' AND COLUMN_NAME = 'note'").fetchone():
         connection.execute("ALTER TABLE movements ADD COLUMN note VARCHAR(255) NOT NULL DEFAULT ''")
         connection.execute("ALTER TABLE movements ADD COLUMN reverts BIGINT NULL")
+    # Stock por departamento: o nome da categoria passa a ser unico dentro do departamento, nao na equipa.
+    if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'categories' AND COLUMN_NAME = 'department'").fetchone():
+        connection.execute("ALTER TABLE categories ADD COLUMN department VARCHAR(64) NOT NULL DEFAULT 'Electronics'")
+        for index in connection.execute("SHOW INDEX FROM categories WHERE Column_name = 'name' AND Non_unique = 0").fetchall():
+            connection.execute(f"ALTER TABLE categories DROP INDEX `{index['Key_name']}`")
+        connection.execute("ALTER TABLE categories ADD UNIQUE KEY dept_name (department, name)")
+    if not connection.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'movements' AND COLUMN_NAME = 'department'").fetchone():
+        connection.execute("ALTER TABLE movements ADD COLUMN department VARCHAR(64) NOT NULL DEFAULT 'Electronics'")
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", BASE_DIR / "uploads"))
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
@@ -309,7 +328,9 @@ EXCEL_COLUMN_WIDTHS = {
 # Dados iniciais usados apenas na primeira criacao da base de dados.
 # Cada chave e uma categoria e cada lista define os campos que o frontend deve
 # pedir para um componente dessa categoria.
+# Secoes iniciais; depois cada departamento edita as suas na tabela sections.
 SECTIONS = ("Componentes eletrónicos", "Harness", "Não consumíveis")
+DEFAULT_SECTIONS = ("Geral",)
 # Departamentos da LART como estao na base Members Filtered do Notion (Board e Leaders dao o cargo).
 ROLES = ("Board", "Department Leader", "Member")
 DEPARTMENTS = ("Aerodynamics", "Autonomous Driving", "Chassis and Structures", "Communication and Logistics", "Dynamics", "Electronics", "Powertrain")
@@ -337,11 +358,18 @@ def current_person():
             "role": row["role"], "department": row["department"]} if row else None
 
 
-def electronics_denied():
-    # Todo o stock (eletronico, Harness e nao consumiveis) e do departamento de Electronics; um admin tambem o altera.
-    if g.person["admin"] or "Electronics" in g.person.get("department", "").split(", "):
+def department_denied(*departments):
+    # Cada departamento altera o seu stock (sem argumentos: o de Electronics); um admin altera todos.
+    departments = set(departments) or {"Electronics"}
+    if g.person["admin"] or departments <= set(g.person.get("department", "").split(", ")):
         return None
-    return erro("Só o departamento de Electronics pode alterar o stock", 403)
+    return erro(f"Só o departamento de {', '.join(sorted(departments))} pode alterar este stock", 403)
+
+
+def requested_department(data):
+    # Pedidos sem departamento sao do stock de Electronics, como antes de haver stock por departamento.
+    department = data.get("department", "Electronics")
+    return department if department in DEPARTMENTS else None
 
 
 def start_session(person_id):
@@ -368,9 +396,10 @@ def record_movements(connection, movements):
         return
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
     connection.executemany(
-        "INSERT INTO movements (ts, person_id, person, type, item_id, cat, props, delta, before_qty, after_qty, note, reverts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO movements (ts, person_id, person, type, item_id, cat, props, delta, before_qty, after_qty, note, reverts, department) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [(ts, g.person["id"], g.person["name"], m["type"], m.get("item_id"), m["cat"],
-          json.dumps(m["props"], ensure_ascii=False), m["delta"], m["before"], m["before"] + m["delta"], m.get("note", ""), m.get("reverts"))
+          json.dumps(m["props"], ensure_ascii=False), m["delta"], m["before"], m["before"] + m["delta"], m.get("note", ""), m.get("reverts"),
+          m.get("department", "Electronics"))
          for m in movements],
     )
 
@@ -438,9 +467,24 @@ def init_db(seed=True):
         # Revoga atribuicoes antigas por nome, inclusive para sessoes ja abertas.
         # notion_sync=0 identifica permissoes revistas explicitamente por um admin.
         connection.execute("UPDATE people SET role = 'Member', department = '' WHERE notion_sync = 1 AND (role <> 'Member' OR department <> '')")
+        seed_sections(connection)
         if not seed:
             return
         seed_categories(connection)
+
+
+# Subcategorias: sem FK em parent_id porque apagar a mãe passa as filhas para o nível de cima.
+SQLITE_CATEGORIES = """
+        CREATE TABLE IF NOT EXISTS {} (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL COLLATE NOCASE,
+            props TEXT NOT NULL,
+            image_enabled INTEGER NOT NULL DEFAULT 0,
+            section TEXT NOT NULL DEFAULT 'Componentes eletrónicos',
+            parent_id INTEGER,
+            department TEXT NOT NULL DEFAULT 'Electronics',
+            UNIQUE (department, name)
+        );"""
 
 
 def init_sqlite_schema(connection):
@@ -448,16 +492,7 @@ def init_sqlite_schema(connection):
     # items guarda cada referencia concreta, ligada a uma categoria por cat_id.
     # meta guarda estados internos, como "os valores padrao ja foram inseridos".
     connection.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS categories (
-            id INTEGER PRIMARY KEY,
-            name TEXT UNIQUE NOT NULL COLLATE NOCASE,
-            props TEXT NOT NULL,
-            image_enabled INTEGER NOT NULL DEFAULT 0,
-            section TEXT NOT NULL DEFAULT 'Componentes eletrónicos',
-            -- Subcategorias: sem FK porque apagar a mãe passa as filhas para o nível de cima.
-            parent_id INTEGER
-        );
+        SQLITE_CATEGORIES.format("categories") + """
         CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY,
             cat_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
@@ -497,7 +532,8 @@ def init_sqlite_schema(connection):
             before_qty INTEGER NOT NULL,
             after_qty INTEGER NOT NULL,
             note TEXT NOT NULL DEFAULT '',
-            reverts INTEGER
+            reverts INTEGER,
+            department TEXT NOT NULL DEFAULT 'Electronics'
         );
         CREATE TABLE IF NOT EXISTS parts (
             mpn TEXT PRIMARY KEY COLLATE NOCASE,
@@ -521,6 +557,13 @@ def init_sqlite_schema(connection):
         CREATE TABLE IF NOT EXISTS pcb_projects (
             id TEXT PRIMARY KEY,
             data TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS sections (
+            id INTEGER PRIMARY KEY,
+            department TEXT NOT NULL,
+            name TEXT NOT NULL COLLATE NOCASE,
+            position INTEGER NOT NULL DEFAULT 0,
+            UNIQUE (department, name)
         );
         CREATE TABLE IF NOT EXISTS purchases (
             id INTEGER PRIMARY KEY,
@@ -561,6 +604,20 @@ def init_sqlite_schema(connection):
     if "note" not in {row["name"] for row in connection.execute("PRAGMA table_info(movements)")}:
         connection.execute("ALTER TABLE movements ADD COLUMN note TEXT NOT NULL DEFAULT ''")
         connection.execute("ALTER TABLE movements ADD COLUMN reverts INTEGER")
+    if "department" not in {row["name"] for row in connection.execute("PRAGMA table_info(movements)")}:
+        connection.execute("ALTER TABLE movements ADD COLUMN department TEXT NOT NULL DEFAULT 'Electronics'")
+    if "department" not in {row["name"] for row in connection.execute("PRAGMA table_info(categories)")}:
+        # O UNIQUE do nome passa a ser por departamento; o SQLite nao o larga, por isso a tabela e refeita.
+        # Sem foreign_keys=OFF o DROP apagava todos os items em cascata (o PRAGMA so vale fora de transacao).
+        connection.commit()
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.executescript("BEGIN;" + SQLITE_CATEGORIES.format("categories_new") + """
+            INSERT INTO categories_new (id, name, props, image_enabled, section, parent_id)
+                SELECT id, name, props, image_enabled, section, parent_id FROM categories;
+            DROP TABLE categories;
+            ALTER TABLE categories_new RENAME TO categories;
+            COMMIT;""")
+        connection.execute("PRAGMA foreign_keys = ON")
 
 
 def split_sections(connection):
@@ -575,6 +632,31 @@ def split_sections(connection):
         if name.casefold() not in existing:
             connection.execute("INSERT INTO categories (name, props, image_enabled, section) VALUES (?, ?, 1, ?)",
                                (name, json.dumps(props, ensure_ascii=False), section))
+
+
+def seed_sections(connection):
+    # Corre uma vez: Electronics fica com as secoes que ja tinha, os outros departamentos com "Geral".
+    # Tambem entram as secoes ja usadas por categorias, para nenhuma ficar sem secao.
+    if connection.execute("SELECT 1 FROM meta WHERE `key` = 'sections_seeded'").fetchone():
+        return
+    used = {}
+    for row in connection.execute("SELECT DISTINCT department, section FROM categories"):
+        used.setdefault(row["department"], []).append(row["section"])
+    for department in DEPARTMENTS:
+        names = {}
+        for name in [*(SECTIONS if department == "Electronics" else DEFAULT_SECTIONS), *used.get(department, [])]:
+            names.setdefault(name.casefold(), name)
+        connection.executemany("INSERT INTO sections (department, name, position) VALUES (?, ?, ?)",
+                               [(department, name, position) for position, name in enumerate(names.values())])
+    connection.execute("INSERT INTO meta (`key`, value) VALUES ('sections_seeded', '1')")
+
+
+def db_sections(connection):
+    # {departamento: [secoes por ordem]}
+    sections = {department: [] for department in DEPARTMENTS}
+    for row in connection.execute("SELECT department, name FROM sections ORDER BY position, id"):
+        sections.setdefault(row["department"], []).append(row["name"])
+    return sections
 
 
 def seed_categories(connection):
@@ -614,7 +696,7 @@ def db_items():
     with db_connection() as connection:
         rows = connection.execute(
             """
-            SELECT items.id, categories.name AS category, items.props, items.qty, items.image, items.location
+            SELECT items.id, categories.name AS category, categories.department, items.props, items.qty, items.image, items.location
             FROM items
             JOIN categories ON categories.id = items.cat_id
             ORDER BY items.id
@@ -630,6 +712,7 @@ def db_items():
             "qty": row["qty"],
             "image": image_path(row["image"]),
             "location": row["location"],
+            "department": row["department"],
         }
         for row in rows
     ]
@@ -641,7 +724,7 @@ def db_categories():
     init_db()
     with db_connection() as connection:
         rows = connection.execute(
-            "SELECT id, name, props, image_enabled, section, parent_id FROM categories ORDER BY id"
+            "SELECT id, name, props, image_enabled, section, parent_id, department FROM categories ORDER BY id"
         ).fetchall()
     names = {row["id"]: row["name"] for row in rows}
     return [
@@ -651,6 +734,7 @@ def db_categories():
             "image": bool(row["image_enabled"]),
             "section": row["section"],
             "parent": names.get(row["parent_id"]),
+            "department": row["department"],
         }
         for row in rows
     ]
@@ -855,13 +939,16 @@ def google_items():
 def sync_google_to_db():
     # Copia alteracoes manuais do Google Sheets para a base usada pela API.
     sheet_items = google_items()
-    if sheet_items is None or sheet_items == db_items():
+    if sheet_items is not None:
+        sheet_items = [{**item, "department": "Electronics"} for item in sheet_items]
+    if sheet_items is None or sheet_items == [item for item in db_items() if item["department"] == "Electronics"]:
         return False
     init_db()
     with db_connection() as connection:
+        # A folha so tem o stock de Electronics: os outros departamentos ficam como estao.
         categories = {
             row["name"].casefold(): row["id"]
-            for row in connection.execute("SELECT id, name FROM categories")
+            for row in connection.execute("SELECT id, name FROM categories WHERE department = 'Electronics'")
         }
         for item in sheet_items:
             key = item["cat"].casefold()
@@ -871,7 +958,7 @@ def sync_google_to_db():
                     (item["cat"], json.dumps(list(item["props"]), ensure_ascii=False)),
                 )
                 categories[key] = cursor.lastrowid
-        connection.execute("DELETE FROM items")
+        connection.execute("DELETE FROM items WHERE cat_id IN (SELECT id FROM categories WHERE department = 'Electronics')")
         connection.executemany(
             "INSERT INTO items (id, cat_id, props, `key`, qty, image, location) VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
@@ -911,7 +998,7 @@ def save_google_items(items):
         managed.append(spreadsheet.add_worksheet(title=f"Categoria {len(managed) + 1}", rows=1000, cols=10))
     used_names = {sheet.title.casefold() for sheet in spreadsheet.worksheets() if sheet not in managed}
     image_categories = {
-        category["name"]: category["image"] for category in db_categories()
+        category["name"]: category["image"] for category in db_categories() if category["department"] == "Electronics"
     }
     for index, (category, category_items) in enumerate(grouped.items()):
         worksheet = managed[index]
@@ -1124,16 +1211,19 @@ def sync_excel_to_db():
     # A comparacao evita apagar e recriar a base quando nada foi alterado.
     with EXCEL_LOCK:
         excel_items = read_excel_items()
-        if excel_items is None or excel_items == db_items():
+        if excel_items is not None:
+            excel_items = [{**item, "department": "Electronics"} for item in excel_items]
+        if excel_items is None or excel_items == [item for item in db_items() if item["department"] == "Electronics"]:
             # Se nao existe Excel, mantemos a base. Se os dados sao iguais,
             # nao fazemos uma escrita desnecessaria.
             return False
 
         init_db()
         with db_connection() as connection:
+            # A folha so tem o stock de Electronics: os outros departamentos ficam como estao.
             categories = {
                 row["name"].casefold(): row["id"]
-                for row in connection.execute("SELECT id, name FROM categories")
+                for row in connection.execute("SELECT id, name FROM categories WHERE department = 'Electronics'")
             }
             excel_categories = {item["cat"].casefold() for item in excel_items}
             for item in excel_items:
@@ -1145,7 +1235,7 @@ def sync_excel_to_db():
                         (item["cat"], json.dumps(list(item["props"]), ensure_ascii=False)),
                     )
                     categories[category_key] = cursor.lastrowid
-            connection.execute("DELETE FROM items")
+            connection.execute("DELETE FROM items WHERE cat_id IN (SELECT id FROM categories WHERE department = 'Electronics')")
             # A lista Excel e considerada completa: primeiro removemos a versao
             # anterior e depois inserimos todos os itens novamente.
             connection.executemany(
@@ -1167,11 +1257,11 @@ def sync_excel_to_db():
                 # no Excel; categorias vazias deixam de existir neste sincronismo.
                 placeholders = ",".join("?" for _ in excel_category_ids)
                 connection.execute(
-                    f"DELETE FROM categories WHERE id NOT IN ({placeholders})",
+                    f"DELETE FROM categories WHERE department = 'Electronics' AND id NOT IN ({placeholders})",
                     excel_category_ids,
                 )
             else:
-                connection.execute("DELETE FROM categories")
+                connection.execute("DELETE FROM categories WHERE department = 'Electronics'")
     return True
 
 
@@ -1222,18 +1312,20 @@ def save_items(items, movements=()):
     with EXCEL_LOCK:
         init_db()
         with db_connection() as connection:
+            # O mesmo nome pode existir em varios departamentos: a categoria e (departamento, nome).
             categories = {
-                row["name"]: row["id"]
-                for row in connection.execute("SELECT id, name FROM categories")
+                (row["department"], row["name"]): row["id"]
+                for row in connection.execute("SELECT id, name, department FROM categories")
             }
             for item in items:
                 # Antes de inserir items, cria a categoria caso ela ainda nao exista.
-                if item["cat"] not in categories:
+                key = (item.get("department", "Electronics"), item["cat"])
+                if key not in categories:
                     cursor = connection.execute(
-                        "INSERT INTO categories (name, props) VALUES (?, ?)",
-                        (item["cat"], json.dumps(list(item["props"]), ensure_ascii=False)),
+                        "INSERT INTO categories (name, props, department) VALUES (?, ?, ?)",
+                        (item["cat"], json.dumps(list(item["props"]), ensure_ascii=False), key[0]),
                     )
-                    categories[item["cat"]] = cursor.lastrowid
+                    categories[key] = cursor.lastrowid
             connection.execute("DELETE FROM items")
             # Reescreve os itens para que apagamentos e alteracoes tambem sejam
             # refletidos na base, em vez de apenas adicionar novos registos.
@@ -1242,7 +1334,7 @@ def save_items(items, movements=()):
                 [
                     (
                         item["id"],
-                        categories[item["cat"]],
+                        categories[(item.get("department", "Electronics"), item["cat"])],
                         json.dumps(item["props"], ensure_ascii=False),
                         "|".join(norm(value) for value in item["props"].values()),
                         item["qty"], item.get("image", ""), item.get("location", ""),
@@ -1252,11 +1344,12 @@ def save_items(items, movements=()):
             )
             record_movements(connection, movements)
 
+        if STORAGE_MODE == "local":
+            return
+        # shortcut: a folha Excel/Google so tem o stock de Electronics; os outros departamentos vivem na base.
+        items = [item for item in items if item.get("department", "Electronics") == "Electronics"]
         if STORAGE_MODE == "google":
             save_google_items(items)
-            return
-
-        if STORAGE_MODE == "local":
             return
 
         # Mantem folhas nao geridas pelo programa e abre/cria o livro de trabalho.
@@ -1318,8 +1411,12 @@ def data_from_items(items):
     # Junta configuracao das categorias e lista de itens numa unica resposta JSON.
     # auth/user dizem ao frontend que as alteracoes pedem login e quem esta com sessao.
     locations = db_locations()
+    with db_connection() as connection:
+        sections = db_sections(connection)
     return {
         "categories": db_categories(),
+        "sections": sections,
+        "departments": DEPARTMENTS,
         "items": items,
         "parts": db_parts(),
         "locations": {row["name"]: image_path(row["image"]) for row in locations},
@@ -1408,7 +1505,7 @@ def upload_image():
 
 @app.post("/api/pcb-step")
 def upload_pcb_step():
-    if (denied := electronics_denied()):
+    if (denied := department_denied()):
         return denied
     # Modelos STEP das PCBs passam do limite geral de 5 MB; o nginx aceita até 50 MB.
     request.max_content_length = MAX_STEP_SIZE
@@ -1488,7 +1585,9 @@ def import_items():
     rows = data.get("items") if isinstance(data, dict) else None
     if not isinstance(rows, list) or not rows or len(rows) > 5000:
         return erro("Envia entre 1 e 5000 componentes para importar")
-    if (denied := electronics_denied()):
+    if not (department := requested_department(data)):
+        return erro("Departamento desconhecido")
+    if (denied := department_denied(department)):
         return denied
     try:
         with EXCEL_LOCK:
@@ -1496,7 +1595,7 @@ def import_items():
             with db_connection() as connection:
                 categories = {
                     row["name"].casefold(): row
-                    for row in connection.execute("SELECT id, name, props FROM categories")
+                    for row in connection.execute("SELECT id, name, props FROM categories WHERE department = ?", (department,))
                 }
                 validated = []
                 for index, item in enumerate(rows, start=2):
@@ -1530,7 +1629,7 @@ def import_items():
                     else:
                         item_id = connection.execute("INSERT INTO items (cat_id, props, `key`, qty, image) VALUES (?, ?, ?, ?, '')", (category["id"], json.dumps(properties, ensure_ascii=False), key, quantity)).lastrowid
                     movements.append({"cat": category["name"], "props": properties, "qty": quantity, "before": before})
-                    record_movements(connection, [{"type": "in", "item_id": item_id, "cat": category["name"], "props": properties, "delta": quantity, "before": before}])
+                    record_movements(connection, [{"type": "in", "item_id": item_id, "cat": category["name"], "department": department, "props": properties, "delta": quantity, "before": before}])
         units = sum(item["qty"] for item in movements)
         return jsonify(msg=f"{len(rows)} linha(s) importada(s) · {units} unidades adicionadas", rows=len(rows), units=units, movements=movements)
     except ValueError as exc:
@@ -1556,21 +1655,22 @@ def mover():
         _, _, _, items = read_items()
         # Extrai do pedido a categoria e os valores preenchidos nas propriedades.
         category = str(data.get("cat", "")).strip()
+        department = requested_department(data)
         props = {str(key): str(value).strip() for key, value in (data.get("props") or {}).items()}
         image = str(data.get("image", "")).strip()
-        category_config = next((item for item in db_categories() if item["name"] == category), None)
+        category_config = next((item for item in db_categories() if item["name"] == category and item["department"] == department), None)
         if not category or not props or not all(props.values()):
             return erro("Preenche a categoria e todas as propriedades")
         if not category_config:
             return erro("Categoria não encontrada", 404)
-        if (denied := electronics_denied()):
+        if (denied := department_denied(department)):
             return denied
         if image and not category_config["image"]:
             return erro("Esta categoria não aceita imagens")
         key = "|".join(norm(props[name]) for name in props)
         # Dois itens sao considerados iguais quando pertencem a mesma categoria
         # e todos os valores das propriedades, depois de normalizados, coincidem.
-        item = next((current for current in items if current["cat"] == category and "|".join(norm(current["props"].get(name, "")) for name in props) == key), None)
+        item = next((current for current in items if current["cat"] == category and current["department"] == department and "|".join(norm(current["props"].get(name, "")) for name in props) == key), None)
         before = item["qty"] if item else 0
 
         if data.get("mode") == "out":
@@ -1590,10 +1690,10 @@ def mover():
         else:
             # Se nao houve correspondencia, cria uma referencia com id novo.
             new_id = max((item["id"] for item in items), default=0) + 1
-            item = {"id": new_id, "cat": category, "props": props, "qty": qty, "image": image}
+            item = {"id": new_id, "cat": category, "department": department, "props": props, "qty": qty, "image": image}
             items.append(item)
             message = "Item novo adicionado"
-        save_items(items, [{"type": "out" if data.get("mode") == "out" else "in", "item_id": item["id"], "cat": category,
+        save_items(items, [{"type": "out" if data.get("mode") == "out" else "in", "item_id": item["id"], "cat": category, "department": department,
                             "props": item["props"], "delta": item["qty"] - before, "before": before}])
         return jsonify(msg=message)
     except Exception as exc:
@@ -1620,10 +1720,10 @@ def consumir():
                 return erro("Item não encontrado", 404)
             if item["qty"] < line["qty"]:
                 return erro(f"Só há {item['qty']} de {' · '.join(item['props'].values())} em stock")
-            movements.append({"type": "out", "item_id": item["id"], "cat": item["cat"], "props": item["props"],
+            movements.append({"type": "out", "item_id": item["id"], "cat": item["cat"], "department": item["department"], "props": item["props"],
                               "delta": -line["qty"], "before": item["qty"], "note": note.strip()})
             item["qty"] -= line["qty"]
-        if (denied := electronics_denied()):
+        if (denied := department_denied(*(movement["department"] for movement in movements))):
             return denied
         save_items(items, movements)
         return jsonify(msg=f"{sum(line['qty'] for line in lines)} unidade(s) retiradas para {note.strip()}")
@@ -1640,13 +1740,13 @@ def ajustar(item_id):
         item = next((current for current in items if current["id"] == item_id), None)
         if not item:
             return erro("Item não encontrado", 404)
-        if (denied := electronics_denied()):
+        if (denied := department_denied(item["department"])):
             return denied
         before = item["qty"]
         item["qty"] = max(0, item["qty"] + delta)
         # max protege a regra de negocio: a quantidade minima possivel e zero.
         change = item["qty"] - before
-        save_items(items, [{"type": "in" if change > 0 else "out", "item_id": item_id, "cat": item["cat"],
+        save_items(items, [{"type": "in" if change > 0 else "out", "item_id": item_id, "cat": item["cat"], "department": item["department"],
                             "props": item["props"], "delta": change, "before": before}] if change else [])
         return jsonify(ok=True)
     except (TypeError, ValueError):
@@ -1663,10 +1763,10 @@ def apagar(item_id):
         item = next((current for current in items if current["id"] == item_id), None)
         if not item:
             return erro("Item não encontrado", 404)
-        if (denied := electronics_denied()):
+        if (denied := department_denied(item["department"])):
             return denied
         save_items([current for current in items if current["id"] != item_id],
-                   [{"type": "delete", "item_id": item_id, "cat": item["cat"], "props": item["props"], "delta": -item["qty"], "before": item["qty"]}])
+                   [{"type": "delete", "item_id": item_id, "cat": item["cat"], "department": item["department"], "props": item["props"], "delta": -item["qty"], "before": item["qty"]}])
         return jsonify(ok=True)
     except Exception as exc:
         return erro(str(exc), 500)
@@ -1684,7 +1784,7 @@ def editar_item(item_id):
             if row is None:
                 return erro("Item não encontrado", 404)
             category = connection.execute("SELECT * FROM categories WHERE id = ?", (row["cat_id"],)).fetchone()
-            if (denied := electronics_denied()):
+            if (denied := department_denied(category["department"])):
                 return denied
             raw_props = data.get("props")
             raw_qty = data.get("qty")
@@ -1707,7 +1807,7 @@ def editar_item(item_id):
                 "UPDATE items SET props = ?, `key` = ?, qty = ?, image = ? WHERE id = ?",
                 (json.dumps(props, ensure_ascii=False), "|".join(norm(value) for value in props.values()), int(raw_qty), image, item_id),
             )
-            record_movements(connection, [{"type": "edit", "item_id": item_id, "cat": category["name"], "props": props,
+            record_movements(connection, [{"type": "edit", "item_id": item_id, "cat": category["name"], "department": category["department"], "props": props,
                                            "delta": int(raw_qty) - row["qty"], "before": row["qty"]}])
         return jsonify(msg="Componente atualizado")
     except DB_INTEGRITY_ERRORS:
@@ -1732,7 +1832,9 @@ def mudar_localizacao():
         init_db()
         with EXCEL_LOCK, db_connection() as connection:
             placeholders = ",".join("?" for _ in ids)
-            if (denied := electronics_denied()):
+            departments = [row["department"] for row in connection.execute(
+                f"SELECT DISTINCT categories.department FROM items JOIN categories ON categories.id = items.cat_id WHERE items.id IN ({placeholders})", ids)]
+            if (denied := department_denied(*departments)):
                 return denied
             changed = connection.execute(f"SELECT COUNT(*) AS n FROM items WHERE id IN ({placeholders})", ids).fetchone()["n"]
             connection.execute(f"UPDATE items SET location = ? WHERE id IN ({placeholders})", (location, *ids))
@@ -1745,7 +1847,7 @@ def mudar_localizacao():
 
 @app.patch("/api/locations")
 def editar_localizacao():
-    if (denied := electronics_denied()):
+    if (denied := department_denied()):
         return denied
     # Muda o nome (em todos os componentes que la estao) e/ou a foto de uma localizacao.
     if STORAGE_MODE != "local":
@@ -1775,7 +1877,7 @@ def editar_localizacao():
 
 @app.delete("/api/locations")
 def apagar_localizacao():
-    if (denied := electronics_denied()):
+    if (denied := department_denied()):
         return denied
     # So apaga caixas vazias: os componentes nunca ficam sem sitio por engano.
     if STORAGE_MODE != "local":
@@ -1898,7 +2000,7 @@ def projetos_pcb():
 
 @app.post("/api/pcb-projects")
 def guardar_projetos_pcb():
-    if (denied := electronics_denied()):
+    if (denied := department_denied()):
         return denied
     # {"projects": [...]}: cria ou substitui cada projeto pelo id. Varios de uma vez trazem os guardados no browser.
     if STORAGE_MODE != "local":
@@ -1936,7 +2038,7 @@ def guardar_projetos_pcb():
 
 @app.delete("/api/pcb-projects/<project_id>")
 def apagar_projeto_pcb(project_id):
-    if (denied := electronics_denied()):
+    if (denied := department_denied()):
         return denied
     if STORAGE_MODE != "local":
         return erro("A edição está disponível no modo local")
@@ -1955,7 +2057,7 @@ def apagar_projeto_pcb(project_id):
 @app.post("/api/parts")
 def guardar_peca():
     # Acrescenta ou corrige uma peca do catalogo. So os campos enviados mudam; o preco pode ficar vazio.
-    if (denied := electronics_denied()):
+    if (denied := department_denied()):
         return denied
     data = request.get_json(silent=True) or {}
     mpn = str(data.get("mpn", "")).strip()
@@ -2119,7 +2221,7 @@ def procurar_peca():
     if g.person is None:
         return jsonify(error="Inicia sessão para procurar a peça", login=True), 401
     # A peca encontrada fica no catalogo: mesma regra que mudar o stock.
-    if (denied := electronics_denied()):
+    if (denied := department_denied()):
         return denied
     mpn = request.args.get("mpn", "").strip()
     if not mpn or mpn == "-" or len(mpn) > 100:
@@ -2180,11 +2282,11 @@ def descendant_ids(connection, category_id):
     return found
 
 
-def resolve_parent(connection, parent, section, own_id=None):
-    # Devolve (id da categoria-mãe, erro). A filha fica sempre na secção da mãe.
+def resolve_parent(connection, parent, section, department, own_id=None):
+    # Devolve (id da categoria-mãe, erro). A filha fica sempre na secção (e no departamento) da mãe.
     if not parent:
         return None, None
-    row = connection.execute("SELECT id, section FROM categories WHERE name = ? COLLATE NOCASE", (str(parent),)).fetchone()
+    row = connection.execute("SELECT id, section FROM categories WHERE name = ? COLLATE NOCASE AND department = ?", (str(parent), department)).fetchone()
     if row is None:
         return None, "Categoria-mãe não encontrada"
     if own_id is not None and (row["id"] == own_id or row["id"] in descendant_ids(connection, own_id)):
@@ -2208,18 +2310,20 @@ def editar_categoria(original_name):
     names = [field["name"].strip() for field in fields]
     if len(set(names)) != len(names):
         return erro("Os nomes das propriedades não podem repetir-se")
-    section = data.get("section", SECTIONS[0])
-    if section not in SECTIONS:
-        return erro("Secção desconhecida")
-    if (denied := electronics_denied()):
+    if not (department := requested_department(request.args)):
+        return erro("Departamento desconhecido")
+    if (denied := department_denied(department)):
         return denied
     try:
         init_db()
         with EXCEL_LOCK, db_connection() as connection:
-            category = connection.execute("SELECT * FROM categories WHERE name = ? COLLATE NOCASE", (original_name,)).fetchone()
+            category = connection.execute("SELECT * FROM categories WHERE name = ? COLLATE NOCASE AND department = ?", (original_name, department)).fetchone()
             if category is None:
                 return erro("Categoria não encontrada", 404)
-            parent_id, problem = resolve_parent(connection, data["parent"], section, category["id"]) if "parent" in data else (category["parent_id"], None)
+            section = data.get("section", category["section"])
+            if section not in db_sections(connection)[department]:
+                return erro("Secção desconhecida")
+            parent_id, problem = resolve_parent(connection, data["parent"], section, department, category["id"]) if "parent" in data else (category["parent_id"], None)
             if problem:
                 return erro(problem)
             old_names = json.loads(category["props"])
@@ -2260,24 +2364,27 @@ def nova_categoria():
     name = str(data.get("name", "")).strip()
     props = list(dict.fromkeys(str(prop).strip() for prop in data.get("props", []) if str(prop).strip()))
     image_enabled = bool(data.get("image"))
-    section = data.get("section", SECTIONS[0])
     if not name or not props:
         return erro("Indica o nome e pelo menos uma propriedade")
-    if section not in SECTIONS:
-        return erro("Secção desconhecida")
-    if (denied := electronics_denied()):
+    if not (department := requested_department(data)):
+        return erro("Departamento desconhecido")
+    if (denied := department_denied(department)):
         return denied
     try:
         init_db()
-        if any(category["name"].casefold() == name.casefold() for category in db_categories()):
+        if any(category["name"].casefold() == name.casefold() and category["department"] == department for category in db_categories()):
             return erro("Essa categoria já existe")
         with db_connection() as connection:
-            parent_id, problem = resolve_parent(connection, data.get("parent"), section)
+            sections = db_sections(connection)[department]
+            section = data.get("section", sections[0] if sections else None)
+            if section not in sections:
+                return erro("Secção desconhecida")
+            parent_id, problem = resolve_parent(connection, data.get("parent"), section, department)
             if problem:
                 return erro(problem)
             connection.execute(
-                "INSERT INTO categories (name, props, image_enabled, section, parent_id) VALUES (?, ?, ?, ?, ?)",
-                (name, json.dumps(props, ensure_ascii=False), int(image_enabled), section, parent_id),
+                "INSERT INTO categories (name, props, image_enabled, section, parent_id, department) VALUES (?, ?, ?, ?, ?, ?)",
+                (name, json.dumps(props, ensure_ascii=False), int(image_enabled), section, parent_id, department),
             )
         return jsonify(msg="Categoria pronta para receber o primeiro item")
     except Exception as exc:
@@ -2288,13 +2395,15 @@ def nova_categoria():
 def apagar_categoria(name):
     # DELETE /api/categories/<name> remove a categoria e, pela chave estrangeira,
     # os componentes ligados a ela; depois atualiza tambem o Excel.
-    if (denied := electronics_denied()):
+    if not (department := requested_department(request.args)):
+        return erro("Departamento desconhecido")
+    if (denied := department_denied(department)):
         return denied
     try:
         init_db()
         with db_connection() as connection:
             row = connection.execute(
-                "SELECT id, name, parent_id FROM categories WHERE name = ? COLLATE NOCASE", (name,)
+                "SELECT id, name, parent_id FROM categories WHERE name = ? COLLATE NOCASE AND department = ?", (name, department)
             ).fetchone()
             if not row:
                 return erro("Categoria não encontrada", 404)
@@ -2302,7 +2411,7 @@ def apagar_categoria(name):
                 "SELECT id, props, qty FROM items WHERE cat_id = ?", (row["id"],)
             ).fetchall()
             n_itens = len(removed)
-            record_movements(connection, [{"type": "delete", "item_id": item["id"], "cat": row["name"], "props": json.loads(item["props"]),
+            record_movements(connection, [{"type": "delete", "item_id": item["id"], "cat": row["name"], "department": department, "props": json.loads(item["props"]),
                                            "delta": -item["qty"], "before": item["qty"]} for item in removed])
             # As subcategorias e o seu stock ficam: sobem um nível.
             connection.execute("UPDATE categories SET parent_id = ? WHERE parent_id = ?", (row["parent_id"], row["id"]))
@@ -2316,6 +2425,59 @@ def apagar_categoria(name):
         if n_itens:
             msg += f" com {n_itens} referência(s)"
         return jsonify(msg=msg)
+    except Exception as exc:
+        return erro(str(exc), 500)
+
+
+@app.route("/api/sections", methods=["POST", "PATCH", "DELETE"])
+def secoes():
+    # Cada departamento cria, muda o nome, ordena (PATCH com position) e apaga as suas secoes.
+    data = request.get_json(silent=True) or {}
+    if not (department := requested_department(data)):
+        return erro("Departamento desconhecido")
+    name = data.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return erro("Indica o nome da secção")
+    name = name.strip()
+    if (denied := department_denied(department)):
+        return denied
+    try:
+        init_db()
+        with db_connection() as connection:
+            sections = db_sections(connection)[department]
+            current = next((section for section in sections if section.casefold() == name.casefold()), None)
+            if request.method == "POST":
+                if len(name) > 64:
+                    return erro("Nome da secção demasiado longo")
+                if current:
+                    return erro("Essa secção já existe", 409)
+                connection.execute("INSERT INTO sections (department, name, position) VALUES (?, ?, ?)", (department, name, len(sections)))
+                return jsonify(msg=f"Secção {name} criada")
+            if current is None:
+                return erro("Secção não encontrada", 404)
+            if request.method == "DELETE":
+                if len(sections) == 1:
+                    return erro("O departamento precisa de pelo menos uma secção", 409)
+                if connection.execute("SELECT 1 FROM categories WHERE department = ? AND section = ? COLLATE NOCASE LIMIT 1", (department, current)).fetchone():
+                    return erro("Move ou apaga as categorias desta secção primeiro", 409)
+                connection.execute("DELETE FROM sections WHERE department = ? AND name = ?", (department, current))
+                return jsonify(msg=f"Secção {current} apagada")
+            new_name, position = data.get("newName", current), data.get("position", sections.index(current))
+            if not isinstance(new_name, str) or not new_name.strip() or len(new_name.strip()) > 64:
+                return erro("Indica o novo nome da secção")
+            new_name = new_name.strip()
+            if new_name.casefold() != current.casefold() and any(section.casefold() == new_name.casefold() for section in sections):
+                return erro("Essa secção já existe", 409)
+            if type(position) is not int or not 0 <= position < len(sections):
+                return erro("Posição inválida")
+            order = [section for section in sections if section != current]
+            order.insert(position, new_name)
+            connection.execute("DELETE FROM sections WHERE department = ?", (department,))
+            connection.executemany("INSERT INTO sections (department, name, position) VALUES (?, ?, ?)",
+                                   [(department, section, index) for index, section in enumerate(order)])
+            # As categorias guardam o nome da secao, por isso seguem a mudanca de nome.
+            connection.execute("UPDATE categories SET section = ? WHERE department = ? AND section = ? COLLATE NOCASE", (new_name, department, current))
+        return jsonify(msg="Secção guardada")
     except Exception as exc:
         return erro(str(exc), 500)
 
@@ -2507,7 +2669,7 @@ def movimentos():
             reverted = {row["reverts"] for row in connection.execute("SELECT reverts FROM movements WHERE reverts IS NOT NULL")}
         return jsonify(movements=[{
             "id": row["id"], "ts": row["ts"], "person": row["person"], "avatar": row["avatar"] or "", "type": row["type"], "item_id": row["item_id"],
-            "cat": row["cat"], "props": json.loads(row["props"]), "delta": row["delta"],
+            "cat": row["cat"], "department": row["department"], "props": json.loads(row["props"]), "delta": row["delta"],
             "before": row["before_qty"], "after": row["after_qty"], "note": row["note"], "reverted": row["id"] in reverted,
         } for row in rows])
     except Exception as exc:
@@ -2539,7 +2701,7 @@ def reverter_movimentos():
         for row in rows:
             props = json.loads(row["props"])
             # O item identifica-se pela categoria e propriedades: os ids podem ser reutilizados depois de apagar.
-            item = next((current for current in items if current["cat"] == row["cat"]
+            item = next((current for current in items if current["cat"] == row["cat"] and current["department"] == row["department"]
                          and all(norm(current["props"].get(name, "")) == norm(value) for name, value in props.items())), None)
             before = item["qty"] if item else 0
             if item:
@@ -2547,10 +2709,10 @@ def reverter_movimentos():
             elif row["delta"] < 0:
                 taken = {current["id"] for current in items}
                 item = {"id": row["item_id"] if row["item_id"] and row["item_id"] not in taken else max(taken, default=0) + 1,
-                        "cat": row["cat"], "props": props, "qty": -row["delta"], "image": "", "location": ""}
+                        "cat": row["cat"], "department": row["department"], "props": props, "qty": -row["delta"], "image": "", "location": ""}
                 items.append(item)
             if item and item["qty"] != before:
-                movements.append({"type": "revert", "item_id": item["id"], "cat": row["cat"], "props": item["props"],
+                movements.append({"type": "revert", "item_id": item["id"], "cat": row["cat"], "department": row["department"], "props": item["props"],
                                   "delta": item["qty"] - before, "before": before, "note": f"Reverte #{row['id']}", "reverts": row["id"]})
         save_items(items, movements)
         return jsonify(msg=f"{len(movements)} movimento(s) revertido(s)")

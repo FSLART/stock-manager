@@ -94,7 +94,7 @@ it('submits a movement using the selected dynamic properties', async () => {
   await form.find('input[type=number]').setValue(4)
   await form.trigger('submit')
   await flushPromises()
-  expect(fetch).toHaveBeenCalledWith('/api/move', expect.objectContaining({ body: JSON.stringify({ cat: 'LEDs', props: { cor: 'vermelho' }, qty: 4, mode: 'in', image: '' }) }))
+  expect(fetch).toHaveBeenCalledWith('/api/move', expect.objectContaining({ body: JSON.stringify({ cat: 'LEDs', props: { cor: 'vermelho' }, qty: 4, mode: 'in', image: '', department: 'Electronics' }) }))
 })
 
 it('searches the category by typing its name', async () => {
@@ -117,7 +117,7 @@ it('handles an empty stock without opening an invalid movement', async () => {
   wrapper = mount(App)
   await flushPromises()
   expect(wrapper.find('.top .primary').exists()).toBe(false)
-  expect(wrapper.find('.empty').text()).toContain('Nada encontrado')
+  expect(wrapper.find('.empty').text()).toContain('ainda não tem stock')
 })
 
 it('combines property and stock filters and clears them together with search', async () => {
@@ -256,8 +256,8 @@ it('edits category and field names while sending the original field identity', a
   await form.find('.property-editor input').setValue('tonalidade')
   await form.trigger('submit')
   await flushPromises()
-  const request = fetch.mock.calls.find(([url, options]) => url === '/api/categories/LEDs' && options.method === 'PATCH')
-  expect(JSON.parse(request[1].body)).toEqual({ originalName: 'LEDs', name: 'Luzes', fields: [{ source: 'cor', name: 'tonalidade' }], image: true, section: 'Componentes eletrónicos', parent: null })
+  const request = fetch.mock.calls.find(([url, options]) => url === '/api/categories/LEDs?department=Electronics' && options.method === 'PATCH')
+  expect(JSON.parse(request[1].body)).toEqual({ originalName: 'LEDs', name: 'Luzes', fields: [{ source: 'cor', name: 'tonalidade' }], image: true, section: 'Componentes eletrónicos', parent: null, department: 'Electronics' })
 })
 
 it('creates a category with one input per property, like the edit form', async () => {
@@ -272,7 +272,7 @@ it('creates a category with one input per property, like the edit form', async (
   await form.trigger('submit')
   await flushPromises()
   const request = fetch.mock.calls.find(([url, options]) => url === '/api/categories' && options.method === 'POST')
-  expect(JSON.parse(request[1].body)).toEqual({ name: 'Díodos', props: ['tipo', 'tensão'], image: false, section: 'Componentes eletrónicos', parent: null })
+  expect(JSON.parse(request[1].body)).toEqual({ name: 'Díodos', props: ['tipo', 'tensão'], image: false, section: 'Componentes eletrónicos', parent: null, department: 'Electronics' })
 })
 
 it('reorders category properties and sends them in the new order', async () => {
@@ -287,7 +287,7 @@ it('reorders category properties and sends them in the new order', async () => {
   expect(form.findAll('.property-editor input').map(input => input.element.value)).toEqual(['tamanho', 'cor'])
   await form.trigger('submit')
   await flushPromises()
-  const request = fetch.mock.calls.find(([url, options]) => url === '/api/categories/LEDs' && options.method === 'PATCH')
+  const request = fetch.mock.calls.find(([url, options]) => url === '/api/categories/LEDs?department=Electronics' && options.method === 'PATCH')
   expect(JSON.parse(request[1].body).fields).toEqual([{ source: null, name: 'tamanho' }, { source: 'cor', name: 'cor' }])
 })
 
@@ -401,7 +401,7 @@ it('edits a category from one discreet button and deletes it from inside the edi
   await flushPromises()
   expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Apagar a categoria "LEDs"?'))
   expect(dialog.element.open).toBe(false)
-  expect(fetch.mock.calls.some(([url, options]) => url === '/api/categories/LEDs' && options.method === 'DELETE')).toBe(true)
+  expect(fetch.mock.calls.some(([url, options]) => url === '/api/categories/LEDs?department=Electronics' && options.method === 'DELETE')).toBe(true)
 })
 
 it('edits the unit price of a part number from the component form', async () => {
@@ -587,7 +587,7 @@ it('starts with the property filters closed and offers undo after deleting an it
   expect(wrapper.find('#toast').text()).toContain('Desfazer')
   await wrapper.find('.toast-undo').trigger('click')
   await flushPromises()
-  expect(fetch).toHaveBeenCalledWith('/api/move', expect.objectContaining({ body: JSON.stringify({ cat: 'LEDs', props: { cor: '<1A & azul' }, qty: 3, mode: 'in', image: '' }) }))
+  expect(fetch).toHaveBeenCalledWith('/api/move', expect.objectContaining({ body: JSON.stringify({ cat: 'LEDs', department: 'Electronics', props: { cor: '<1A & azul' }, qty: 3, mode: 'in', image: '' }) }))
 })
 
 it('offers a sort selector that mirrors the table headers for the phone cards', async () => {

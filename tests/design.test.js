@@ -273,7 +273,7 @@ it('previews a CSV before importing its components through the backend', async (
   expect(wrapper.find('.csv-import-submit').attributes('disabled')).toBeUndefined()
   await wrapper.find('.csv-import-dialog form').trigger('submit')
   await flushPromises()
-  expect(fetch).toHaveBeenCalledWith('/api/items/import', expect.objectContaining({ body: JSON.stringify({ items: [{ cat: 'LEDs', qty: 4, props: { cor: 'verde' } }] }) }))
+  expect(fetch).toHaveBeenCalledWith('/api/items/import', expect.objectContaining({ body: JSON.stringify({ items: [{ cat: 'LEDs', qty: 4, props: { cor: 'verde' } }], department: 'Electronics' }) }))
 })
 it('groups shared resources and engineering and closes a group after choosing a route', async () => {
   wrapper = mount(App, { attachTo: document.body })

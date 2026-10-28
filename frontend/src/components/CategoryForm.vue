@@ -1,16 +1,15 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-const props = defineProps({ categories: Array, busy: Boolean, error: String })
+const props = defineProps({ categories: Array, sections: Array, busy: Boolean, error: String })
 const emit = defineEmits(['submit', 'delete'])
 const dialog = ref(null)
-const SECTIONS = ['Componentes eletrónicos', 'Harness', 'Não consumíveis']
-const name = ref(''), image = ref(false), section = ref(SECTIONS[0]), parent = ref('')
+const name = ref(''), image = ref(false), section = ref(''), parent = ref('')
 const originalName = ref(null), fields = ref([]), originalFields = ref([]), copied = ref('')
 function open(category, defaultSection) {
   originalName.value = category?.name || null
   originalFields.value = [...(category?.props || [])]
   fields.value = category ? category.props.map(p => ({ source: p, name: p })) : [{ source: null, name: '' }]
-  name.value = ''; copied.value = ''; image.value = false; section.value = category?.section || defaultSection || SECTIONS[0]; parent.value = category?.parent || ''
+  name.value = ''; copied.value = ''; image.value = false; section.value = category?.section || defaultSection || props.sections[0] || ''; parent.value = category?.parent || ''
   if (category) { name.value = category.name; image.value = category.image }
   dialog.value.showModal()
 }
@@ -53,8 +52,8 @@ defineExpose({ open, close: () => dialog.value.close() })
     <form @submit.prevent="submit">
       <h2 id="category-title">{{ originalName ? 'Editar categoria' : 'Nova categoria' }}</h2>
       <label>Nome <input v-model="name" placeholder="Ex.: Díodos" required></label>
-      <label>Dentro de <select v-model="parent"><option value="">— Nível de topo</option><optgroup v-for="group in SECTIONS" :key="group" :label="group"><option v-for="choice in parentChoices.filter(c => c.section === group)" :key="choice.name" :value="choice.name">{{ choice.label }}</option></optgroup></select></label>
-      <label>Secção <select v-model="section" :disabled="Boolean(parent)"><option v-for="option in SECTIONS" :key="option">{{ option }}</option></select></label>
+      <label>Dentro de <select v-model="parent"><option value="">— Nível de topo</option><optgroup v-for="group in sections" :key="group" :label="group"><option v-for="choice in parentChoices.filter(c => c.section === group)" :key="choice.name" :value="choice.name">{{ choice.label }}</option></optgroup></select></label>
+      <label>Secção <select v-model="section" :disabled="Boolean(parent)"><option v-for="option in sections" :key="option">{{ option }}</option></select></label>
       <label v-if="!originalName">Copiar propriedades de
         <select v-model="copied" @change="copyFrom(copied)"><option value="">—</option><option v-for="category in categories" :key="category.name">{{ category.name }}</option></select>
       </label>

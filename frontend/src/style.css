@@ -1769,3 +1769,12 @@ input::placeholder,textarea::placeholder { color:var(--muted);opacity:1; }
 .take-remove{width:36px;height:36px;border:1px solid var(--line);border-radius:8px;background:none;color:var(--muted)}
 .take-remove:hover{border-color:var(--danger-text);color:var(--danger-text)}
 @media(max-width:560px){.take-list li{grid-template-columns:minmax(0,1fr) 72px 44px;}.take-list .take-name{grid-column:1/-1;white-space:normal}.take-list .toggle-chip{min-height:40px}.take-remove{width:44px;height:44px}.take-meta{display:none}.take-results button{grid-template-columns:minmax(0,1fr) 28px}}
+/* Stock por departamento: chips por cima da pesquisa e botão para criar secções na barra. */
+.department-picker{display:flex;flex-direction:column;gap:8px}
+.department-picker .editor-label{margin:0}
+.new-section{align-self:flex-start;margin-top:10px;padding:6px 10px;border:1px dashed var(--line-strong);border-radius:8px;background:none;color:var(--muted);font-size:12px;font-weight:600}
+.new-section:hover{border-color:var(--accent);color:var(--accent)}
+.section-order{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.section-order span{margin-right:auto;color:var(--muted);font-size:13px}
+.cat-section button.cat-edit{flex:none}
+.cat-section:hover .cat-edit{opacity:1}

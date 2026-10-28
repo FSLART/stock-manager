@@ -121,7 +121,7 @@ class EditingTest(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 200, response.json)
         items = self.module.db_items()
-        self.assertEqual(items[0], {'id': 1, 'cat': 'Renamed', 'props': {'dimension': 'small', 'reference': 'A', 'note': ''}, 'qty': 4, 'image': '', 'location': ''})
+        self.assertEqual(items[0], {'id': 1, 'cat': 'Renamed', 'props': {'dimension': 'small', 'reference': 'A', 'note': ''}, 'qty': 4, 'image': '', 'location': '', 'department': 'Electronics'})
         self.assertEqual(items[1]['id'], 2)
 
     def test_category_edit_collision_rolls_back_everything(self):

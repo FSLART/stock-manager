@@ -6,7 +6,7 @@ import { useNavigation } from '../composables/useNavigation.js'
 const router = useNavigation(), auth = inject('auth', null)
 const leader = computed(() => Boolean(auth?.user && (auth.user.admin || ['Board', 'Department Leader'].includes(auth.user.role))))
 const resources = [
-  { title: 'Inventário', description: 'Consulta material, quantidades e disponibilidade.', route: '/stock', icon: 'M4 7h16v13H4z M3 3h18v4H3z M10 11h4' },
+  { title: 'Inventário', description: 'Material de cada departamento, quantidades e disponibilidade.', route: '/stock', icon: 'M4 7h16v13H4z M3 3h18v4H3z M10 11h4' },
   { title: 'Localizações', description: 'Encontra caixas e gavetas. Abre o material pelo QR.', route: '/locations', icon: 'M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z M15 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z' },
   { title: 'Etiquetas', description: 'Prepara e imprime etiquetas para a oficina.', route: '/labels', icon: 'M3 3h8l10 10-8 8L3 11Z M7 7h.01' },
   { title: 'Movimentos', description: 'Vê o que mudou, quando e por quem.', route: '/movements', icon: 'M7 3v18 M3 7l4-4 4 4 M17 21V3 M13 17l4 4 4-4' },

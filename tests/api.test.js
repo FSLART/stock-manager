@@ -13,7 +13,7 @@ describe('Flask adapter and offline compatibility', () => {
     fetch.mockResolvedValue(response({ msg: 'ok' }))
     const api = createApi()
     await api.request('deleteCategory', { name: 'R&D / LEDs' })
-    expect(fetch).toHaveBeenCalledWith('/api/categories/R%26D%20%2F%20LEDs', expect.objectContaining({ method: 'DELETE' }))
+    expect(fetch).toHaveBeenCalledWith('/api/categories/R%26D%20%2F%20LEDs?department=Electronics', expect.objectContaining({ method: 'DELETE' }))
     await api.request('step', { id: 7, delta: -1 })
     expect(fetch).toHaveBeenLastCalledWith('/api/items/7/step', expect.objectContaining({ method: 'POST', body: '{"id":7,"delta":-1}' }))
   })

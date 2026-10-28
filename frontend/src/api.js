@@ -16,7 +16,7 @@ const routes = {
   move: () => ['/api/move', 'POST'],
   importItems: () => ['/api/items/import', 'POST'],
   newCategory: () => ['/api/categories', 'POST'],
-  deleteCategory: p => [`/api/categories/${encodeURIComponent(p.name)}`, 'DELETE'],
+  deleteCategory: p => [`/api/categories/${encodeURIComponent(p.name)}?department=${encodeURIComponent(p.department || 'Electronics')}`, 'DELETE'],
   deleteItem: p => [`/api/items/${p.id}`, 'DELETE'],
   step: p => [`/api/items/${p.id}/step`, 'POST'],
   editItem: p => [`/api/items/${p.id}`, 'PATCH'],
@@ -28,7 +28,10 @@ const routes = {
   savePcbProjects: () => ['/api/pcb-projects', 'POST'],
   deletePcbProject: p => [`/api/pcb-projects/${encodeURIComponent(p.id)}`, 'DELETE'],
   deleteLabels: () => ['/api/labels', 'DELETE'],
-  editCategory: p => [`/api/categories/${encodeURIComponent(p.originalName)}`, 'PATCH'],
+  editCategory: p => [`/api/categories/${encodeURIComponent(p.originalName)}?department=${encodeURIComponent(p.department || 'Electronics')}`, 'PATCH'],
+  newSection: () => ['/api/sections', 'POST'],
+  editSection: () => ['/api/sections', 'PATCH'],
+  deleteSection: () => ['/api/sections', 'DELETE'],
   savePart: () => ['/api/parts', 'POST'],
   lookupPart: p => [`/api/parts/lookup?mpn=${encodeURIComponent(p.mpn)}`, 'GET'],
   movements: () => ['/api/movements', 'GET'],
@@ -180,7 +183,7 @@ export function createApi({ onUnauthorized } = {}) {
   }
 
   // direct não usa a fila offline: login, histórico e pessoas precisam do servidor.
-  return { get cached() { return cached }, request, direct, load, syncPending, uploadImage, uploadStep, importInventory: items => direct('importItems', { items }) }
+  return { get cached() { return cached }, request, direct, load, syncPending, uploadImage, uploadStep, importInventory: (items, department = 'Electronics') => direct('importItems', { items, department }) }
 }
 
 // Uma foto de telemóvel (3–12 MB) fica com 800 px no lado maior, sem margens: ~100 KB e cabe no limite de 5 MB.

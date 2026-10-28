@@ -31,20 +31,20 @@ const stepBusy = ref(false), stepError = ref(''), bomError = ref(''), imageBusy 
 const boardCounts = reactive({})
 // Retirar do stock: o nome da PCB escrito à mão confirma, e fica nos movimentos.
 const consumeDialog = ref(null), consumeBoards = ref(1), consumeName = ref('')
-const toTake = computed(() => selectedProject.value ? stockToTake(selectedProject.value.items, consumeBoards.value || 0, inventory.items) : { items: [], short: [] })
+const toTake = computed(() => selectedProject.value ? stockToTake(selectedProject.value.items, consumeBoards.value || 0, inventory.electronicsItems) : { items: [], short: [] })
 const toTakeUnits = computed(() => toTake.value.items.reduce((total, item) => total + item.qty, 0))
 
 const componentCount = computed(() => bomItems.value.reduce((total, item) => total + item.quantity, 0))
 // Cada linha do BOM do projeto aberto, com o que o BOM diz dela para ver ao abrir a linha.
 const lineStock = computed(() => selectedProject.value?.items.map(line => ({
-  ...stockCheck([{ lines: [line], count: 1 }], inventory.items)[0],
+  ...stockCheck([{ lines: [line], count: 1 }], inventory.electronicsItems)[0],
   details: [
     line.partNumber !== '—' && line.value !== 'Componente sem valor' && ['Valor', line.value],
     line.description !== '—' && ['Descrição', line.description],
     line.footprint !== '—' && ['Footprint', line.footprint],
   ].filter(Boolean),
 })) ?? [])
-const build = computed(() => stockCheck(projects.value.filter(project => boardCounts[project.id] > 0).map(project => ({ lines: project.items, count: boardCounts[project.id] })), inventory.items))
+const build = computed(() => stockCheck(projects.value.filter(project => boardCounts[project.id] > 0).map(project => ({ lines: project.items, count: boardCounts[project.id] })), inventory.electronicsItems))
 
 function readLocal() {
   const saved = readStored(PROJECTS_STORAGE_KEY, [])
